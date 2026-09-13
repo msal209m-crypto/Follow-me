@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile and role information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "storeName": { "type": "string" },
+        "role": { "type": "string", "enum": ["OWNER", "MANAGER", "CASHIER"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "Item": {
+      "title": "Item",
+      "description": "Inventory product with barcode and pricing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "barcode": { "type": "string" },
+        "sku": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "quantity": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "salePrice": { "type": "number" },
+        "minStockAlert": { "type": "number" },
+        "unit": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "barcode", "name", "quantity", "costPrice", "salePrice"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Sales, purchases, and order goods invoices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "type": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "partyName": { "type": "string" },
+        "partyPhone": { "type": "string" },
+        "cashierName": { "type": "string" },
+        "subtotal": { "type": "number" },
+        "discount": { "type": "number" },
+        "tax": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "remainingDebt": { "type": "number" },
+        "notes": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "userId", "invoiceNumber", "type", "paymentMethod", "totalAmount", "timestamp"]
+    },
+    "DebtRecord": {
+      "title": "DebtRecord",
+      "description": "Customer debts, supplier balances, and loans",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "personName": { "type": "string" },
+        "phone": { "type": "string" },
+        "type": { "type": "string" },
+        "category": { "type": "string" },
+        "totalDebt": { "type": "number" },
+        "paidDebt": { "type": "number" },
+        "remainingDebt": { "type": "number" },
+        "lastTransactionDate": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "userId", "personName", "type", "totalDebt", "remainingDebt"]
+    },
+    "StoreSettings": {
+      "title": "StoreSettings",
+      "description": "Store configuration and preferences",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "storeName": { "type": "string" },
+        "phone": { "type": "string" },
+        "taxNumber": { "type": "string" },
+        "address": { "type": "string" },
+        "currency": { "type": "string" },
+        "footerNote": { "type": "string" },
+        "language": { "type": "string" }
+      },
+      "required": ["id", "userId", "storeName", "currency"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "User operations and changes audit log across inventory, accounts, and sales",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "category": { "type": "string" },
+        "actionType": { "type": "string" },
+        "title": { "type": "string" },
+        "details": { "type": "string" },
+        "performedBy": { "type": "string" },
+        "targetId": { "type": "string" },
+        "targetName": { "type": "string" }
+      },
+      "required": ["id", "userId", "timestamp", "category", "actionType", "title", "performedBy"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document"
+    },
+    "/users/{userId}/items/{itemId}": {
+      "schema": "Item",
+      "description": "Isolated inventory items per user account"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Isolated transactions and sales per user account"
+    },
+    "/users/{userId}/debts/{debtId}": {
+      "schema": "DebtRecord",
+      "description": "Isolated debts and payments per user account"
+    },
+    "/users/{userId}/settings/{settingsId}": {
+      "schema": "StoreSettings",
+      "description": "Store settings per user account"
+    },
+    "/users/{userId}/activity_logs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "User operations log tracking inventory and account changes"
+    }
+  }
+}

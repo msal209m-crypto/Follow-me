@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "collections": {
+    "license_keys": {
+      "description": "FlowApp Pro activation license keys created by admin and redeemed by users",
+      "fields": {
+        "key": { "type": "string", "description": "Unique key formatted like FLOW-XXXX-XXXX-XXXX" },
+        "is_used": { "type": "boolean", "description": "Whether the key has been redeemed" },
+        "plan": { "type": "string", "description": "Plan code (1M, 3M, 6M, 1Y, LIFE)" },
+        "duration_days": { "type": "number", "description": "Duration in days" },
+        "created_at": { "type": "string", "description": "ISO timestamp of key generation" },
+        "created_by": { "type": "string", "description": "Admin who generated the key" },
+        "used_at": { "type": "string", "description": "ISO timestamp of redemption" },
+        "used_by": { "type": "string", "description": "User ID of customer who redeemed" },
+        "user_email": { "type": "string", "description": "Customer email" },
+        "notes": { "type": "string", "description": "Optional notes or retailer name" }
+      }
+    },
+    "users": {
+      "description": "Multi-tenant user profiles and isolated subcollections",
+      "fields": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" },
+        "subscriptionTier": { "type": "string" },
+        "subscriptionExpiresAt": { "type": "string" },
+        "licenseKey": { "type": "string" }
+      }
+    }
+  }
+}

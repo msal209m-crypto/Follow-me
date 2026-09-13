@@ -1,0 +1,10 @@
+{
+  "name": "Remix فلو اب - إدارة المخزون والمبيعات والحسابات",
+  "description": "تطبيق فلو اب الشامل لإدارة قائمة الأصناف، استيكرات الباركود، الحركات (بيع، شراء، أجل)، جدول الحسابات، الديون والسداد، والتقارير اليومية للمبيعات والموظفين",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

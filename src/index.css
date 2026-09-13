@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Cairo', 'Tajawal', system-ui, -apple-system, sans-serif;
+    background-color: #090d16;
+    color: #f1f5f9;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Accessible focus indicators for interactive elements */
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  a:focus-visible {
+    outline: 2px solid rgba(16, 185, 129, 0.65);
+    outline-offset: 2px;
+  }
+}
+
+/* Eye-safe dark contrast utility classes */
+.dark-surface {
+  background-color: #0f172a;
+  border: 1px solid rgba(51, 65, 85, 0.7);
+}
+
+.dark-surface-elevated {
+  background-color: #131d35;
+  border: 1px solid rgba(71, 85, 105, 0.65);
+}
+
+.dark-interactive-element {
+  border: 1px solid rgba(71, 85, 105, 0.75);
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark-interactive-element:hover {
+  border-color: rgba(16, 185, 129, 0.6);
+  background-color: rgba(30, 41, 59, 0.9);
+}
+
+.dark-interactive-element:active {
+  transform: scale(0.985);
+}
+
+/* تأكد أن الحاوية الرئيسية تحت الهيدر تحمل مساحة علوية كافية */
+.main-content-container {
+  padding-top: 75px; /* رفع المحتوى قليلاً لئلا يغطيه الهيدر العلوي */
+}
+
+/* Print layout optimizations */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-page-break {
+    page-break-after: always;
+  }
+  .print-receipt-container {
+    width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 2mm !important;
+    font-size: 11px !important;
+    color: black !important;
+  }
+  .print-stickers-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(48mm, 1fr)) !important;
+    gap: 2mm !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .sticker-item {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+/* Custom smooth scrollbar with improved dark contrast */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+  border: 1px solid rgba(15, 23, 42, 0.8);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}

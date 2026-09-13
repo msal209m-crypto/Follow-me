@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if caller is an administrator
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == 'msal209m@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'ADMIN'])
+      );
+    }
+
+    // License Keys collection security rules (RLS equivalent in Firestore):
+    // 1. Only admins can browse the full table/list, generate new keys, or delete keys
+    // 2. Normal users can look up an individual key document during activation
+    // 3. Normal users can only update an unused key to mark it used by their own user ID
+    match /license_keys/{keyId} {
+      allow list, create, delete: if isAdmin();
+      allow get: if request.auth != null;
+      allow update: if isAdmin() || (
+        request.auth != null &&
+        resource.data.is_used == false &&
+        request.resource.data.is_used == true &&
+        request.resource.data.used_by == request.auth.uid
+      );
+    }
+
+    // User profile: only the authenticated user can read or modify their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Multi-tenant isolated subcollections: only owner can access their subcollections
+      match /items/{itemId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      match /transactions/{transactionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      match /debts/{debtId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      match /settings/{settingsId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /cashiers/{cashierId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /backups/{backupId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /activity_logs/{logId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Default deny all other requests
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
