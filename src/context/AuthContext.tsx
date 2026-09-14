@@ -18,6 +18,7 @@ interface AuthContextType {
   currentUser: { uid: string; email?: string | null; displayName?: string | null } | null;
   userProfile: UserProfile | null;
   loading: boolean;
+  isCloudConnected: boolean;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, displayName: string, storeName?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -229,11 +230,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser({ uid, email: cleanEmail, displayName: newProfile.displayName });
         setUserProfile(newProfile);
 
-        // Try writing profile to firestore if online
-        try {
-          await safeSetDoc(doc(db, 'users', uid), newProfile);
-        } catch (e) {
-          console.warn('Firestore offline fallback:', e);
+        // Try writing profile to firestore if online and authenticated
+        if (auth.currentUser && auth.currentUser.uid === uid && !uid.startsWith('usr_')) {
+          try {
+            await safeSetDoc(doc(db, 'users', uid), newProfile);
+          } catch (e) {
+            console.warn('Firestore offline fallback:', e);
+          }
         }
 
         return;
@@ -345,12 +348,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch {}
     }
 
-    try {
-      await safeSetDoc(doc(db, 'users', currentUser.uid), { storeName: name }, { merge: true });
-    } catch (e) {
-      console.warn('Failed to update store name in cloud:', e);
+    if (isCloudConnected && currentUser && !currentUser.uid.startsWith('usr_')) {
+      try {
+        await safeSetDoc(doc(db, 'users', currentUser.uid), { storeName: name }, { merge: true });
+      } catch (e) {
+        console.warn('Failed to update store name in cloud:', e);
+      }
     }
   };
+
+  const isCloudConnected = Boolean(
+    auth.currentUser &&
+    currentUser &&
+    auth.currentUser.uid === currentUser.uid &&
+    !currentUser.uid.startsWith('usr_')
+  );
 
   return (
     <AuthContext.Provider
@@ -358,6 +370,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         userProfile,
         loading,
+        isCloudConnected,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,

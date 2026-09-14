@@ -192,7 +192,8 @@ const STORAGE_KEYS = {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, isCloudConnected } = useAuth();
+  const canWriteToCloud = Boolean(isCloudConnected && currentUser?.uid && !currentUser.uid.startsWith('usr_'));
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [selectedStickerItemId, setSelectedStickerItemId] = useState<string | null>(null);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>('offline');
@@ -528,7 +529,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Real-time Cloud Firestore synchronization listeners (per-user multi-tenant isolation)
   useEffect(() => {
-    if (!currentUser) {
+    if (!canWriteToCloud || !currentUser) {
       setCloudSyncStatus('offline');
       return;
     }
@@ -683,11 +684,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubDebts();
       unsubBackups();
     };
-  }, [currentUser]);
+  }, [currentUser, canWriteToCloud]);
 
   // Manual sync function to batch save all state to Firestore
   const syncToCloudNow = useCallback(async () => {
-    if (!currentUser) return;
+    if (!canWriteToCloud || !currentUser) return;
     setCloudSyncStatus('syncing');
     try {
       const batch = writeBatch(db);
@@ -726,7 +727,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
-      if (currentUser) {
+      if (canWriteToCloud && currentUser) {
         safeSetDoc(doc(db, 'users', currentUser.uid, 'settings', 'store_config'), updated, { merge: true }).catch(console.warn);
       }
       return updated;
@@ -755,7 +756,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     // Save to Cloud in background
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       safeSetDoc(doc(db, 'users', currentUser.uid, 'items', newItem.id), newItem).catch(console.warn);
     }
 
@@ -804,7 +805,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...updatedFields,
             updatedAt: new Date().toISOString(),
           };
-          if (currentUser) {
+          if (canWriteToCloud && currentUser) {
             safeSetDoc(doc(db, 'users', currentUser.uid, 'items', id), updated, { merge: true }).catch(console.warn);
           }
           return updated;
@@ -828,7 +829,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
     setItems((prev) => prev.filter((item) => item.id !== id));
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       deleteDoc(doc(db, 'users', currentUser.uid, 'items', id)).catch(console.warn);
     }
   };
@@ -857,7 +858,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setDebts((prev) => [newDebt, ...prev]);
 
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', newDebt.id), newDebt).catch(console.warn);
     }
 
@@ -907,7 +908,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         prev.map((d) => (d.id === existingDebt!.id ? updatedDebt : d))
       );
 
-      if (currentUser) {
+      if (canWriteToCloud && currentUser) {
         safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', updatedDebt.id), updatedDebt).catch(console.warn);
       }
 
@@ -933,7 +934,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setDebts((prev) => [createdDebt, ...prev]);
 
-      if (currentUser) {
+      if (canWriteToCloud && currentUser) {
         safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', createdDebt.id), createdDebt).catch(console.warn);
       }
 
@@ -968,7 +969,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             lastTransactionDate: new Date().toISOString(),
             loans: [loanItem, ...(debt.loans || [])],
           };
-          if (currentUser) {
+          if (canWriteToCloud && currentUser) {
             safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', debtId), updated).catch(console.warn);
           }
           return updated;
@@ -1031,7 +1032,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             lastTransactionDate: new Date().toISOString(),
             payments: [paymentItem, ...debt.payments],
           };
-          if (currentUser) {
+          if (canWriteToCloud && currentUser) {
             safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', debtId), updated).catch(console.warn);
           }
           return updated;
@@ -1045,7 +1046,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteDebtRecord = (debtId: string) => {
     setDebts((prev) => prev.filter((d) => d.id !== debtId));
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       deleteDoc(doc(db, 'users', currentUser.uid, 'debts', debtId)).catch(console.warn);
     }
   };
@@ -1171,7 +1172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             updatedAt: new Date().toISOString(),
           };
 
-          if (currentUser) {
+          if (canWriteToCloud && currentUser) {
             safeSetDoc(doc(db, 'users', currentUser.uid, 'items', invItem.id), updated, { merge: true }).catch(console.warn);
           }
 
@@ -1207,7 +1208,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           prev.map((d) => (d.id === existingDebt.id ? updatedDebt : d))
         );
 
-        if (currentUser) {
+        if (canWriteToCloud && currentUser) {
           safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', updatedDebt.id), updatedDebt).catch(console.warn);
         }
       } else {
@@ -1228,7 +1229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setDebts((prev) => [newDebtRecord, ...prev]);
 
-        if (currentUser) {
+        if (canWriteToCloud && currentUser) {
           safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', newDebtRecord.id), newDebtRecord).catch(console.warn);
         }
       }
@@ -1257,7 +1258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       targetName: newTransaction.invoiceNumber,
     });
 
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       safeSetDoc(doc(db, 'users', currentUser.uid, 'transactions', newTransaction.id), newTransaction).catch(console.warn);
     }
 
@@ -1392,7 +1393,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((t) => (t.id === orderId ? updatedTransaction : t))
     );
 
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       safeSetDoc(
         doc(db, 'users', currentUser.uid, 'transactions', orderId),
         updatedTransaction,
@@ -1420,7 +1421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setDebts((prev) =>
           prev.map((d) => (d.id === existingDebt.id ? updatedDebt : d))
         );
-        if (currentUser) {
+        if (canWriteToCloud && currentUser) {
           safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', updatedDebt.id), updatedDebt).catch(console.warn);
         }
       } else {
@@ -1439,7 +1440,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           loans: [],
         };
         setDebts((prev) => [newDebtRecord, ...prev]);
-        if (currentUser) {
+        if (canWriteToCloud && currentUser) {
           safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', newDebtRecord.id), newDebtRecord).catch(console.warn);
         }
       }
@@ -1457,7 +1458,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             status: 'CANCELLED',
             notes: reason ? `${t.notes || ''} [ملغي: ${reason}]` : `${t.notes || ''} [تم إلغاء الطلبية]`,
           };
-          if (currentUser) {
+          if (canWriteToCloud && currentUser) {
             safeSetDoc(doc(db, 'users', currentUser.uid, 'transactions', orderId), updated, { merge: true }).catch(console.warn);
           }
           return updated;
@@ -1498,7 +1499,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             updatedAt: new Date().toISOString(),
           };
 
-          if (currentUser) {
+          if (canWriteToCloud && currentUser) {
             safeSetDoc(doc(db, 'users', currentUser.uid, 'items', invItem.id), updatedItem, { merge: true }).catch(console.warn);
           }
 
@@ -1522,7 +1523,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               remainingDebt: Number(newRemaining.toFixed(2)),
               lastTransactionDate: new Date().toISOString(),
             };
-            if (currentUser) {
+            if (canWriteToCloud && currentUser) {
               safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', d.id), updatedDebt, { merge: true }).catch(console.warn);
             }
             return updatedDebt;
@@ -1546,7 +1547,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setTransactions((prev) => prev.filter((t) => t.id !== id));
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       deleteDoc(doc(db, 'users', currentUser.uid, 'transactions', id)).catch(console.warn);
     }
 
@@ -1683,7 +1684,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error(e);
     }
 
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       try {
         const batch = writeBatch(db);
         for (const it of items) {
@@ -1717,7 +1718,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error(e);
     }
 
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       setCloudSyncStatus('syncing');
       try {
         const batch = writeBatch(db);
@@ -1777,7 +1778,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Persist snapshot to Firestore if user logged in
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       try {
         const backupDocRef = doc(db, 'users', currentUser.uid, 'backups', backupId);
         await safeSetDoc(backupDocRef, backupRecord);
@@ -1815,7 +1816,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Sync restored state to Firestore active collections
-      if (currentUser) {
+      if (canWriteToCloud && currentUser) {
         const batch = writeBatch(db);
 
         // Update settings
@@ -1853,7 +1854,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteCloudBackup = async (backupId: string): Promise<void> => {
     setCloudBackups((prev) => prev.filter((b) => b.id !== backupId));
 
-    if (currentUser) {
+    if (canWriteToCloud && currentUser) {
       try {
         const backupDocRef = doc(db, 'users', currentUser.uid, 'backups', backupId);
         await deleteDoc(backupDocRef);
@@ -2017,7 +2018,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Sync to Firestore if user is authenticated
-      if (currentUser) {
+      if (canWriteToCloud && currentUser) {
         try {
           const batch = writeBatch(db);
           if (finalSettings) {

@@ -25,9 +25,20 @@ import { AuthModal } from './components/AuthModal';
 import { ShareModal } from './components/ShareModal';
 import { AdminLicensePanelModal } from './components/AdminLicensePanelModal';
 import { ToastNotification } from './components/ToastNotification';
+import { VillageStoreView } from './components/VillageStoreView';
+import { PortalLandingScreen } from './components/PortalLandingScreen';
+import { useAuth } from './context/AuthContext';
 import { Item, Transaction, DebtRecord, DebtPaymentHistoryItem } from './types';
 
-const MainAppContent: React.FC = () => {
+interface MainAppContentProps {
+  onSwitchToStore?: () => void;
+  onOpenLanding?: () => void;
+}
+
+const MainAppContent: React.FC<MainAppContentProps> = ({
+  onSwitchToStore,
+  onOpenLanding,
+}) => {
   const { activeTab, setActiveTab, setSelectedStickerItemId, settings, isRTL, items } = useApp();
   const { isPro, setShowSubscriptionModal, canAddItemWithCount } = useSubscription();
 
@@ -107,6 +118,8 @@ const MainAppContent: React.FC = () => {
         onOpenAuthModal={() => setShowAuthModal(true)}
         onOpenShareModal={() => setShowShareModal(true)}
         onOpenAdminLicenses={() => setShowAdminLicenseModal(true)}
+        onSwitchToStore={onSwitchToStore}
+        onOpenLanding={onOpenLanding}
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
         mobileOpen={mobileMenuOpen}
@@ -130,6 +143,8 @@ const MainAppContent: React.FC = () => {
           onOpenAuthModal={() => setShowAuthModal(true)}
           onOpenShareModal={() => setShowShareModal(true)}
           onOpenAdminLicenses={() => setShowAdminLicenseModal(true)}
+          onSwitchToStore={onSwitchToStore}
+          onOpenLanding={onOpenLanding}
           onNavigateToItems={() => setActiveTab('items')}
           onNavigateToDashboard={() => setActiveTab('dashboard')}
         />
@@ -258,13 +273,116 @@ const MainAppContent: React.FC = () => {
   );
 };
 
+const PortalRouter: React.FC = () => {
+  const { items, settings, isRTL } = useApp();
+  const { currentUser } = useAuth();
+  
+  // Check URL query parameters or hash to support direct linking (?portal=store or ?portal=merchant)
+  const [portalMode, setPortalMode] = useState<'landing' | 'store' | 'merchant'>(() => {
+    try {
+      const search = window.location.search;
+      const params = new URLSearchParams(search);
+      const portalParam = params.get('portal');
+      if (portalParam === 'store' || window.location.hash === '#store') return 'store';
+      if (portalParam === 'merchant' || window.location.hash === '#admin') return 'merchant';
+    } catch {}
+    return 'landing';
+  });
+
+  const [showGlobalAuthModal, setShowGlobalAuthModal] = useState(false);
+
+  const handleSwitchToStore = () => {
+    setPortalMode('store');
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('portal', 'store');
+      window.history.replaceState(null, '', url.toString());
+    } catch {}
+  };
+
+  const handleSwitchToMerchant = () => {
+    setPortalMode('merchant');
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('portal', 'merchant');
+      window.history.replaceState(null, '', url.toString());
+    } catch {}
+  };
+
+  const handleSwitchToLanding = () => {
+    setPortalMode('landing');
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('portal');
+      window.history.replaceState(null, '', url.pathname + (url.search ? url.search : ''));
+    } catch {}
+  };
+
+  if (portalMode === 'store') {
+    return (
+      <>
+        <VillageStoreView
+          items={items}
+          settings={settings}
+          isRTL={isRTL}
+          onOpenMerchantPortal={handleSwitchToMerchant}
+          onOpenLanding={handleSwitchToLanding}
+        />
+        {showGlobalAuthModal && (
+          <AuthModal
+            isOpen={showGlobalAuthModal}
+            onClose={() => setShowGlobalAuthModal(false)}
+          />
+        )}
+      </>
+    );
+  }
+
+  if (portalMode === 'landing') {
+    return (
+      <>
+        <PortalLandingScreen
+          settings={settings}
+          itemsCount={items.length}
+          isRTL={isRTL}
+          isAuthenticated={!!currentUser}
+          onEnterStore={handleSwitchToStore}
+          onEnterMerchant={handleSwitchToMerchant}
+          onOpenAuthModal={() => setShowGlobalAuthModal(true)}
+        />
+        {showGlobalAuthModal && (
+          <AuthModal
+            isOpen={showGlobalAuthModal}
+            onClose={() => setShowGlobalAuthModal(false)}
+          />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <MainAppContent
+        onSwitchToStore={handleSwitchToStore}
+        onOpenLanding={handleSwitchToLanding}
+      />
+      {showGlobalAuthModal && (
+        <AuthModal
+          isOpen={showGlobalAuthModal}
+          onClose={() => setShowGlobalAuthModal(false)}
+        />
+      )}
+    </>
+  );
+};
+
 export default function App() {
   return (
     <PWAProvider>
       <AuthProvider>
         <AppProvider>
           <SubscriptionProvider>
-            <MainAppContent />
+            <PortalRouter />
           </SubscriptionProvider>
         </AppProvider>
       </AuthProvider>

@@ -43,6 +43,8 @@ interface SidebarProps {
   onOpenAuthModal?: () => void;
   onOpenShareModal?: () => void;
   onOpenAdminLicenses?: () => void;
+  onSwitchToStore?: () => void;
+  onOpenLanding?: () => void;
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
   mobileOpen: boolean;
@@ -56,6 +58,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenAuthModal,
   onOpenShareModal,
   onOpenAdminLicenses,
+  onSwitchToStore,
+  onOpenLanding,
   isCollapsed,
   setIsCollapsed,
   mobileOpen,
@@ -535,6 +539,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {!isCollapsed ? (
             <div className="space-y-2">
+              {/* Village Storefront for Customers */}
+              {onSwitchToStore && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileOpen(false);
+                    onSwitchToStore();
+                  }}
+                  className="w-full flex items-center justify-between py-2 px-3 bg-gradient-to-r from-emerald-950/80 to-teal-950/80 hover:from-emerald-900 hover:to-teal-900 border border-emerald-500/50 text-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                  title="عرض واجهة متجر القرية للعملاء"
+                >
+                  <div className="flex items-center gap-2">
+                    <Store className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>متجر القرية (للعملاء)</span>
+                  </div>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-medium">عام</span>
+                </button>
+              )}
+
+              {/* Back to Portals Screen */}
+              {onOpenLanding && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileOpen(false);
+                    onOpenLanding();
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 py-1 text-[11px] text-slate-400 hover:text-white transition-colors"
+                >
+                  <span>شاشة البوابات الرئيسية</span>
+                </button>
+              )}
+
               <a
                 href={OWNER_CONTACT.getWhatsAppUrl({ storeName: settings.storeName })}
                 target="_blank"

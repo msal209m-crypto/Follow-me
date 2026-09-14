@@ -54,6 +54,8 @@ interface TopHeaderProps {
   onNavigateToDashboard?: () => void;
   onOpenShareModal?: () => void;
   onOpenAdminLicenses?: () => void;
+  onSwitchToStore?: () => void;
+  onOpenLanding?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -66,6 +68,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onNavigateToDashboard,
   onOpenShareModal,
   onOpenAdminLicenses,
+  onSwitchToStore,
+  onOpenLanding,
 }) => {
   const {
     currentCashier,
@@ -83,7 +87,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     syncToCloudNow,
   } = useApp();
 
-  const { currentUser, userProfile, logout } = useAuth();
+  const { currentUser, userProfile, logout, isCloudConnected } = useAuth();
   const { isInstalled, setShowInstallPromptModal, updateAvailable, applyUpdate, isOnline } = usePWA();
   const { isPro, subscription, setShowSubscriptionModal } = useSubscription();
 
@@ -626,6 +630,21 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </div>
 
+          {/* 3.5. Village Customer Store Switch Button */}
+          {onSwitchToStore && (
+            <button
+              type="button"
+              onClick={onSwitchToStore}
+              className="h-8 sm:h-9 px-2.5 sm:px-3 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-200 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm text-xs font-bold"
+              title={language === 'ar' ? 'معاينة متجر القرية للعملاء' : 'View Village Customer Store'}
+            >
+              <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0" />
+              <span className="hidden sm:inline">
+                {language === 'ar' ? 'متجر القرية' : 'Store'}
+              </span>
+            </button>
+          )}
+
           {/* 4. Settings Button */}
           <button
             type="button"
@@ -720,20 +739,46 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowUserDropdown(false);
-                      syncToCloudNow();
-                    }}
-                    className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-slate-100 hover:bg-slate-800 border border-transparent hover:border-slate-700 transition-colors cursor-pointer active:scale-98"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Cloud className="w-4 h-4 text-cyan-400 shrink-0" />
-                      <span>{t.cloudSyncTitle}</span>
+                  {!isCloudConnected && (
+                    <div className="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-200 text-[11px] flex flex-col gap-1.5 my-1">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>{language === 'ar' ? 'وضع المتجر المحلي' : 'Local Offline Store'}</span>
+                      </div>
+                      <p className="text-[10px] text-amber-200/80 leading-relaxed">
+                        {language === 'ar'
+                          ? 'البيانات محفوظة بأمان في هذا الجهاز. لمزامنتها مع السحابة سجّل الدخول عبر Google.'
+                          : 'Store is safely stored locally. Sign in with Google to enable cloud sync.'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUserDropdown(false);
+                          onOpenAuthModal();
+                        }}
+                        className="w-full py-1 px-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-lg text-center cursor-pointer transition-colors text-xs"
+                      >
+                        {language === 'ar' ? 'ربط السحابة بـ Google' : 'Connect Google Cloud'}
+                      </button>
                     </div>
-                    <span className="text-[10px] text-emerald-400 font-bold">{t.cloudSynced}</span>
-                  </button>
+                  )}
+
+                  {isCloudConnected && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        syncToCloudNow();
+                      }}
+                      className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-slate-100 hover:bg-slate-800 border border-transparent hover:border-slate-700 transition-colors cursor-pointer active:scale-98"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Cloud className="w-4 h-4 text-cyan-400 shrink-0" />
+                        <span>{t.cloudSyncTitle}</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 font-bold">{t.cloudSynced}</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -835,6 +880,20 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     </div>
                     <span className="text-[10px] text-emerald-400 font-mono font-bold">{OWNER_CONTACT.phoneLocal}</span>
                   </a>
+
+                  {onOpenLanding && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        onOpenLanding();
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-emerald-300 hover:bg-emerald-950/40 border border-transparent hover:border-emerald-700/60 transition-colors cursor-pointer active:scale-98"
+                    >
+                      <Store className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>{language === 'ar' ? 'العودة لشاشة البوابات الرئيسية' : 'Return to Portals Screen'}</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"

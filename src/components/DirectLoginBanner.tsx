@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 
 export const DirectLoginBanner: React.FC<{ onOpenAuthModal: () => void }> = ({ onOpenAuthModal }) => {
-  const { currentUser, userProfile, logout } = useAuth();
-  const { isRTL, language, cloudSyncStatus, syncToCloudNow } = useApp();
+  const { currentUser, userProfile, logout, isCloudConnected } = useAuth();
+  const { isRTL, language, syncToCloudNow } = useApp();
 
   // If user is not logged in: show prominent Direct Login Banner
   if (!currentUser) {
@@ -64,34 +64,55 @@ export const DirectLoginBanner: React.FC<{ onOpenAuthModal: () => void }> = ({ o
         </div>
 
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-xs sm:text-sm text-white truncate">
               {userProfile?.displayName || currentUser.email?.split('@')[0] || 'المدير'}
             </span>
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40">
               {userProfile?.storeName || 'متجري الذكي'}
             </span>
-            <span className="hidden xs:inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
-              <ShieldCheck className="w-3 h-3 text-emerald-400" />
-              <span>{language === 'ar' ? 'متصل وحاضر' : 'Online & Active'}</span>
-            </span>
+            {isCloudConnected ? (
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/40">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span>{language === 'ar' ? 'سحابي متصل ومزامن' : 'Cloud Synced'}</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] text-amber-300 font-bold bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-500/40">
+                <AlertCircle className="w-3 h-3 text-amber-400" />
+                <span>{language === 'ar' ? 'متجر محلي (محفوظ بالجهاز)' : 'Local Storage Mode'}</span>
+              </span>
+            )}
           </div>
-          <div className="text-[11px] text-slate-400 truncate">
+          <div className="text-[11px] text-slate-400 truncate mt-0.5">
             {currentUser.email || 'حساب التاجر المعتمد'}
           </div>
         </div>
       </div>
 
       <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-        <button
-          type="button"
-          onClick={syncToCloudNow}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all cursor-pointer active:scale-95"
-          title={language === 'ar' ? 'مزامنة السحابة الآن' : 'Sync cloud now'}
-        >
-          <Cloud className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="hidden xs:inline">{language === 'ar' ? 'مزامنة سحابية' : 'Cloud Sync'}</span>
-        </button>
+        {!isCloudConnected && (
+          <button
+            type="button"
+            onClick={onOpenAuthModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 text-xs font-bold transition-all cursor-pointer active:scale-95"
+            title={language === 'ar' ? 'ربط السحابة بـ Google لحفظ دائم' : 'Connect Google Cloud'}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>{language === 'ar' ? 'ربط السحابة بـ Google' : 'Connect Cloud'}</span>
+          </button>
+        )}
+
+        {isCloudConnected && (
+          <button
+            type="button"
+            onClick={syncToCloudNow}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all cursor-pointer active:scale-95"
+            title={language === 'ar' ? 'مزامنة السحابة الآن' : 'Sync cloud now'}
+          >
+            <Cloud className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden xs:inline">{language === 'ar' ? 'مزامنة سحابية' : 'Cloud Sync'}</span>
+          </button>
+        )}
 
         <button
           type="button"

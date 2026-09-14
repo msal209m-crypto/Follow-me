@@ -1,9 +1,10 @@
 {
-  "version": 1,
-  "collections": {
-    "license_keys": {
+  "entities": {
+    "LicenseKey": {
+      "title": "LicenseKey",
       "description": "FlowApp Pro activation license keys created by admin and redeemed by users",
-      "fields": {
+      "type": "object",
+      "properties": {
         "key": { "type": "string", "description": "Unique key formatted like FLOW-XXXX-XXXX-XXXX" },
         "is_used": { "type": "boolean", "description": "Whether the key has been redeemed" },
         "plan": { "type": "string", "description": "Plan code (1M, 3M, 6M, 1Y, LIFE)" },
@@ -14,18 +15,85 @@
         "used_by": { "type": "string", "description": "User ID of customer who redeemed" },
         "user_email": { "type": "string", "description": "Customer email" },
         "notes": { "type": "string", "description": "Optional notes or retailer name" }
-      }
+      },
+      "required": ["key", "is_used"]
     },
-    "users": {
-      "description": "Multi-tenant user profiles and isolated subcollections",
-      "fields": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Multi-tenant user profiles and isolated store metadata",
+      "type": "object",
+      "properties": {
         "email": { "type": "string" },
         "displayName": { "type": "string" },
         "role": { "type": "string" },
-        "subscriptionTier": { "type": "string" },
-        "subscriptionExpiresAt": { "type": "string" },
-        "licenseKey": { "type": "string" }
-      }
+        "storeName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["email", "displayName"]
+    },
+    "Item": {
+      "title": "Item",
+      "description": "Inventory product item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "barcode": { "type": "string" },
+        "salePrice": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["id", "name", "salePrice", "quantity"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Sales or purchase invoice transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "type": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "type", "totalAmount", "timestamp"]
+    },
+    "DebtRecord": {
+      "title": "DebtRecord",
+      "description": "Customer or supplier debt ledger record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "personName": { "type": "string" },
+        "totalDebt": { "type": "number" },
+        "remainingDebt": { "type": "number" }
+      },
+      "required": ["id", "personName", "totalDebt", "remainingDebt"]
+    }
+  },
+  "firestore": {
+    "/license_keys/{keyId}": {
+      "schema": "LicenseKey",
+      "description": "Activation license keys collection"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document"
+    },
+    "/users/{userId}/items/{itemId}": {
+      "schema": "Item",
+      "description": "Isolated merchant inventory items subcollection"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Isolated merchant sales transactions subcollection"
+    },
+    "/users/{userId}/debts/{debtId}": {
+      "schema": "DebtRecord",
+      "description": "Isolated merchant debt records subcollection"
     }
   }
 }

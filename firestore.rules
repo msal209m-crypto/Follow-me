@@ -26,37 +26,37 @@ service cloud.firestore {
       );
     }
 
-    // User profile: only the authenticated user can read or modify their own profile
+    // User profile: only the authenticated user (or admin) can read or modify profile
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
       
-      // Multi-tenant isolated subcollections: only owner can access their subcollections
+      // Multi-tenant isolated subcollections: only owner (or admin) can access their subcollections
       match /items/{itemId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
       }
       
       match /transactions/{transactionId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
       }
       
       match /debts/{debtId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
       }
       
       match /settings/{settingsId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
       }
 
       match /cashiers/{cashierId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
       }
 
       match /backups/{backupId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
       }
 
       match /activity_logs/{logId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
       }
     }
 
