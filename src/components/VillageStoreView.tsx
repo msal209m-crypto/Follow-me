@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search,
   ShoppingCart,
@@ -73,9 +73,9 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     return items.filter((item) => {
       const matchSearch =
         !searchQuery.trim() ||
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.barcode && item.barcode.includes(searchQuery));
+        String(item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(item.category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.barcode && String(item.barcode).toLowerCase().includes(searchQuery.toLowerCase()));
 
       const matchCategory =
         selectedCategory === 'ALL' || item.category === selectedCategory;
@@ -188,6 +188,47 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       window.open(`https://api.whatsapp.com/send?text=${encodedMsg}`, '_blank');
     }
   };
+
+  // Direct 1-click single-item WhatsApp Order
+  const handleDirectWhatsAppProduct = (item: Item) => {
+    const currency = settings.currency || 'ر.س';
+    const storeName = settings.storeName || 'متجر قريتي';
+    const cleanPhone = getWhatsAppTargetPhone();
+
+    let message = `🛒 *طلب فوري عبر الواتساب*\n`;
+    message += `🏪 *المتجر:* ${storeName}\n`;
+    message += `📦 *الصنف المطلوب:* *${item.name}*\n`;
+    message += `💵 *السعر:* ${item.salePrice.toFixed(2)} ${currency} ${item.unit ? `لكل ${item.unit}` : ''}\n`;
+    if (customerName.trim()) {
+      message += `👤 *اسم العميل:* ${customerName.trim()}\n`;
+    }
+    if (customerAddress.trim()) {
+      message += `📍 *العنوان / القرية:* ${customerAddress.trim()}\n`;
+    }
+    message += `📅 *تاريخ الطلب:* ${new Date().toLocaleDateString('ar-SA')}\n`;
+    message += `هل الصنف متاح حالياً للتوصيل أو الاستلام؟ شكراً لك.`;
+
+    const encodedMsg = encodeURIComponent(message);
+    if (cleanPhone) {
+      window.open(`https://wa.me/${cleanPhone}?text=${encodedMsg}`, '_blank');
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encodedMsg}`, '_blank');
+    }
+  };
+
+  // Interoperability with custom event qaryati:add-to-cart
+  useEffect(() => {
+    const handleAddEvent = (e: any) => {
+      const targetId = e.detail?.id;
+      if (!targetId) return;
+      const target = items.find((i) => String(i.id) === String(targetId));
+      if (target) {
+        addToCart(target);
+      }
+    };
+    window.addEventListener('qaryati:add-to-cart', handleAddEvent);
+    return () => window.removeEventListener('qaryati:add-to-cart', handleAddEvent);
+  }, [items, addToCart]);
 
   const handleShareStoreLink = async () => {
     const url = `${window.location.origin}${window.location.pathname}?portal=store`;
@@ -384,40 +425,65 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div
+            id="products-container"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3 sm:gap-4"
+          >
             {filteredItems.map((item) => {
               const inCart = cart[item.id];
-              const isAvailable = item.quantity > 0;
+              const isAvailable = item.quantity > 0 && item.available !== false;
               const currency = settings.currency || 'ر.س';
+              const productImage = item.image || item.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60';
 
               return (
                 <div
                   key={item.id}
-                  className="bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-3.5 flex flex-col justify-between transition-all duration-200 shadow-sm hover:shadow-md relative group"
+                  className="bg-slate-900/95 hover:bg-slate-900 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-200 shadow-sm hover:shadow-md relative group"
                 >
-                  {/* Category & Availability Badges */}
-                  <div className="flex items-center justify-between gap-1 mb-2">
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 truncate max-w-[110px]">
-                      {item.category || 'عام'}
-                    </span>
-                    {isAvailable ? (
-                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
-                        متوفر
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded">
-                        نفذ
-                      </span>
-                    )}
-                  </div>
+                  <div>
+                    {/* Product Image & Badges */}
+                    <div className="relative w-full h-32 sm:h-36 mb-3 rounded-xl overflow-hidden bg-slate-950/80 border border-slate-800">
+                      <img
+                        src={productImage}
+                        alt={item.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60';
+                        }}
+                      />
 
-                  {/* Product Title & Info */}
-                  <div className="mb-3">
-                    <h3 className="font-bold text-sm text-white line-clamp-2 leading-snug group-hover:text-emerald-300 transition-colors">
-                      {item.name}
-                    </h3>
-                    <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
-                      {item.unit && <span>الوحدة: {item.unit}</span>}
+                      {/* Availability Badge */}
+                      <div className="absolute top-2 right-2">
+                        {isAvailable ? (
+                          <span className="text-[10px] font-bold text-emerald-300 bg-slate-950/85 backdrop-blur border border-emerald-500/30 px-2 py-0.5 rounded-md shadow">
+                            متوفر
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-rose-300 bg-slate-950/85 backdrop-blur border border-rose-500/30 px-2 py-0.5 rounded-md shadow">
+                            نفذ
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Category Badge */}
+                      {item.category && (
+                        <div className="absolute bottom-2 right-2">
+                          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-950/80 backdrop-blur text-slate-300">
+                            {item.category}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Product Title & Info */}
+                    <div className="mb-2">
+                      <h3 className="font-bold text-sm text-white line-clamp-2 leading-snug group-hover:text-emerald-300 transition-colors">
+                        {item.name}
+                      </h3>
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                        {item.unit && <span>الوحدة: {item.unit}</span>}
+                      </div>
                     </div>
                   </div>
 
@@ -431,12 +497,12 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Interactive Cart Buttons */}
+                    {/* Interactive Cart Buttons & 1-Click WhatsApp */}
                     {inCart ? (
                       <div className="flex items-center justify-between bg-slate-800/90 rounded-xl p-1 border border-emerald-500/40">
                         <button
                           onClick={() => updateQuantity(item.id, -1)}
-                          className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center transition-colors"
+                          className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center transition-colors cursor-pointer"
                           title="إنقاص"
                         >
                           <Minus className="w-3.5 h-3.5" />
@@ -446,25 +512,36 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                         </span>
                         <button
                           onClick={() => updateQuantity(item.id, 1)}
-                          className="w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-colors"
+                          className="w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-colors cursor-pointer"
                           title="زيادة"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => addToCart(item)}
-                        disabled={!isAvailable}
-                        className={`w-full py-2 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                          isAvailable
-                            ? 'bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white border border-slate-700/60 hover:border-emerald-500'
-                            : 'bg-slate-800/40 text-slate-500 cursor-not-allowed border border-slate-800'
-                        }`}
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>{isAvailable ? 'إضافة للسلة' : 'غير متوفر'}</span>
-                      </button>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => addToCart(item)}
+                          disabled={!isAvailable}
+                          className={`flex-1 py-2 px-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                            isAvailable
+                              ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm hover:shadow-emerald-950/50'
+                              : 'bg-slate-800/40 text-slate-500 cursor-not-allowed border border-slate-800'
+                          }`}
+                        >
+                          <ShoppingCart className="w-3.5 h-3.5" />
+                          <span>{isAvailable ? 'إضافة للسلة' : 'غير متوفر'}</span>
+                        </button>
+                        {isAvailable && (
+                          <button
+                            onClick={() => handleDirectWhatsAppProduct(item)}
+                            className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl transition-colors cursor-pointer shrink-0"
+                            title="طلب هذا الصنف عبر الواتساب فوراً"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

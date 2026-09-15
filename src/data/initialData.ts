@@ -748,7 +748,8 @@ export const INITIAL_ITEMS: Item[] = [
 ];
 
 export const INITIAL_CASHIERS: Cashier[] = [
-  { id: 'c-1', name: 'المدير العام / كاشير', role: 'كاشير ومبيعات', phone: '', active: true },
+  { id: 'c-1', name: 'المدير العام (مشرف)', role: 'OWNER', phone: '', active: true },
+  { id: 'c-2', name: 'كاشير المبيعات', role: 'CASHIER', phone: '', active: true, password: '123' },
 ];
 
 export const INITIAL_DEBTS: DebtRecord[] = [

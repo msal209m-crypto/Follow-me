@@ -44,7 +44,10 @@
         "costPrice": { "type": "number" },
         "quantity": { "type": "number" },
         "unit": { "type": "string" },
-        "category": { "type": "string" }
+        "category": { "type": "string" },
+        "image": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "available": { "type": "boolean" }
       },
       "required": ["id", "name", "salePrice", "quantity"]
     },

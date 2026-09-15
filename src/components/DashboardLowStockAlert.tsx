@@ -97,8 +97,8 @@ export const DashboardLowStockAlert: React.FC<DashboardLowStockAlertProps> = ({
     const q = searchQuery.toLowerCase().trim();
     return list.filter(
       (it) =>
-        it.name.toLowerCase().includes(q) ||
-        (it.barcode && it.barcode.toLowerCase().includes(q)) ||
+        (it.name && it.name.toLowerCase().includes(q)) ||
+        (it.barcode && String(it.barcode).toLowerCase().includes(q)) ||
         (it.category && it.category.toLowerCase().includes(q))
     );
   }, [showDismissed, criticalItems, activeCriticalItems, filterMode, searchQuery]);

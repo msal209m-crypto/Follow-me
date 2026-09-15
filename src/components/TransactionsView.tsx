@@ -53,13 +53,21 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     settings,
     currentCashier,
     showNotification,
+    isCashierMode,
   } = useApp();
 
   const language = settings.language || 'ar';
 
-  // Active operation mode
+  // Active operation mode (بيع كاش / بيع أجل)
   const [operationType, setOperationType] = useState<TransactionType>('SALE');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
+
+  // التأكد من أن الكاشير محصور في بيع كاش أو بيع أجل فقط
+  useEffect(() => {
+    if (isCashierMode && operationType === 'PURCHASE') {
+      setOperationType('SALE');
+    }
+  }, [isCashierMode, operationType]);
 
   // Input view mode: Barcode scan or Visual Catalog List
   const [inputViewMode, setInputViewMode] = useState<'BARCODE' | 'CATALOG'>('BARCODE');
@@ -443,7 +451,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           {/* Operation Type Switcher */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
             <div className="text-xs text-slate-400 font-bold mb-2">نوع العملية للكاشير:</div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid ${isCashierMode ? 'grid-cols-2' : 'grid-cols-3'} gap-2`}>
               <button
                 type="button"
                 id="btn-pos-sale-cash"
@@ -470,18 +478,20 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 ⏳ بيع أجل (دين)
               </button>
 
-              <button
-                type="button"
-                id="btn-pos-purchase-cash"
-                onClick={() => setOperationType('PURCHASE')}
-                className={`text-xs py-2.5 px-3 rounded-lg font-extrabold border transition-all cursor-pointer ${
-                  operationType === 'PURCHASE'
-                    ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-950'
-                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
-                }`}
-              >
-                📥 شراء نقدي سريع
-              </button>
+              {!isCashierMode && (
+                <button
+                  type="button"
+                  id="btn-pos-purchase-cash"
+                  onClick={() => setOperationType('PURCHASE')}
+                  className={`text-xs py-2.5 px-3 rounded-lg font-extrabold border transition-all cursor-pointer ${
+                    operationType === 'PURCHASE'
+                      ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-950'
+                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  📥 شراء نقدي سريع
+                </button>
+              )}
             </div>
           </div>
 
@@ -1355,7 +1365,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               </div>
 
               <div className="flex flex-wrap gap-1 text-[11px]">
-                {['ALL', 'SALE', 'CREDIT_SALE', 'PURCHASE', 'ORDER_GOODS_CASH'].map((type) => (
+                {(isCashierMode
+                  ? ['ALL', 'SALE', 'CREDIT_SALE']
+                  : ['ALL', 'SALE', 'CREDIT_SALE', 'PURCHASE', 'ORDER_GOODS_CASH']
+                ).map((type) => (
                   <button
                     key={type}
                     onClick={() => setHistoryFilterType(type)}
@@ -1441,18 +1454,20 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                           <span>طباعة الإيصال</span>
                         </button>
 
-                        <button
-                          type="button"
-                          id={`btn-delete-tx-${tx.id}`}
-                          onClick={() => {
-                            setTxToDelete(tx);
-                            setRestoreStockOnDelete(true);
-                          }}
-                          className="p-1 text-rose-400 hover:text-rose-300 bg-rose-950/30 hover:bg-rose-900/50 rounded-lg border border-rose-800/40 transition-colors cursor-pointer"
-                          title="حذف الحركة المالية"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!isCashierMode && (
+                          <button
+                            type="button"
+                            id={`btn-delete-tx-${tx.id}`}
+                            onClick={() => {
+                              setTxToDelete(tx);
+                              setRestoreStockOnDelete(true);
+                            }}
+                            className="p-1 text-rose-400 hover:text-rose-300 bg-rose-950/30 hover:bg-rose-900/50 rounded-lg border border-rose-800/40 transition-colors cursor-pointer"
+                            title="حذف الحركة المالية"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

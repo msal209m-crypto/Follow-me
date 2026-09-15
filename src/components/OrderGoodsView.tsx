@@ -134,9 +134,9 @@ export const OrderGoodsView: React.FC<OrderGoodsViewProps> = ({
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchName = item.name.toLowerCase().includes(q);
-        const matchBarcode = item.barcode.toLowerCase().includes(q);
-        const matchCategory = (item.category || '').toLowerCase().includes(q);
+        const matchName = String(item.name || '').toLowerCase().includes(q);
+        const matchBarcode = String(item.barcode || '').toLowerCase().includes(q);
+        const matchCategory = String(item.category || '').toLowerCase().includes(q);
         if (!matchName && !matchBarcode && !matchCategory) {
           return false;
         }

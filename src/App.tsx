@@ -39,7 +39,15 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
   onSwitchToStore,
   onOpenLanding,
 }) => {
-  const { activeTab, setActiveTab, setSelectedStickerItemId, settings, isRTL, items } = useApp();
+  const {
+    activeTab,
+    setActiveTab,
+    setSelectedStickerItemId,
+    settings,
+    isRTL,
+    items,
+    isCashierMode,
+  } = useApp();
   const { isPro, setShowSubscriptionModal, canAddItemWithCount } = useSubscription();
 
   // Sidebar collapse & mobile state
@@ -134,19 +142,23 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
         {/* Top Header with Multi-Tenant Cloud & Auth status */}
         <TopHeader
           onOpenMobileMenu={() => setMobileMenuOpen(true)}
-          onOpenAddItem={handleOpenAddItem}
-          onOpenOrderGoods={(item) => handleOpenOrderGoods(item?.id, 'CASH')}
-          onOpenSettings={(tab?: 'GENERAL' | 'CURRENCY' | 'BACKUPS') => {
-            setSettingsInitialTab(tab || 'GENERAL');
-            setShowSettingsModal(true);
-          }}
+          onOpenAddItem={isCashierMode ? () => {} : handleOpenAddItem}
+          onOpenOrderGoods={isCashierMode ? () => {} : (item) => handleOpenOrderGoods(item?.id, 'CASH')}
+          onOpenSettings={
+            isCashierMode
+              ? () => {}
+              : (tab?: 'GENERAL' | 'CURRENCY' | 'BACKUPS') => {
+                  setSettingsInitialTab(tab || 'GENERAL');
+                  setShowSettingsModal(true);
+                }
+          }
           onOpenAuthModal={() => setShowAuthModal(true)}
           onOpenShareModal={() => setShowShareModal(true)}
           onOpenAdminLicenses={() => setShowAdminLicenseModal(true)}
           onSwitchToStore={onSwitchToStore}
           onOpenLanding={onOpenLanding}
-          onNavigateToItems={() => setActiveTab('items')}
-          onNavigateToDashboard={() => setActiveTab('dashboard')}
+          onNavigateToItems={isCashierMode ? () => {} : () => setActiveTab('items')}
+          onNavigateToDashboard={isCashierMode ? () => {} : () => setActiveTab('dashboard')}
         />
 
         {/* Content views */}
@@ -154,47 +166,58 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
           <div className="max-w-7xl mx-auto w-full">
             {/* Direct & Prominent User Presence / Login Banner */}
             <DirectLoginBanner onOpenAuthModal={() => setShowAuthModal(true)} />
-            {activeTab === 'dashboard' && (
-              <DashboardView
-                onOpenAddItem={handleOpenAddItem}
-                onOpenOrderGoods={handleOpenOrderGoods}
-                onPrintReceipt={handlePrintTransactionReceipt}
-                onNavigate={(tab) => setActiveTab(tab)}
-              />
-            )}
 
-            {activeTab === 'items' && (
-              <ItemsView
-                onOpenAddItem={handleOpenAddItem}
-                onOpenOrderGoods={handleOpenOrderGoods}
-                onEditItem={handleEditItem}
-                onPrintStickersForItem={handlePrintStickersForItem}
-              />
-            )}
-
-            {activeTab === 'stickers' && <StickersView />}
-
-            {activeTab === 'transactions' && (
+            {/* صلاحيات الكاشير: عند تفعيل حساب الكاشير، إخفاء الحسابات والأرباح والمخزون، والاكتفاء بشاشة نقاط البيع فقط */}
+            {isCashierMode ? (
               <TransactionsView
                 onPrintReceipt={handlePrintTransactionReceipt}
-                onOpenOrderGoodsModal={(type) => handleOpenOrderGoods(undefined, type || 'CASH')}
+                onOpenOrderGoodsModal={undefined}
               />
+            ) : (
+              <>
+                {activeTab === 'dashboard' && (
+                  <DashboardView
+                    onOpenAddItem={handleOpenAddItem}
+                    onOpenOrderGoods={handleOpenOrderGoods}
+                    onPrintReceipt={handlePrintTransactionReceipt}
+                    onNavigate={(tab) => setActiveTab(tab)}
+                  />
+                )}
+
+                {activeTab === 'items' && (
+                  <ItemsView
+                    onOpenAddItem={handleOpenAddItem}
+                    onOpenOrderGoods={handleOpenOrderGoods}
+                    onEditItem={handleEditItem}
+                    onPrintStickersForItem={handlePrintStickersForItem}
+                  />
+                )}
+
+                {activeTab === 'stickers' && <StickersView />}
+
+                {activeTab === 'transactions' && (
+                  <TransactionsView
+                    onPrintReceipt={handlePrintTransactionReceipt}
+                    onOpenOrderGoodsModal={(type) => handleOpenOrderGoods(undefined, type || 'CASH')}
+                  />
+                )}
+
+                {activeTab === 'order_goods' && (
+                  <OrderGoodsView
+                    onOpenAddItem={handleOpenAddItem}
+                    onPrintReceipt={handlePrintTransactionReceipt}
+                  />
+                )}
+
+                {activeTab === 'accounts' && <AccountsView />}
+
+                {activeTab === 'debts' && (
+                  <DebtsView onPrintDebtReceipt={handlePrintDebtReceipt} />
+                )}
+
+                {activeTab === 'daily_reports' && <DailyReportsView />}
+              </>
             )}
-
-            {activeTab === 'order_goods' && (
-              <OrderGoodsView
-                onOpenAddItem={handleOpenAddItem}
-                onPrintReceipt={handlePrintTransactionReceipt}
-              />
-            )}
-
-            {activeTab === 'accounts' && <AccountsView />}
-
-            {activeTab === 'debts' && (
-              <DebtsView onPrintDebtReceipt={handlePrintDebtReceipt} />
-            )}
-
-            {activeTab === 'daily_reports' && <DailyReportsView />}
           </div>
         </main>
       </div>

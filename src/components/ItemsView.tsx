@@ -642,16 +642,29 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
                         </div>
                       </td>
 
-                      {/* Item Name & Category */}
+                      {/* Item Name & Category with Product Image */}
                       <td className="p-3.5">
-                        <div className="font-bold text-white text-sm group-hover:text-emerald-300 transition-colors">
-                          {item.name}
-                        </div>
-                        {item.category && (
-                          <div className="text-xs text-slate-300 mt-0.5 font-medium">
-                            {item.category} • {t.unitLabel}: {item.unit || (language === 'ar' ? 'حبة' : 'Piece')}
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={item.image || item.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60'}
+                            alt={item.name}
+                            className="w-10 h-10 rounded-lg object-cover bg-slate-950 border border-slate-700 shrink-0"
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60';
+                            }}
+                          />
+                          <div>
+                            <div className="font-bold text-white text-sm group-hover:text-emerald-300 transition-colors">
+                              {item.name}
+                            </div>
+                            {item.category && (
+                              <div className="text-xs text-slate-300 mt-0.5 font-medium">
+                                {item.category} • {t.unitLabel}: {item.unit || (language === 'ar' ? 'حبة' : 'Piece')}
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </td>
 
                       {/* Quantity */}

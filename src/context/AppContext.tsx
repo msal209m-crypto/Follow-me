@@ -35,6 +35,7 @@ import {
   INITIAL_CASHIERS,
 } from '../data/initialData';
 import { translations, Translations } from '../i18n/translations';
+import { sanitizeProductImage, DEFAULT_PRODUCT_IMAGE } from '../utils/imageUtils';
 
 // Sets of dummy demo IDs used only to purge and prevent unwanted mock data pre-fill
 const DEMO_ITEM_IDS = new Set(INITIAL_ITEMS.map((i) => i.id));
@@ -54,6 +55,11 @@ interface AppContextType {
   cashiers: Cashier[];
   currentCashier: Cashier;
   setCurrentCashier: (cashier: Cashier) => void;
+  isCashierMode: boolean;
+  resetCashierPassword: (
+    cashierIdOrName?: string,
+    newPassword?: string
+  ) => { success: boolean; message: string; cashierName?: string; newPassword?: string };
   settings: StoreSettings;
   updateSettings: (newSettings: Partial<StoreSettings>) => void;
 
@@ -63,6 +69,7 @@ interface AppContextType {
 
   // Item operations
   addItem: (item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>) => Item;
+  saveProduct: (productName: string, salePrice: number | string, productImage?: string) => Item;
   updateItem: (id: string, item: Partial<Item>) => void;
   deleteItem: (id: string) => void;
   findItemByBarcode: (barcode: string) => Item | undefined;
@@ -234,13 +241,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [items, setItems] = useState<Item[]>(() => {
     try {
       const saved = localStorage.getItem(userPrefix + STORAGE_KEYS.ITEMS);
+      let list: Item[] = [];
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.filter((i: Item) => !DEMO_ITEM_IDS.has(i.id));
+          list = parsed
+            .filter((i: Item) => !DEMO_ITEM_IDS.has(i.id))
+            .map((i: any) => ({
+              ...i,
+              barcode: String(i.barcode ?? '').trim(),
+              name: String(i.name ?? '').trim(),
+            }));
         }
       }
-      return [];
+      // Check for products saved in 'qaryati_products'
+      const qaryatiSaved = localStorage.getItem('qaryati_products');
+      if (qaryatiSaved) {
+        try {
+          const qList = JSON.parse(qaryatiSaved);
+          if (Array.isArray(qList)) {
+            qList.forEach((qp: any) => {
+              if (qp && qp.name && !list.some((it) => String(it.id) === String(qp.id) || it.name === qp.name)) {
+                list.push({
+                  id: String(qp.id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`),
+                  barcode: `628${Math.floor(100000000 + Math.random() * 900000000)}`,
+                  name: qp.name,
+                  category: 'مواد غذائية',
+                  quantity: 50,
+                  costPrice: Math.round(Number(qp.price || 0) * 0.75 * 100) / 100,
+                  salePrice: Number(qp.price || 0),
+                  price: Number(qp.price || 0),
+                  image: qp.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60',
+                  imageUrl: qp.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60',
+                  available: qp.available !== false,
+                  minStockAlert: 5,
+                  unit: 'حبة',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                });
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Error reading qaryati_products:', e);
+        }
+      }
+      return list;
     } catch {
       return [];
     }
@@ -279,13 +325,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [cashiers, setCashiers] = useState<Cashier[]>(() => {
     try {
       const saved = localStorage.getItem(userPrefix + STORAGE_KEYS.CASHIERS);
-      return saved ? JSON.parse(saved) : INITIAL_CASHIERS;
+      const parsed: Cashier[] = saved ? JSON.parse(saved) : INITIAL_CASHIERS;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const hasCashierRole = parsed.some(
+          (c) =>
+            c.role === 'CASHIER' ||
+            (c.role?.includes('كاشير') && !c.role?.includes('مدير') && !c.role?.includes('مشرف'))
+        );
+        if (!hasCashierRole) {
+          return [
+            ...parsed,
+            { id: 'c-2', name: 'كاشير المبيعات', role: 'CASHIER', phone: '', active: true, password: '123' },
+          ];
+        }
+        return parsed;
+      }
+      return INITIAL_CASHIERS;
     } catch {
       return INITIAL_CASHIERS;
     }
   });
 
   const [currentCashier, setCurrentCashier] = useState<Cashier>(cashiers[0] || INITIAL_CASHIERS[0]);
+
+  // صلاحيات الكاشير: هل الحساب النشط حالياً هو حساب كاشير
+  const isCashierMode = useMemo(() => {
+    if (userProfile?.role === 'CASHIER') return true;
+    if (!currentCashier) return false;
+    const r = (currentCashier.role || '').toUpperCase();
+    return (
+      r === 'CASHIER' ||
+      (r.includes('كاشير') &&
+        !r.includes('مدير') &&
+        !r.includes('مشرف') &&
+        !r.includes('OWNER') &&
+        !r.includes('ADMIN'))
+    );
+  }, [userProfile?.role, currentCashier]);
 
   // Cloud Backups state
   const [cloudBackups, setCloudBackups] = useState<CloudBackupRecord[]>(() => {
@@ -448,8 +524,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     try {
       localStorage.setItem(userPrefix + STORAGE_KEYS.ITEMS, JSON.stringify(items));
+      // Keep qaryati_products synchronized with all items using lightweight sanitized images
+      const qaryatiFormat = items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        price: Number(item.salePrice || item.price || 0),
+        image: sanitizeProductImage(item.image || item.imageUrl, DEFAULT_PRODUCT_IMAGE),
+        available: item.quantity > 0 && item.available !== false,
+      }));
+      localStorage.setItem('qaryati_products', JSON.stringify(qaryatiFormat));
     } catch (e) {
-      console.error(e);
+      console.error('Failed to sync items to localStorage (quota or serialization issue):', e);
+      // Fallback: If quota exceeded, strip heavy base64 strings from cache to protect responsiveness
+      try {
+        const lightweightItems = items.map((item) => ({
+          ...item,
+          image: item.image && item.image.startsWith('data:') ? DEFAULT_PRODUCT_IMAGE : item.image,
+          imageUrl: item.imageUrl && item.imageUrl.startsWith('data:') ? DEFAULT_PRODUCT_IMAGE : item.imageUrl,
+        }));
+        localStorage.setItem(userPrefix + STORAGE_KEYS.ITEMS, JSON.stringify(lightweightItems));
+      } catch (innerE) {
+        console.error('Critical localStorage quota exceeded:', innerE);
+      }
     }
   }, [items, userPrefix]);
 
@@ -476,6 +572,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error(e);
     }
   }, [settings, userPrefix]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(userPrefix + STORAGE_KEYS.CASHIERS, JSON.stringify(cashiers));
+    } catch (e) {
+      console.error('Failed to sync cashiers to localStorage:', e);
+    }
+  }, [cashiers, userPrefix]);
+
+  // صلاحيات الكاشير: عند تفعيل حساب الكاشير، إخفاء الحسابات والأرباح والمخزون، والاكتفاء بشاشة نقاط البيع فقط
+  useEffect(() => {
+    if (isCashierMode) {
+      const restrictedTabs: NavigationTab[] = [
+        'accounts',
+        'daily_reports',
+        'items',
+        'order_goods',
+        'stickers',
+        'dashboard',
+      ];
+      if (restrictedTabs.includes(activeTab)) {
+        setActiveTab('transactions');
+      }
+    }
+  }, [isCashierMode, activeTab]);
 
   useEffect(() => {
     try {
@@ -545,11 +666,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const demoDocsToDelete: string[] = [];
 
         snapshot.forEach((docSnap) => {
-          const it = docSnap.data() as Item;
-          if (DEMO_ITEM_IDS.has(it.id)) {
-            demoDocsToDelete.push(it.id);
+          const raw = docSnap.data() as any;
+          if (DEMO_ITEM_IDS.has(raw.id)) {
+            demoDocsToDelete.push(raw.id);
           } else {
-            loaded.push(it);
+            loaded.push({
+              ...raw,
+              barcode: String(raw.barcode ?? '').trim(),
+              name: String(raw.name ?? '').trim(),
+            });
           }
         });
 
@@ -736,8 +861,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ITEM OPERATIONS
   const addItem = (itemData: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>): Item => {
+    const safeBarcode = String(itemData.barcode ?? '').trim();
+    const safeName = String(itemData.name ?? '').trim();
     const newItem: Item = {
       ...itemData,
+      barcode: safeBarcode,
+      name: safeName,
       id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -764,23 +893,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateItem = (id: string, updatedFields: Partial<Item>) => {
+    const sanitizedFields = { ...updatedFields };
+    if (sanitizedFields.barcode !== undefined) {
+      sanitizedFields.barcode = String(sanitizedFields.barcode ?? '').trim();
+    }
+    if (sanitizedFields.name !== undefined) {
+      sanitizedFields.name = String(sanitizedFields.name ?? '').trim();
+    }
+
     const existing = items.find((i) => i.id === id);
     if (existing) {
       const diffs: ActivityChangeDiff[] = [];
-      if (updatedFields.name !== undefined && updatedFields.name !== existing.name) {
-        diffs.push({ label: 'اسم الصنف', oldVal: existing.name, newVal: updatedFields.name });
+      if (sanitizedFields.name !== undefined && sanitizedFields.name !== existing.name) {
+        diffs.push({ label: 'اسم الصنف', oldVal: existing.name, newVal: sanitizedFields.name });
       }
-      if (updatedFields.quantity !== undefined && updatedFields.quantity !== existing.quantity) {
-        diffs.push({ label: 'الكمية', oldVal: existing.quantity, newVal: updatedFields.quantity });
+      if (sanitizedFields.quantity !== undefined && sanitizedFields.quantity !== existing.quantity) {
+        diffs.push({ label: 'الكمية', oldVal: existing.quantity, newVal: sanitizedFields.quantity });
       }
-      if (updatedFields.salePrice !== undefined && updatedFields.salePrice !== existing.salePrice) {
-        diffs.push({ label: 'سعر البيع', oldVal: `${existing.salePrice} ${settings.currency}`, newVal: `${updatedFields.salePrice} ${settings.currency}` });
+      if (sanitizedFields.salePrice !== undefined && sanitizedFields.salePrice !== existing.salePrice) {
+        diffs.push({ label: 'سعر البيع', oldVal: `${existing.salePrice} ${settings.currency}`, newVal: `${sanitizedFields.salePrice} ${settings.currency}` });
       }
-      if (updatedFields.costPrice !== undefined && updatedFields.costPrice !== existing.costPrice) {
-        diffs.push({ label: 'سعر التكلفة', oldVal: `${existing.costPrice} ${settings.currency}`, newVal: `${updatedFields.costPrice} ${settings.currency}` });
+      if (sanitizedFields.costPrice !== undefined && sanitizedFields.costPrice !== existing.costPrice) {
+        diffs.push({ label: 'سعر التكلفة', oldVal: `${existing.costPrice} ${settings.currency}`, newVal: `${sanitizedFields.costPrice} ${settings.currency}` });
       }
-      if (updatedFields.barcode !== undefined && updatedFields.barcode !== existing.barcode) {
-        diffs.push({ label: 'الباركود', oldVal: existing.barcode, newVal: updatedFields.barcode });
+      if (sanitizedFields.barcode !== undefined && sanitizedFields.barcode !== existing.barcode) {
+        diffs.push({ label: 'الباركود', oldVal: existing.barcode, newVal: sanitizedFields.barcode });
       }
 
       logActivity({
@@ -802,7 +939,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (item.id === id) {
           const updated = {
             ...item,
-            ...updatedFields,
+            ...sanitizedFields,
             updatedAt: new Date().toISOString(),
           };
           if (canWriteToCloud && currentUser) {
@@ -844,6 +981,211 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return bCode === clean || (skuCode !== '' && skuCode === clean);
     });
   };
+
+  const saveProduct = useCallback(
+    (productName: string, salePrice: number | string, productImage?: string): Item => {
+      try {
+        console.log('saveProduct initiated:', { productName, salePrice, hasImage: !!productImage });
+        const price = typeof salePrice === 'string' ? parseFloat(salePrice) || 0 : salePrice;
+        const safeImg = sanitizeProductImage(productImage, DEFAULT_PRODUCT_IMAGE);
+        
+        const newItem = addItem({
+          barcode: `628${Math.floor(100000000 + Math.random() * 900000000)}`,
+          name: String(productName || '').trim(),
+          category: 'مواد غذائية',
+          quantity: 50,
+          costPrice: Math.round(price * 0.75 * 100) / 100,
+          salePrice: price,
+          price: price,
+          image: safeImg,
+          imageUrl: safeImg,
+          available: true,
+          unit: 'حبة',
+          minStockAlert: 5,
+        });
+
+        try {
+          const existing = JSON.parse(localStorage.getItem('qaryati_products') || '[]');
+          const entry = {
+            id: newItem.id,
+            name: newItem.name,
+            price: newItem.salePrice,
+            image: newItem.image,
+            available: true,
+          };
+          const updated = [entry, ...existing.filter((p: any) => String(p.id) !== String(newItem.id))];
+          localStorage.setItem('qaryati_products', JSON.stringify(updated));
+          console.log('qaryati_products successfully updated in localStorage');
+        } catch (err) {
+          console.error('Error updating qaryati_products in localStorage:', err);
+        }
+
+        showNotification('تم إضافة الصنف بنجاح وسيعرض في المتجر فوراً!', 'success');
+        return newItem;
+      } catch (fatalErr) {
+        console.error('Fatal error in saveProduct:', fatalErr);
+        showNotification('تعذر حفظ الصنف، يرجى مراجعة الكونسول لمعرفة السبب', 'error');
+        throw fatalErr;
+      }
+    },
+    [addItem, showNotification]
+  );
+
+  /**
+   * دالة بسيطة ومحلية تتيح للتاجر (المشرف) إعادة تعيين كلمة مرور الكاشير عند نسيانها
+   * دون المساس بقية ملفات المشروع أو تعديل التصميم القائم.
+   */
+  const resetCashierPassword = useCallback(
+    (
+      cashierIdOrName?: string,
+      newPassword?: string
+    ): { success: boolean; message: string; cashierName?: string; newPassword?: string } => {
+      try {
+        const passToSet = newPassword && newPassword.trim() ? newPassword.trim() : '1234';
+
+        // البحث عن الكاشير المطابق بالمعرف أو الاسم
+        let target = cashiers.find(
+          (c) =>
+            c.id === cashierIdOrName ||
+            c.name.trim().toLowerCase() === (cashierIdOrName || '').trim().toLowerCase()
+        );
+
+        // إذا لم يحدد أو لم يوجد، ابحث عن كاشير المبيعات أو أول حساب بصلاحية كاشير
+        if (!target) {
+          target =
+            cashiers.find(
+              (c) =>
+                c.role === 'CASHIER' ||
+                (c.role?.includes('كاشير') && !c.role?.includes('مدير') && !c.role?.includes('مشرف'))
+            ) ||
+            (cashiers.length > 1 ? cashiers[1] : cashiers[0]);
+        }
+
+        if (!target) {
+          const errMsg = language === 'ar' ? 'لم يتم العثور على حساب الكاشير.' : 'Cashier account not found.';
+          showNotification(errMsg, 'error');
+          return { success: false, message: errMsg };
+        }
+
+        const updated = cashiers.map((c) => {
+          if (c.id === target!.id) {
+            return {
+              ...c,
+              password: passToSet,
+              pin: passToSet,
+            };
+          }
+          return c;
+        });
+
+        setCashiers(updated);
+        try {
+          localStorage.setItem(userPrefix + STORAGE_KEYS.CASHIERS, JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Failed to save cashiers to localStorage:', e);
+        }
+
+        // مزامنة مع المستخدمين المحليين إذا كان مسجلاً لدخول محلي
+        try {
+          const LOCAL_USERS_KEY = 'flowapp_v4_local_users';
+          const savedUsers = localStorage.getItem(LOCAL_USERS_KEY);
+          if (savedUsers) {
+            const parsed = JSON.parse(savedUsers);
+            let anyUpdated = false;
+            for (const key of Object.keys(parsed)) {
+              if (
+                parsed[key]?.profile?.role === 'CASHIER' ||
+                key.toLowerCase().includes('cashier') ||
+                parsed[key]?.profile?.displayName === target.name
+              ) {
+                parsed[key].passwordHash = passToSet;
+                anyUpdated = true;
+              }
+            }
+            if (anyUpdated) {
+              localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(parsed));
+            }
+          }
+        } catch (err) {
+          console.warn('Local users sync note:', err);
+        }
+
+        logActivity({
+          category: 'SETTINGS',
+          actionType: 'SETTINGS_UPDATE',
+          summary: `إعادة تعيين كلمة مرور الكاشير (${target.name}) بواسطة التاجر المشرف`,
+          details: { cashierId: target.id, cashierName: target.name },
+          performedBy: 'التاجر (المشرف)',
+        });
+
+        const successMsg =
+          language === 'ar'
+            ? `تمت استعادة وإعادة تعيين كلمة مرور الكاشير (${target.name}) بنجاح! كلمة المرور الجديدة: ${passToSet}`
+            : `Cashier (${target.name}) password has been successfully reset! New password: ${passToSet}`;
+
+        showNotification(successMsg, 'success');
+
+        return {
+          success: true,
+          message: successMsg,
+          cashierName: target.name,
+          newPassword: passToSet,
+        };
+      } catch (err: any) {
+        console.error('resetCashierPassword error:', err);
+        const errMsg = language === 'ar' ? 'تعذر إعادة تعيين كلمة المرور.' : 'Failed to reset password.';
+        showNotification(errMsg, 'error');
+        return { success: false, message: errMsg };
+      }
+    },
+    [cashiers, language, logActivity, showNotification, userPrefix]
+  );
+
+  // Global window attachment for interoperability with user's exact scripts
+  useEffect(() => {
+    (window as any).resetCashierPassword = (cashierIdOrName?: string, newPassword?: string) => {
+      return resetCashierPassword(cashierIdOrName, newPassword);
+    };
+
+    (window as any).saveProduct = (productName: string, salePrice: number | string, productImage?: string) => {
+      try {
+        return saveProduct(productName, salePrice, productImage);
+      } catch (err) {
+        console.error('window.saveProduct error:', err);
+        return null;
+      }
+    };
+
+    (window as any).loadStoreProducts = () => {
+      const productContainer = document.getElementById('products-container');
+      const products = JSON.parse(localStorage.getItem('qaryati_products') || '[]');
+      if (!productContainer) return;
+      if (products.length === 0) {
+        productContainer.innerHTML = `
+          <div class="col-span-full text-center p-6 text-slate-400">
+            <p>لا توجد منتجات مضافة حالياً في المتجر.</p>
+          </div>
+        `;
+        return;
+      }
+      productContainer.innerHTML = '';
+      products.forEach((product: any) => {
+        const productCard = `
+          <div class="bg-gray-800 rounded-xl p-4 shadow-md flex flex-col justify-between border border-gray-700">
+            <img src="${product.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60'}" alt="${product.name}" class="w-full h-32 object-cover rounded-lg mb-3">
+            <div>
+              <h3 class="text-white font-bold text-lg mb-1">${product.name}</h3>
+              <p class="text-emerald-400 font-semibold mb-3">${product.price} ريال</p>
+            </div>
+            <button onclick="window.dispatchEvent(new CustomEvent('qaryati:add-to-cart', { detail: { id: '${product.id}' } }))" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg text-sm font-medium transition cursor-pointer">
+              إضافة إلى السلة
+            </button>
+          </div>
+        `;
+        productContainer.innerHTML += productCard;
+      });
+    };
+  }, [saveProduct]);
 
   // DEBT MANAGEMENT
   const addDebtRecord = (
@@ -2078,11 +2420,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cashiers,
         currentCashier,
         setCurrentCashier,
+        isCashierMode,
+        resetCashierPassword,
         settings,
         updateSettings,
         cloudSyncStatus,
         syncToCloudNow,
         addItem,
+        saveProduct,
         updateItem,
         deleteItem,
         findItemByBarcode,

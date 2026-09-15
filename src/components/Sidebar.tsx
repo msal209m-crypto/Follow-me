@@ -28,6 +28,11 @@ import {
   Share2,
   ShieldAlert,
   MessageCircle,
+  KeyRound,
+  Lock,
+  ShoppingCart,
+  Check,
+  X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -88,61 +93,77 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setLanguage,
     t,
     isRTL,
+    isCashierMode,
+    resetCashierPassword,
   } = useApp();
 
+  // حالة نافذة استعادة كلمة مرور الكاشير للتاجر (المشرف)
+  const [showResetPasswordModal, setShowResetPasswordModal] = React.useState(false);
+  const [selectedCashierToReset, setSelectedCashierToReset] = React.useState<string>('');
+  const [newPasswordInput, setNewPasswordInput] = React.useState<string>('1234');
+
+  // صلاحيات الكاشير: عند تفعيل حساب الكاشير، إخفاء الحسابات والأرباح والمخزون، والاكتفاء بشاشة نقاط البيع فقط
   const navItems: {
     id: NavigationTab;
     label: string;
     icon: React.ElementType;
     badge?: number;
     alert?: boolean;
-  }[] = [
-    {
-      id: 'dashboard',
-      label: t.navDashboard,
-      icon: LayoutDashboard,
-    },
-    {
-      id: 'items',
-      label: t.navItems,
-      icon: Package,
-      badge: items.length,
-      alert: inventoryStats.lowStockCount > 0,
-    },
-    {
-      id: 'stickers',
-      label: t.navStickers,
-      icon: Barcode,
-    },
-    {
-      id: 'transactions',
-      label: t.navTransactions,
-      icon: ArrowLeftRight,
-    },
-    {
-      id: 'order_goods',
-      label: t.navOrderGoods,
-      icon: Truck,
-      badge: inventoryStats.lowStockCount > 0 ? inventoryStats.lowStockCount : undefined,
-      alert: inventoryStats.lowStockCount > 0,
-    },
-    {
-      id: 'accounts',
-      label: t.navAccounts,
-      icon: Calculator,
-    },
-    {
-      id: 'debts',
-      label: t.navDebts,
-      icon: CreditCard,
-      badge: debts.filter((d) => d.remainingDebt > 0).length,
-    },
-    {
-      id: 'daily_reports',
-      label: t.navDailyReports,
-      icon: FileSpreadsheet,
-    },
-  ];
+  }[] = isCashierMode
+    ? [
+        {
+          id: 'transactions',
+          label: language === 'ar' ? 'نقاط البيع (بيع كاش / بيع أجل)' : 'POS (Cash / Credit)',
+          icon: ShoppingCart,
+        },
+      ]
+    : [
+        {
+          id: 'dashboard',
+          label: t.navDashboard,
+          icon: LayoutDashboard,
+        },
+        {
+          id: 'items',
+          label: t.navItems,
+          icon: Package,
+          badge: items.length,
+          alert: inventoryStats.lowStockCount > 0,
+        },
+        {
+          id: 'stickers',
+          label: t.navStickers,
+          icon: Barcode,
+        },
+        {
+          id: 'transactions',
+          label: t.navTransactions,
+          icon: ArrowLeftRight,
+        },
+        {
+          id: 'order_goods',
+          label: t.navOrderGoods,
+          icon: Truck,
+          badge: inventoryStats.lowStockCount > 0 ? inventoryStats.lowStockCount : undefined,
+          alert: inventoryStats.lowStockCount > 0,
+        },
+        {
+          id: 'accounts',
+          label: t.navAccounts,
+          icon: Calculator,
+        },
+        {
+          id: 'debts',
+          label: t.navDebts,
+          icon: CreditCard,
+          badge: debts.filter((d) => d.remainingDebt > 0).length,
+        },
+        {
+          id: 'daily_reports',
+          label: t.navDailyReports,
+          icon: FileSpreadsheet,
+        },
+      ];
 
   const handleSelectTab = (tab: NavigationTab) => {
     setActiveTab(tab);
@@ -355,21 +376,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const found = cashiers.find((c) => c.id === e.target.value);
                   if (found) setCurrentCashier(found);
                 }}
-                className="bg-transparent text-emerald-300 font-bold focus:outline-none cursor-pointer py-1"
+                className="bg-transparent text-emerald-300 font-bold focus:outline-none cursor-pointer py-1 max-w-[130px] truncate"
               >
                 {cashiers.map((c) => (
                   <option key={c.id} value={c.id} className="bg-slate-900 text-slate-100">
-                    {c.name}
+                    {c.name} {c.role === 'CASHIER' ? (language === 'ar' ? '(كاشير)' : '(Cashier)') : (language === 'ar' ? '(مشرف)' : '(Admin)')}
                   </option>
                 ))}
               </select>
             </div>
 
-            <div className="flex items-center gap-1 text-[11px] font-mono font-bold text-emerald-300">
-              <Wallet className="w-3 h-3 text-emerald-400" />
-              <span>{financialSummary.cashBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
-              <span className="text-[9px] font-sans text-slate-300">{settings.currency}</span>
-            </div>
+            {/* If cashier mode is active, hide profits/wallet balance and show restricted badge */}
+            {isCashierMode ? (
+              <div className="flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-500/40 px-2 py-0.5 rounded-lg shadow-sm">
+                <Lock className="w-3 h-3 text-amber-400" />
+                <span>{language === 'ar' ? 'صلاحيات كاشير' : 'Cashier Mode'}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                {/* زر استعادة كلمة مرور الكاشير للتاجر (المشرف) */}
+                <button
+                  type="button"
+                  id="btn-reset-cashier-pwd-sidebar"
+                  onClick={() => {
+                    const firstCashier =
+                      cashiers.find(
+                        (c) => c.role === 'CASHIER' || (c.role?.includes('كاشير') && !c.role?.includes('مدير'))
+                      ) || cashiers[1] || cashiers[0];
+                    setSelectedCashierToReset(firstCashier?.id || '');
+                    setNewPasswordInput(firstCashier?.password || '1234');
+                    setShowResetPasswordModal(true);
+                  }}
+                  className="p-1 px-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 hover:text-amber-200 transition-colors cursor-pointer text-[10px] flex items-center gap-1 font-bold"
+                  title={language === 'ar' ? 'استعادة وإعادة تعيين كلمة مرور الكاشير (خاص بالتاجر المشرف)' : 'Reset Cashier Password'}
+                >
+                  <KeyRound className="w-3 h-3 text-amber-400" />
+                  <span className="hidden sm:inline">{language === 'ar' ? 'استعادة المرور' : 'Reset'}</span>
+                </button>
+
+                <div className="flex items-center gap-1 text-[11px] font-mono font-bold text-emerald-300">
+                  <Wallet className="w-3 h-3 text-emerald-400" />
+                  <span>{financialSummary.cashBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
+                  <span className="text-[9px] font-sans text-slate-300">{settings.currency}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -587,23 +638,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </a>
 
               <div className="flex items-center justify-between gap-2">
-                <button
-                  id="sidebar-btn-settings"
-                  onClick={() => {
-                    setMobileOpen(false);
-                    onOpenSettings();
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold text-slate-100 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-650 hover:border-teal-500/50 transition-all cursor-pointer shadow-sm active:scale-[0.98]"
-                >
-                  <SettingsIcon className="w-4 h-4 text-teal-400" />
-                  <span>{t.navSettings}</span>
-                </button>
+                {!isCashierMode && (
+                  <button
+                    id="sidebar-btn-settings"
+                    onClick={() => {
+                      setMobileOpen(false);
+                      onOpenSettings();
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold text-slate-100 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-650 hover:border-teal-500/50 transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                  >
+                    <SettingsIcon className="w-4 h-4 text-teal-400" />
+                    <span>{t.navSettings}</span>
+                  </button>
+                )}
 
                 <button
                   id="sidebar-btn-lang-toggle"
                   onClick={toggleLanguage}
                   title={t.switchLanguage}
-                  className="py-2 px-3 text-slate-100 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-650 hover:border-emerald-500/50 transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold shrink-0 shadow-sm active:scale-[0.98]"
+                  className={`${isCashierMode ? 'w-full' : ''} py-2 px-3 text-slate-100 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-650 hover:border-emerald-500/50 transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs font-bold shrink-0 shadow-sm active:scale-[0.98]`}
                 >
                   <Globe className="w-4 h-4 text-emerald-400" />
                   <span>{language === 'ar' ? 'EN' : 'عربي'}</span>
@@ -632,7 +685,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <Share2 className="w-4 h-4" />
                 </button>
               )}
-              {isAccountAdmin && onOpenAdminLicenses && (
+              {isAccountAdmin && onOpenAdminLicenses && !isCashierMode && (
                 <button
                   type="button"
                   onClick={onOpenAdminLicenses}
@@ -642,14 +695,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <ShieldAlert className="w-4 h-4" />
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setShowSubscriptionModal(true)}
-                title={language === 'ar' ? 'باقة المحترف (PRO)' : 'Pro Subscription'}
-                className="p-2 text-amber-400 hover:text-amber-300 bg-amber-950/60 hover:bg-amber-900/80 rounded-lg text-xs font-bold border border-amber-500/50 shadow-sm"
-              >
-                <Crown className="w-4 h-4" />
-              </button>
+              {!isCashierMode && (
+                <button
+                  type="button"
+                  onClick={() => setShowSubscriptionModal(true)}
+                  title={language === 'ar' ? 'باقة المحترف (PRO)' : 'Pro Subscription'}
+                  className="p-2 text-amber-400 hover:text-amber-300 bg-amber-950/60 hover:bg-amber-900/80 rounded-lg text-xs font-bold border border-amber-500/50 shadow-sm"
+                >
+                  <Crown className="w-4 h-4" />
+                </button>
+              )}
               <button
                 onClick={toggleLanguage}
                 title={t.switchLanguage}
@@ -657,17 +712,120 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 {language === 'ar' ? 'EN' : 'AR'}
               </button>
-              <button
-                onClick={onOpenSettings}
-                title={t.navSettings}
-                className="p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-650 shadow-sm"
-              >
-                <SettingsIcon className="w-4 h-4 text-teal-400" />
-              </button>
+              {!isCashierMode && (
+                <button
+                  onClick={onOpenSettings}
+                  title={t.navSettings}
+                  className="p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-650 shadow-sm"
+                >
+                  <SettingsIcon className="w-4 h-4 text-teal-400" />
+                </button>
+              )}
             </div>
           )}
         </div>
       </aside>
+
+      {/* نافذة بسيطة ومحلية تتيح للتاجر (المشرف) استعادة وإعادة تعيين كلمة مرور الكاشير */}
+      {showResetPasswordModal && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-750 border-amber-500/40 rounded-2xl p-5 shadow-2xl space-y-4 text-right">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    {language === 'ar' ? 'استعادة كلمة مرور الكاشير' : 'Reset Cashier Password'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {language === 'ar'
+                      ? 'خاص بالتاجر (المشرف): تعيين كلمة سر جديدة للكاشير عند نسيانها'
+                      : 'Owner override: assign a new local password for cashier'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetPasswordModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">
+                  {language === 'ar' ? 'اختر حساب الكاشير:' : 'Select Cashier Account:'}
+                </label>
+                <select
+                  value={selectedCashierToReset}
+                  onChange={(e) => setSelectedCashierToReset(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-750 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-400"
+                >
+                  {cashiers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.role === 'CASHIER' ? (language === 'ar' ? '(كاشير)' : '(Cashier)') : (language === 'ar' ? '(مشرف)' : '(Supervisor)')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">
+                  {language === 'ar' ? 'كلمة المرور الجديدة:' : 'New Password / PIN:'}
+                </label>
+                <input
+                  type="text"
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  placeholder="مثال: 1234 أو كود سري"
+                  className="w-full bg-slate-950 border border-slate-750 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-amber-400"
+                />
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <span className="text-[10px] text-slate-400">
+                    {language === 'ar' ? 'اقتراحات سريعة:' : 'Quick set:'}
+                  </span>
+                  {['1234', '1122', '5555', '0000'].map((suggested) => (
+                    <button
+                      key={suggested}
+                      type="button"
+                      onClick={() => setNewPasswordInput(suggested)}
+                      className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-[10px] font-mono border border-slate-700 cursor-pointer"
+                    >
+                      {suggested}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowResetPasswordModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+              >
+                {language === 'ar' ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                id="btn-confirm-reset-cashier-pwd"
+                onClick={() => {
+                  resetCashierPassword(selectedCashierToReset, newPasswordInput);
+                  setShowResetPasswordModal(false);
+                }}
+                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-colors flex items-center gap-1.5 shadow-lg shadow-amber-950 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>{language === 'ar' ? 'حفظ وتعيين كلمة المرور' : 'Save New Password'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

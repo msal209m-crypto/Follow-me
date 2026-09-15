@@ -16,6 +16,10 @@ export interface Item {
   quantity: number;
   costPrice: number; // سعر التكلفة
   salePrice: number; // سعر البيع
+  price?: number;    // اختياري متوافق مع كود المتجر
+  image?: string;    // رابط صورة الصنف أو base64
+  imageUrl?: string; // رابط موازي للصورة
+  available?: boolean; // حالة التوفر في متجر العملاء
   minStockAlert: number;
   unit: string;
   notes?: string;
@@ -225,6 +229,8 @@ export interface Cashier {
   role: string;
   phone?: string;
   active: boolean;
+  password?: string;
+  pin?: string;
 }
 
 export type ActivityCategory = 'INVENTORY' | 'ACCOUNTS' | 'SALES' | 'SETTINGS';

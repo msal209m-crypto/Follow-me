@@ -143,8 +143,8 @@ export const OrderGoodsModal: React.FC<OrderGoodsModalProps> = ({
       const query = searchQuery.trim().toLowerCase();
       const matchesSearch =
         !query ||
-        item.name.toLowerCase().includes(query) ||
-        item.barcode.toLowerCase().includes(query) ||
+        (item.name && item.name.toLowerCase().includes(query)) ||
+        (item.barcode && String(item.barcode).toLowerCase().includes(query)) ||
         (item.category && item.category.toLowerCase().includes(query));
 
       const matchesCategory =

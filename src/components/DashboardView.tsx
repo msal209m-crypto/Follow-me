@@ -235,8 +235,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const q = modalSearch.toLowerCase().trim();
     return criticalItems.filter(
       (it) =>
-        it.name.toLowerCase().includes(q) ||
-        (it.barcode && it.barcode.toLowerCase().includes(q)) ||
+        (it.name && it.name.toLowerCase().includes(q)) ||
+        (it.barcode && String(it.barcode).toLowerCase().includes(q)) ||
         (it.category && it.category.toLowerCase().includes(q))
     );
   }, [criticalItems, modalSearch]);
