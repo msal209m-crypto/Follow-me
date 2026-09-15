@@ -463,6 +463,25 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Right / End: All top controls in a single tidy row */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* 0. Return to Store Main Button (دالة الخروج والعودة لواجهة المتجر الرئيسية) */}
+          {onSwitchToStore && (
+            <button
+              type="button"
+              id="top-return-to-store-main-btn"
+              onClick={onSwitchToStore}
+              className="h-8 sm:h-9 px-2.5 sm:px-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 shadow-md shadow-emerald-950/40 text-xs font-bold border border-emerald-400/40"
+              title={language === 'ar' ? 'الخروج والعودة إلى واجهة المتجر الرئيسية' : 'Return to Main Store View'}
+            >
+              <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-100 shrink-0" />
+              <span className="hidden sm:inline">
+                {language === 'ar' ? 'واجهة المتجر' : 'Store View'}
+              </span>
+              <span className="text-[10px] bg-emerald-950/60 text-emerald-200 px-1.5 py-0.2 rounded border border-emerald-400/30 hidden md:inline">
+                {language === 'ar' ? 'خروج' : 'Exit'}
+              </span>
+            </button>
+          )}
+
           {/* 1. Currency Switcher */}
           <div className="relative" ref={currencyMenuRef}>
             <button
@@ -880,6 +899,27 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     </div>
                     <span className="text-[10px] text-emerald-400 font-mono font-bold">{OWNER_CONTACT.phoneLocal}</span>
                   </a>
+
+                  {onSwitchToStore && (
+                    <button
+                      type="button"
+                      id="dropdown-return-to-store-main-btn"
+                      onClick={() => {
+                        setShowUserDropdown(false);
+                        onSwitchToStore();
+                      }}
+                      className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-emerald-300 hover:bg-emerald-950/60 border border-emerald-500/30 hover:border-emerald-500/60 transition-colors cursor-pointer active:scale-98"
+                      title={language === 'ar' ? 'الخروج والعودة إلى واجهة المتجر الرئيسية' : 'Return to Main Store View'}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Store className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="font-bold">{language === 'ar' ? 'الخروج لواجهة المتجر الرئيسية' : 'Return to Main Store View'}</span>
+                      </div>
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">
+                        {language === 'ar' ? 'متجر العملاء' : 'Customer View'}
+                      </span>
+                    </button>
+                  )}
 
                   {onOpenLanding && (
                     <button

@@ -590,22 +590,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {!isCollapsed ? (
             <div className="space-y-2">
-              {/* Village Storefront for Customers */}
+              {/* Village Storefront for Customers / Return to Store Main View */}
               {onSwitchToStore && (
                 <button
                   type="button"
+                  id="sidebar-return-to-store-main-btn"
                   onClick={() => {
                     setMobileOpen(false);
                     onSwitchToStore();
                   }}
-                  className="w-full flex items-center justify-between py-2 px-3 bg-gradient-to-r from-emerald-950/80 to-teal-950/80 hover:from-emerald-900 hover:to-teal-900 border border-emerald-500/50 text-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.98]"
-                  title="عرض واجهة متجر القرية للعملاء"
+                  className="w-full flex items-center justify-between py-2.5 px-3 bg-gradient-to-r from-emerald-950/90 via-slate-900 to-teal-950/90 hover:from-emerald-900 hover:to-teal-900 border-2 border-emerald-500/60 hover:border-emerald-400 text-emerald-100 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md shadow-emerald-950/50 active:scale-[0.98]"
+                  title={language === 'ar' ? 'الخروج والعودة إلى واجهة المتجر الرئيسية' : 'Exit / Return to Main Store View'}
                 >
                   <div className="flex items-center gap-2">
                     <Store className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>متجر القرية (للعملاء)</span>
+                    <span>{language === 'ar' ? 'واجهة المتجر الرئيسية' : 'Main Store View'}</span>
                   </div>
-                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-medium">عام</span>
+                  <span className="text-[10px] bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 px-1.5 py-0.5 rounded font-extrabold">
+                    {language === 'ar' ? 'خروج' : 'Exit'}
+                  </span>
                 </button>
               )}
 
@@ -613,13 +616,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {onOpenLanding && (
                 <button
                   type="button"
+                  id="sidebar-portals-screen-btn"
                   onClick={() => {
                     setMobileOpen(false);
                     onOpenLanding();
                   }}
                   className="w-full flex items-center justify-center gap-1.5 py-1 text-[11px] text-slate-400 hover:text-white transition-colors"
                 >
-                  <span>شاشة البوابات الرئيسية</span>
+                  <span>{language === 'ar' ? 'شاشة البوابات الرئيسية' : 'Portals Screen'}</span>
                 </button>
               )}
 
@@ -665,6 +669,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
+              {onSwitchToStore && (
+                <button
+                  type="button"
+                  id="sidebar-collapsed-return-to-store-btn"
+                  onClick={onSwitchToStore}
+                  title={language === 'ar' ? 'الخروج والعودة إلى واجهة المتجر الرئيسية' : 'Exit / Return to Main Store View'}
+                  className="p-2 text-emerald-300 hover:text-white bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 rounded-xl text-xs font-bold border border-emerald-400/50 shadow-md shadow-emerald-950/60 cursor-pointer active:scale-95 transition-all"
+                >
+                  <Store className="w-4 h-4" />
+                </button>
+              )}
+
               <a
                 href={OWNER_CONTACT.getWhatsAppUrl({ storeName: settings.storeName })}
                 target="_blank"

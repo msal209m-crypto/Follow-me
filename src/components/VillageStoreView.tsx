@@ -251,6 +251,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
   return (
     <div
+      id="village-store-container"
       dir={isRTL ? 'rtl' : 'ltr'}
       className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white font-sans"
     >

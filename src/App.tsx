@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { AppProvider, useApp } from './context/AppContext';
 import { PWAProvider } from './context/PWAContext';
@@ -321,6 +321,11 @@ const PortalRouter: React.FC = () => {
       url.searchParams.set('portal', 'store');
       window.history.replaceState(null, '', url.toString());
     } catch {}
+
+    const merchantEl = document.getElementById('merchant-dashboard');
+    const storeEl = document.getElementById('main-store-view');
+    if (merchantEl) merchantEl.style.display = 'none';
+    if (storeEl) storeEl.style.display = 'block';
   };
 
   const handleSwitchToMerchant = () => {
@@ -330,6 +335,11 @@ const PortalRouter: React.FC = () => {
       url.searchParams.set('portal', 'merchant');
       window.history.replaceState(null, '', url.toString());
     } catch {}
+
+    const merchantEl = document.getElementById('merchant-dashboard');
+    const storeEl = document.getElementById('main-store-view');
+    if (merchantEl) merchantEl.style.display = 'block';
+    if (storeEl) storeEl.style.display = 'none';
   };
 
   const handleSwitchToLanding = () => {
@@ -341,54 +351,90 @@ const PortalRouter: React.FC = () => {
     } catch {}
   };
 
-  if (portalMode === 'store') {
-    return (
-      <>
-        <VillageStoreView
-          items={items}
-          settings={settings}
-          isRTL={isRTL}
-          onOpenMerchantPortal={handleSwitchToMerchant}
-          onOpenLanding={handleSwitchToLanding}
-        />
-        {showGlobalAuthModal && (
-          <AuthModal
-            isOpen={showGlobalAuthModal}
-            onClose={() => setShowGlobalAuthModal(false)}
-          />
-        )}
-      </>
-    );
-  }
+  // دالة الخروج والعودة إلى واجهة المتجر الرئيسية (Global helper and event handler)
+  useEffect(() => {
+    const returnToStoreMain = () => {
+      handleSwitchToStore();
+    };
 
-  if (portalMode === 'landing') {
-    return (
-      <>
-        <PortalLandingScreen
-          settings={settings}
-          itemsCount={items.length}
-          isRTL={isRTL}
-          isAuthenticated={!!currentUser}
-          onEnterStore={handleSwitchToStore}
-          onEnterMerchant={handleSwitchToMerchant}
-          onOpenAuthModal={() => setShowGlobalAuthModal(true)}
-        />
-        {showGlobalAuthModal && (
-          <AuthModal
-            isOpen={showGlobalAuthModal}
-            onClose={() => setShowGlobalAuthModal(false)}
-          />
-        )}
-      </>
-    );
-  }
+    (window as any).returnToStoreMain = returnToStoreMain;
+
+    const onCustomReturnEvent = () => {
+      handleSwitchToStore();
+    };
+    window.addEventListener('store:return-to-main', onCustomReturnEvent);
+
+    const onPopState = () => {
+      try {
+        const search = window.location.search;
+        const params = new URLSearchParams(search);
+        const portalParam = params.get('portal');
+        if (portalParam === 'store' || window.location.hash === '#store') {
+          setPortalMode('store');
+        } else if (portalParam === 'merchant' || window.location.hash === '#admin') {
+          setPortalMode('merchant');
+        } else {
+          setPortalMode('landing');
+        }
+      } catch {}
+    };
+    window.addEventListener('popstate', onPopState);
+
+    return () => {
+      window.removeEventListener('store:return-to-main', onCustomReturnEvent);
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, []);
 
   return (
     <>
-      <MainAppContent
-        onSwitchToStore={handleSwitchToStore}
-        onOpenLanding={handleSwitchToLanding}
-      />
+      <div
+        id="merchant-dashboard"
+        style={{ display: portalMode === 'merchant' ? 'block' : 'none' }}
+        className={portalMode === 'merchant' ? 'w-full min-h-screen' : 'hidden'}
+      >
+        {portalMode === 'merchant' && (
+          <MainAppContent
+            onSwitchToStore={handleSwitchToStore}
+            onOpenLanding={handleSwitchToLanding}
+          />
+        )}
+      </div>
+
+      <div
+        id="main-store-view"
+        style={{ display: portalMode === 'store' ? 'block' : 'none' }}
+        className={portalMode === 'store' ? 'w-full min-h-screen' : 'hidden'}
+      >
+        {portalMode === 'store' && (
+          <VillageStoreView
+            items={items}
+            settings={settings}
+            isRTL={isRTL}
+            onOpenMerchantPortal={handleSwitchToMerchant}
+            onOpenLanding={handleSwitchToLanding}
+          />
+        )}
+      </div>
+
+      <div
+        id="landing-portal-view"
+        style={{ display: portalMode === 'landing' ? 'block' : 'none' }}
+        className={portalMode === 'landing' ? 'w-full min-h-screen' : 'hidden'}
+      >
+        {portalMode === 'landing' && (
+          <PortalLandingScreen
+            settings={settings}
+            itemsCount={items.length}
+            isRTL={isRTL}
+            isAuthenticated={!!currentUser}
+            onEnterStore={handleSwitchToStore}
+            onEnterMerchant={handleSwitchToMerchant}
+            onOpenAuthModal={() => setShowGlobalAuthModal(true)}
+          />
+        )}
+      </div>
+
       {showGlobalAuthModal && (
         <AuthModal
           isOpen={showGlobalAuthModal}

@@ -54,6 +54,20 @@
           }
         }
       })();
+
+      // دالة الخروج والعودة إلى واجهة المتجر الرئيسية
+      function returnToStoreMain() {
+        try {
+          var merchant = document.getElementById('merchant-dashboard');
+          var store = document.getElementById('main-store-view');
+          if (merchant) merchant.style.display = 'none';
+          if (store) store.style.display = 'block';
+          window.dispatchEvent(new CustomEvent('store:return-to-main'));
+        } catch (e) {
+          console.error('Error in returnToStoreMain:', e);
+        }
+      }
+      window.returnToStoreMain = returnToStoreMain;
     </script>
   </head>
   <body class="font-sans antialiased bg-slate-950 text-slate-100 selection:bg-emerald-500 selection:text-white">
