@@ -22,9 +22,22 @@ import {
   ChevronDown,
   Info,
   ExternalLink,
-  MessageCircle
+  MessageCircle,
+  Truck,
+  ChefHat,
+  Bell,
+  Package,
+  Check,
+  Megaphone,
+  Tag
 } from 'lucide-react';
-import { Item, StoreSettings } from '../types';
+import { Item, StoreSettings, DeliveryOrder } from '../types';
+import {
+  createDeliveryOrder,
+  getDeliveryOrders,
+  playNotificationChime
+} from '../services/deliveryService';
+import { getPlatformAds, PlatformAd } from '../services/platformSettingsService';
 
 interface VillageStoreViewProps {
   items: Item[];
@@ -52,10 +65,72 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   const [cart, setCart] = useState<Record<string, CartItem>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH_ON_DELIVERY' | 'TRANSFER'>('CASH_ON_DELIVERY');
   const [copiedLink, setCopiedLink] = useState(false);
   const [customStorePhone, setCustomStorePhone] = useState(settings.phone || '');
+
+  // Track active placed order
+  const [trackedOrderId, setTrackedOrderId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('qaryati_customer_last_order_id');
+    } catch {
+      return null;
+    }
+  });
+  const [trackedOrder, setTrackedOrder] = useState<DeliveryOrder | null>(null);
+  const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
+
+  // Sync tracked order with local storage orders
+  useEffect(() => {
+    if (!trackedOrderId) {
+      setTrackedOrder(null);
+      return;
+    }
+    const all = getDeliveryOrders();
+    const found = all.find((o) => o.id === trackedOrderId);
+    if (found) {
+      setTrackedOrder(found);
+    }
+  }, [trackedOrderId]);
+
+  useEffect(() => {
+    const handleOrderUpdates = () => {
+      if (!trackedOrderId) return;
+      const all = getDeliveryOrders();
+      const found = all.find((o) => o.id === trackedOrderId);
+      if (found) {
+        setTrackedOrder(found);
+      }
+    };
+
+    window.addEventListener('qaryati:orders-updated', handleOrderUpdates);
+    window.addEventListener('qaryati:order-accepted', handleOrderUpdates);
+    window.addEventListener('qaryati:order-ready-for-pickup', handleOrderUpdates);
+    window.addEventListener('qaryati:order-delivered', handleOrderUpdates);
+
+    return () => {
+      window.removeEventListener('qaryati:orders-updated', handleOrderUpdates);
+      window.removeEventListener('qaryati:order-accepted', handleOrderUpdates);
+      window.removeEventListener('qaryati:order-ready-for-pickup', handleOrderUpdates);
+      window.removeEventListener('qaryati:order-delivered', handleOrderUpdates);
+    };
+  }, [trackedOrderId]);
+
+  // Platform Promotional Ads from Developer / Owner Console
+  const [platformAds, setPlatformAds] = useState<PlatformAd[]>(() =>
+    getPlatformAds().filter((a) => a.isActive)
+  );
+
+  useEffect(() => {
+    const handleAdsUpdate = () => {
+      setPlatformAds(getPlatformAds().filter((a) => a.isActive));
+    };
+    window.addEventListener('qaryati:ads-updated', handleAdsUpdate);
+    return () => window.removeEventListener('qaryati:ads-updated', handleAdsUpdate);
+  }, []);
 
   // Extract unique categories
   const categories = useMemo(() => {
@@ -189,6 +264,80 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     }
   };
 
+  // Send Order Directly to Store with System Notification & Driver Flow
+  const handlePlaceOrderToStore = () => {
+    if (cartItemsList.length === 0) return;
+
+    const validName = customerName.trim() || 'عميل المتجر';
+    const validPhone = customerPhone.trim() || (customStorePhone || '05xxxxxxxx');
+    const validAddress = customerAddress.trim() || (settings.address ? `حي ${settings.address}` : 'القرية');
+    const deliveryFee = 10;
+    const subtotal = totalCartPrice;
+    const totalAmount = subtotal + deliveryFee;
+
+    const newOrder = createDeliveryOrder({
+      customerName: validName,
+      customerPhone: validPhone,
+      customerAddress: validAddress,
+      storeName: settings.storeName || 'متجر قريتي',
+      storePhone: settings.phone || '',
+      storeAddress: settings.address || '',
+      items: cartItemsList.map((ci) => ({
+        itemId: ci.item.id,
+        name: ci.item.name,
+        quantity: ci.quantity,
+        unitPrice: ci.item.salePrice,
+        unit: ci.item.unit,
+        total: ci.quantity * ci.item.salePrice,
+      })),
+      subtotal,
+      deliveryFee,
+      totalAmount,
+      paymentMethod,
+      status: 'NEW',
+      notes: orderNotes.trim() || undefined,
+    });
+
+    try {
+      localStorage.setItem('qaryati_customer_last_order_id', newOrder.id);
+    } catch {}
+
+    setTrackedOrderId(newOrder.id);
+    setTrackedOrder(newOrder);
+    setIsCartOpen(false);
+    setIsTrackingModalOpen(true);
+    clearCart();
+  };
+
+  // Send WhatsApp message for a created order
+  const handleSendWhatsAppForExistingOrder = (order: DeliveryOrder) => {
+    const currency = settings.currency || 'ر.س';
+    const cleanPhone = getWhatsAppTargetPhone();
+
+    let msg = `🛒 *طلب رسمي جديد - رقم #${order.orderNumber}*\n`;
+    msg += `🏪 *المتجر:* ${order.storeName}\n`;
+    msg += `👤 *العميل:* ${order.customerName}\n`;
+    msg += `📞 *رقم الجوال:* ${order.customerPhone}\n`;
+    msg += `📍 *العنوان:* ${order.customerAddress}\n`;
+    if (order.notes) msg += `📝 *ملاحظة:* ${order.notes}\n`;
+    msg += `--------------------------------\n`;
+    msg += `📋 *الأصناف:*\n`;
+    order.items.forEach((it, idx) => {
+      msg += `${idx + 1}. *${it.name}* (الكمية: ${it.quantity} ${it.unit || ''}) = ${it.total.toFixed(2)} ${currency}\n`;
+    });
+    msg += `--------------------------------\n`;
+    msg += `💵 *إجمالي الحساب مع التوصيل:* *${order.totalAmount.toFixed(2)} ${currency}*\n`;
+    msg += `طريقة الدفع: ${order.paymentMethod === 'TRANSFER' ? 'تحويل بنكي' : 'كاش عند الاستلام'}\n`;
+    msg += `تم تسجيل الطلب في نظام المتجر وبانتظار بدء التجهيز والتوصيل. شكراً لكم!`;
+
+    const encoded = encodeURIComponent(msg);
+    if (cleanPhone) {
+      window.open(`https://wa.me/${cleanPhone}?text=${encoded}`, '_blank');
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+    }
+  };
+
   // Direct 1-click single-item WhatsApp Order
   const handleDirectWhatsAppProduct = (item: Item) => {
     const currency = settings.currency || 'ر.س';
@@ -292,6 +441,21 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
           {/* Action Buttons: Cart & Merchant Entry */}
           <div className="flex items-center gap-2">
+            {/* Active Order Tracker Button */}
+            {trackedOrder && trackedOrder.status !== 'CANCELLED' && (
+              <button
+                onClick={() => setIsTrackingModalOpen(true)}
+                className="px-2.5 sm:px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                title="متابعة حالة طلبك المباشرة"
+              >
+                <Clock className="w-4 h-4 text-amber-400 animate-spin" />
+                <span className="hidden sm:inline">متابعة طلبي</span>
+                <span className="font-mono text-[11px] font-black bg-amber-400/20 px-1.5 py-0.5 rounded">
+                  {trackedOrder.orderNumber}
+                </span>
+              </button>
+            )}
+
             {/* Share Link */}
             <button
               onClick={handleShareStoreLink}
@@ -347,6 +511,40 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
       {/* Main Container */}
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 flex flex-col gap-6">
+        {/* Promotional Campaign Ads Carousel (Platform Owner / Developer Managed) */}
+        {platformAds.length > 0 && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {platformAds.map((ad) => (
+                <div
+                  key={ad.id}
+                  className={`bg-gradient-to-r ${ad.bgGradient} rounded-2xl p-4 text-white shadow-xl flex items-center justify-between gap-3 relative overflow-hidden transition-transform hover:scale-[1.01]`}
+                >
+                  <div className="space-y-1 relative z-10">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-white/20 backdrop-blur-md">
+                        {ad.badge}
+                      </span>
+                      {ad.discountCode && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white text-slate-900 shadow-sm">
+                          كود الخصم: {ad.discountCode}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-black text-sm sm:text-base text-white">{ad.title}</h3>
+                    <p className="text-xs text-white/85 leading-relaxed">{ad.subtitle}</p>
+                  </div>
+                  <div className="shrink-0 relative z-10">
+                    <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-inner">
+                      <Megaphone className="w-5 h-5" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Search & Category Filter */}
         <div className="flex flex-col gap-3">
           {/* Search bar & stock toggle */}
@@ -691,12 +889,12 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                   <div className="mt-4 bg-slate-950/90 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
                     <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>بيانات المستلم والتوصيل (اختياري للواتساب):</span>
+                      <span>بيانات المستلم والتوصيل:</span>
                     </h4>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
-                        <label className="text-[11px] text-slate-400 mb-1 block">اسمك الكريم</label>
+                        <label className="text-[11px] text-slate-400 mb-1 block">اسمك الكريم *</label>
                         <input
                           type="text"
                           value={customerName}
@@ -707,7 +905,20 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                       </div>
 
                       <div>
-                        <label className="text-[11px] text-slate-400 mb-1 block">الحي أو القرية</label>
+                        <label className="text-[11px] text-slate-400 mb-1 block">رقم الجوال للتواصل والتوصيل *</label>
+                        <input
+                          type="tel"
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                          placeholder="مثال: 0501234567"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[11px] text-slate-400 mb-1 block">الحي أو موقع التوصيل بالقرية *</label>
                         <input
                           type="text"
                           value={customerAddress}
@@ -716,15 +927,27 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                           className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                         />
                       </div>
+
+                      <div>
+                        <label className="text-[11px] text-slate-400 mb-1 block">طريقة الدفع المفضلة</label>
+                        <select
+                          value={paymentMethod}
+                          onChange={(e) => setPaymentMethod(e.target.value as any)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="CASH_ON_DELIVERY">كاش عند الاستلام</option>
+                          <option value="TRANSFER">تحويل بنكي</option>
+                        </select>
+                      </div>
                     </div>
 
                     <div>
-                      <label className="text-[11px] text-slate-400 mb-1 block">ملاحظات الطلب</label>
+                      <label className="text-[11px] text-slate-400 mb-1 block">ملاحظات الطلب (اختياري)</label>
                       <input
                         type="text"
                         value={orderNotes}
                         onChange={(e) => setOrderNotes(e.target.value)}
-                        placeholder="مثال: توصيل بعد صلاة العصر أو اتصل بي"
+                        placeholder="مثال: توصيل سريع أو الاتصال قبل الوصول"
                         className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                       />
                     </div>
@@ -750,29 +973,304 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               )}
             </div>
 
-            {/* Modal Footer with Send to WhatsApp Button */}
+            {/* Modal Footer with Send Order to Store and WhatsApp Buttons */}
             {cartItemsList.length > 0 && (
               <div className="p-4 sm:p-5 border-t border-slate-800 bg-slate-900/95 flex flex-col gap-3">
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-xs text-slate-400">إجمالي الحساب:</span>
-                  <div className="text-xl font-extrabold text-emerald-400">
-                    {totalCartPrice.toFixed(2)} {settings.currency || 'ر.س'}
+                <div className="bg-slate-950/70 p-3 rounded-2xl border border-slate-800/80 flex flex-col gap-1.5 text-xs">
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>قيمة الأصناف:</span>
+                    <span className="font-mono font-bold text-slate-200">
+                      {totalCartPrice.toFixed(2)} {settings.currency || 'ر.س'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>أجرة التوصيل داخل القرية:</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      10.00 {settings.currency || 'ر.س'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1.5 border-t border-slate-800 text-sm font-extrabold text-white">
+                    <span>المجموع الكلي:</span>
+                    <div className="text-xl font-black text-emerald-400 font-mono">
+                      {(totalCartPrice + 10).toFixed(2)} {settings.currency || 'ر.س'}
+                    </div>
                   </div>
                 </div>
 
+                {/* Primary Button: Send Order to Store with Delivery Workflow */}
                 <button
-                  onClick={handleSendWhatsAppOrder}
-                  className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-950/80 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  id="btn-send-order-to-store"
+                  onClick={handlePlaceOrderToStore}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-950/80 transition-all hover:scale-[1.01] active:scale-[0.99] border border-emerald-400/30"
                 >
-                  <MessageCircle className="w-5 h-5 fill-white text-emerald-600" />
-                  <span>إرسال الطلب عبر الواتساب فوراً</span>
+                  <Truck className="w-5 h-5 text-white" />
+                  <span>إرسال الطلب إلى المتجر والتوصيل 🚀</span>
                   {isRTL ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
                 </button>
-                <p className="text-[11px] text-slate-400 text-center">
-                  سيتم فتح محادثة الواتساب مع المتجر مباشرة وتحتوي رسالة مرتبة بجميع طلباتك وإجمالي الحساب.
-                </p>
+
+                <div className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-400 font-medium bg-emerald-500/10 py-1.5 px-2 rounded-xl border border-emerald-500/20">
+                  <Bell className="w-3.5 h-3.5 shrink-0" />
+                  <span>يصل إشعار فوري للتاجر لقبول الطلب وتجهيزه وتوجيهه لسائق التوصيل 🛵</span>
+                </div>
+
+                {/* Secondary Button: WhatsApp only */}
+                <button
+                  onClick={handleSendWhatsAppOrder}
+                  className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4 text-teal-400" />
+                  <span>إرسال عبر الواتساب فقط 💬</span>
+                </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Customer Live Order Tracking Modal */}
+      {isTrackingModalOpen && trackedOrder && (
+        <div
+          dir={isRTL ? 'rtl' : 'ltr'}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setIsTrackingModalOpen(false)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-950/50">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-extrabold text-sm sm:text-base text-white">
+                      متابعة مسار طلبك
+                    </h3>
+                    <span className="font-mono text-xs font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                      {trackedOrder.orderNumber}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    تحديث حي ومباشر لحالة طلبك وتجهيزه وتوصيله
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsTrackingModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tracking Stepper Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5">
+              {/* Stepper Steps */}
+              <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 space-y-4">
+                {/* Step 1: Received */}
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0 mt-0.5">
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-extrabold text-emerald-400">
+                      1. تم إرسال الطلب بنجاح بالنظام
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      تم تسجيل طلبك وإرسال إشعار فوري لمتجر {trackedOrder.storeName}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 2: Merchant Acceptance & Preparation */}
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                      trackedOrder.status === 'NEW'
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50 animate-pulse'
+                        : trackedOrder.status !== 'CANCELLED'
+                        ? 'bg-emerald-500 text-slate-950'
+                        : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {trackedOrder.status === 'NEW' ? (
+                      <Clock className="w-3.5 h-3.5 animate-spin" />
+                    ) : trackedOrder.status !== 'CANCELLED' ? (
+                      <Check className="w-4 h-4 stroke-[3]" />
+                    ) : (
+                      <X className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                  <div>
+                    <h4
+                      className={`text-xs sm:text-sm font-extrabold ${
+                        trackedOrder.status === 'NEW'
+                          ? 'text-amber-400'
+                          : trackedOrder.status !== 'CANCELLED'
+                          ? 'text-emerald-400'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      2. قبول المتجر وتجهيز الأصناف 👨‍🍳
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {trackedOrder.status === 'NEW' &&
+                        'وصل إشعار للتاجر وبانتظار بدء التجهيز... سيصلك تحديث فوري ⏳'}
+                      {trackedOrder.status === 'ACCEPTED' &&
+                        'قام التاجر بقبول طلبك ويقوم حالياً بتجهيز وتعبئة الأصناف 👨‍🍳'}
+                      {trackedOrder.status === 'READY_FOR_PICKUP' &&
+                        'تم اكتمال تجهيز الأصناف بالكامل بالمحل وتغليفها 📦'}
+                      {(trackedOrder.status === 'OUT_FOR_DELIVERY' ||
+                        trackedOrder.status === 'ON_THE_WAY' ||
+                        trackedOrder.status === 'DELIVERED') &&
+                        'تم تجهيز الطلب بالكامل من المتجر ✅'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 3: Delivery Driver */}
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                      trackedOrder.status === 'READY_FOR_PICKUP'
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50 animate-pulse'
+                        : trackedOrder.status === 'OUT_FOR_DELIVERY' || trackedOrder.status === 'ON_THE_WAY'
+                        ? 'bg-indigo-500 text-white animate-bounce'
+                        : trackedOrder.status === 'DELIVERED'
+                        ? 'bg-emerald-500 text-slate-950'
+                        : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {trackedOrder.status === 'READY_FOR_PICKUP' ? (
+                      <Package className="w-3.5 h-3.5" />
+                    ) : trackedOrder.status === 'OUT_FOR_DELIVERY' || trackedOrder.status === 'ON_THE_WAY' ? (
+                      <Truck className="w-3.5 h-3.5" />
+                    ) : trackedOrder.status === 'DELIVERED' ? (
+                      <Check className="w-4 h-4 stroke-[3]" />
+                    ) : (
+                      <Truck className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                  <div>
+                    <h4
+                      className={`text-xs sm:text-sm font-extrabold ${
+                        trackedOrder.status === 'READY_FOR_PICKUP'
+                          ? 'text-blue-400'
+                          : trackedOrder.status === 'OUT_FOR_DELIVERY' || trackedOrder.status === 'ON_THE_WAY'
+                          ? 'text-indigo-400'
+                          : trackedOrder.status === 'DELIVERED'
+                          ? 'text-emerald-400'
+                          : 'text-slate-500'
+                      }`}
+                    >
+                      3. سائق التوصيل والاستلام 🛵
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {trackedOrder.status === 'NEW' && 'سيتم إشعار السائق فور انتهاء التاجر من تجهيز طلبك.'}
+                      {trackedOrder.status === 'ACCEPTED' &&
+                        'الطلب قيد التحضير وبانتظار إشعار السائق فور جهوزيته.'}
+                      {trackedOrder.status === 'READY_FOR_PICKUP' &&
+                        'الطلب جاهز بالمحل! تم إرسال إشعار لمناديب التوصيل للاستلام فوراً 📦'}
+                      {(trackedOrder.status === 'OUT_FOR_DELIVERY' ||
+                        trackedOrder.status === 'ON_THE_WAY') && (
+                        <span className="text-indigo-300 font-bold">
+                          الطلب خرج مع السائق {trackedOrder.driverName || ''} وهو في الطريق إليك الآن! 🛵
+                        </span>
+                      )}
+                      {trackedOrder.status === 'DELIVERED' && 'تم استلام وتوصيل الطلب بنجاح.'}
+                    </p>
+
+                    {trackedOrder.driverPhone && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <a
+                          href={`tel:${trackedOrder.driverPhone}`}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 text-xs font-bold flex items-center gap-1.5"
+                        >
+                          <Phone className="w-3 h-3" />
+                          <span>اتصال بالسائق: {trackedOrder.driverPhone}</span>
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Step 4: Completed */}
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                      trackedOrder.status === 'DELIVERED'
+                        ? 'bg-emerald-500 text-slate-950'
+                        : 'bg-slate-800 text-slate-600'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4
+                      className={`text-xs sm:text-sm font-extrabold ${
+                        trackedOrder.status === 'DELIVERED' ? 'text-emerald-400' : 'text-slate-500'
+                      }`}
+                    >
+                      4. التسليم والاستلام 🎉
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {trackedOrder.status === 'DELIVERED'
+                        ? 'تم تسليم الطلب واستلام الحساب بنجاح! بالعافية والبركة.'
+                        : 'يتم التسليم عند باب منزلك مع استلام الحساب.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Items & Totals */}
+              <div className="bg-slate-950/60 rounded-2xl p-4 border border-slate-800 space-y-2">
+                <div className="text-xs font-bold text-slate-300 mb-1">الأصناف المطلوبة:</div>
+                <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                  {trackedOrder.items.map((it, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between text-xs text-slate-300 py-1 border-b border-slate-800/40"
+                    >
+                      <span>
+                        {idx + 1}. {it.name} × {it.quantity} {it.unit || ''}
+                      </span>
+                      <span className="font-mono text-emerald-400">
+                        {it.total.toFixed(2)} {settings.currency || 'ر.س'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">الإجمالي النهائي مع التوصيل:</span>
+                  <span className="text-base font-black text-emerald-400 font-mono">
+                    {trackedOrder.totalAmount.toFixed(2)} {settings.currency || 'ر.س'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center gap-2">
+                <button
+                  onClick={() => handleSendWhatsAppForExistingOrder(trackedOrder)}
+                  className="w-full sm:flex-1 py-2.5 px-3 rounded-xl bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-500/40 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4 text-teal-400" />
+                  <span>مراسلة المتجر عبر الواتساب</span>
+                </button>
+
+                <button
+                  onClick={() => setIsTrackingModalOpen(false)}
+                  className="w-full sm:w-auto py-2.5 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors"
+                >
+                  متابعة التسوق
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

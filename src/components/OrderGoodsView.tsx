@@ -1057,7 +1057,7 @@ export const OrderGoodsView: React.FC<OrderGoodsViewProps> = ({
                           <div className="text-[10px] text-slate-400 font-mono">
                             {quantity} {item.unit || 'حبة'} × {costPrice} ={' '}
                             <strong className="text-amber-300">
-                              {(quantity * costPrice).toLocaleString()} {settings.currency}
+                              {((quantity || 0) * (costPrice || 0)).toLocaleString()} {settings.currency}
                             </strong>
                           </div>
                         </div>
@@ -1084,7 +1084,7 @@ export const OrderGoodsView: React.FC<OrderGoodsViewProps> = ({
                 <div className="flex items-center justify-between text-sm font-black border-t border-slate-800/80 pt-2">
                   <span className="text-white">إجمالي قيمة الفاتورة:</span>
                   <span className="text-amber-400 font-mono text-base">
-                    {totalAmount.toLocaleString()} {settings.currency}
+                    {(totalAmount ?? 0).toLocaleString()} {settings.currency}
                   </span>
                 </div>
               </div>
@@ -1356,7 +1356,7 @@ export const OrderGoodsView: React.FC<OrderGoodsViewProps> = ({
                                     </span>
                                   </td>
                                   <td className="py-2 text-left font-mono font-bold text-amber-400">
-                                    {cartItem.total.toLocaleString()} {settings.currency}
+                                    {(cartItem.total ?? 0).toLocaleString()} {settings.currency}
                                   </td>
                                 </tr>
                               );
@@ -1636,7 +1636,7 @@ export const OrderGoodsView: React.FC<OrderGoodsViewProps> = ({
 
                           <div className="text-left">
                             <span className="text-xs font-mono font-bold text-emerald-400">
-                              {(recQty * recCost).toLocaleString()} {settings.currency}
+                              {((recQty || 0) * (recCost || 0)).toLocaleString()} {settings.currency}
                             </span>
                           </div>
                         </div>

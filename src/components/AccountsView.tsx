@@ -15,7 +15,7 @@ import {
 import { useApp } from '../context/AppContext';
 
 export const AccountsView: React.FC = () => {
-  const { transactions, debts, settings, financialSummary } = useApp();
+  const { transactions, debts, settings, financialSummary, isRTL, language } = useApp();
   const [accountFilter, setAccountFilter] = useState<'ALL' | 'CREDIT' | 'PAID' | 'TRANSFER' | 'CARD'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -208,7 +208,7 @@ export const AccountsView: React.FC = () => {
             <Wallet className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-2xl font-black text-emerald-400 font-mono">
-            {financialSummary.cashBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+            {(financialSummary?.cashBalance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
             <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
           </div>
           <div className="text-xs text-slate-400 mt-1">النقد الفعلي المتوفر في الصندوق</div>
@@ -221,7 +221,7 @@ export const AccountsView: React.FC = () => {
             <Building2 className="w-4 h-4 text-blue-400" />
           </div>
           <div className="text-2xl font-black text-blue-400 font-mono">
-            {financialSummary.bankTransferBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+            {(financialSummary?.bankTransferBalance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
             <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
           </div>
           <div className="text-xs text-slate-400 mt-1">إجمالي الحوالات البنكية المحصلة</div>
@@ -234,7 +234,7 @@ export const AccountsView: React.FC = () => {
             <CreditCard className="w-4 h-4 text-teal-400" />
           </div>
           <div className="text-2xl font-black text-teal-400 font-mono">
-            {financialSummary.cardBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+            {(financialSummary?.cardBalance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
             <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
           </div>
           <div className="text-xs text-slate-400 mt-1">مقبوضات أجهزة نقاط البيع POS</div>
@@ -247,7 +247,7 @@ export const AccountsView: React.FC = () => {
             <ArrowUpRight className="w-4 h-4 text-amber-400" />
           </div>
           <div className="text-2xl font-black text-amber-400 font-mono">
-            {financialSummary.totalCreditSalesDue.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+            {(financialSummary?.totalCreditSalesDue ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
             <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
           </div>
           <div className="text-xs text-slate-400 mt-1">ديون متأخرة على العملاء واجبة التحصيل</div>
@@ -324,17 +324,17 @@ export const AccountsView: React.FC = () => {
       {/* Ledger Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs sm:text-sm">
+          <table className={`w-full ${isRTL ? 'text-right' : 'text-left'} text-xs sm:text-sm`}>
             <thead>
               <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-bold">
-                <th className="p-3.5">التاريخ والوقت</th>
-                <th className="p-3.5">رقم المرجع / الفاتورة</th>
-                <th className="p-3.5">الطرف (العميل / المورد)</th>
-                <th className="p-3.5">نوع العملية (بيع آجل / دفع)</th>
-                <th className="p-3.5 text-center">طريقة الدفع</th>
-                <th className="p-3.5 text-center text-emerald-400">مدين (لنا / قبض)</th>
-                <th className="p-3.5 text-center text-rose-400">دائن (صرف / علينا)</th>
-                <th className="p-3.5">البيان والتفاصيل</th>
+                <th className="p-3.5">{language === 'ar' ? 'التاريخ والوقت' : 'Date & Time'}</th>
+                <th className="p-3.5">{language === 'ar' ? 'رقم المرجع / الفاتورة' : 'Reference / Invoice #'}</th>
+                <th className="p-3.5">{language === 'ar' ? 'الطرف (العميل / المورد)' : 'Party (Customer / Supplier)'}</th>
+                <th className="p-3.5">{language === 'ar' ? 'نوع العملية (بيع آجل / دفع)' : 'Operation Type'}</th>
+                <th className="p-3.5 text-center">{language === 'ar' ? 'طريقة الدفع' : 'Payment Method'}</th>
+                <th className="p-3.5 text-center text-emerald-400">{language === 'ar' ? 'مدين (لنا / قبض)' : 'Debit (Receive)'}</th>
+                <th className="p-3.5 text-center text-rose-400">{language === 'ar' ? 'دائن (صرف / علينا)' : 'Credit (Pay)'}</th>
+                <th className="p-3.5">{language === 'ar' ? 'البيان والتفاصيل' : 'Notes / Description'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-slate-200">

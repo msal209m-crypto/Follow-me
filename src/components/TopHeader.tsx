@@ -33,6 +33,8 @@ import {
   Check,
   Sparkles,
   Tag,
+  Truck,
+  MapPin,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -43,6 +45,8 @@ import { ReorderAlertsDropdown } from './ReorderAlertsDropdown';
 import { Item } from '../types';
 import { OWNER_CONTACT } from '../config/ownerContact';
 import { getDismissedAlertIds } from '../utils/alertUtils';
+import { getDeliveryOrders } from '../services/deliveryService';
+import { getPlatformDeveloperSettings } from '../services/platformSettingsService';
 
 interface TopHeaderProps {
   onOpenMobileMenu: () => void;
@@ -53,9 +57,9 @@ interface TopHeaderProps {
   onNavigateToItems?: (item?: Item) => void;
   onNavigateToDashboard?: () => void;
   onOpenShareModal?: () => void;
-  onOpenAdminLicenses?: () => void;
   onSwitchToStore?: () => void;
   onOpenLanding?: () => void;
+  onOpenMerchantOrders?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -67,9 +71,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onNavigateToItems,
   onNavigateToDashboard,
   onOpenShareModal,
-  onOpenAdminLicenses,
   onSwitchToStore,
   onOpenLanding,
+  onOpenMerchantOrders,
 }) => {
   const {
     currentCashier,
@@ -90,12 +94,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const { currentUser, userProfile, logout, isCloudConnected } = useAuth();
   const { isInstalled, setShowInstallPromptModal, updateAvailable, applyUpdate, isOnline } = usePWA();
   const { isPro, subscription, setShowSubscriptionModal } = useSubscription();
-
-  const isAccountAdmin = useMemo(() => {
-    const role = (userProfile?.role || '').toLowerCase();
-    const email = (currentUser?.email || '').toLowerCase();
-    return role === 'admin' || email === 'msal209m@gmail.com';
-  }, [userProfile, currentUser]);
 
   const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
@@ -160,28 +158,26 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const [userDropdownStyle, setUserDropdownStyle] = useState<React.CSSProperties>({});
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>(() => getDismissedAlertIds());
 
-  // Persistent customizable announcement banner state
-  const [announcementText, setAnnouncementText] = useState<string>(() => {
-    return localStorage.getItem('flowapp:header-announcement') || '';
+  // Global platform developer broadcast/announcement (read-only for merchants, managed exclusively by app developer in Developer Console)
+  const [developerAnnouncement, setDeveloperAnnouncement] = useState<string>(() => {
+    try {
+      return getPlatformDeveloperSettings().developerAnnouncement || '';
+    } catch {
+      return '';
+    }
   });
-  const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
-  const [tempAnnouncement, setTempAnnouncement] = useState('');
 
-  const handleSaveAnnouncement = () => {
-    const trimmed = tempAnnouncement.trim();
-    setAnnouncementText(trimmed);
-    localStorage.setItem('flowapp:header-announcement', trimmed);
-    setIsEditingAnnouncement(false);
-  };
-
-  const handleCancelAnnouncement = () => {
-    setIsEditingAnnouncement(false);
-  };
-
-  const handleStartEditAnnouncement = () => {
-    setTempAnnouncement(announcementText);
-    setIsEditingAnnouncement(true);
-  };
+  useEffect(() => {
+    const handleDevSettingsUpdated = (e: any) => {
+      if (e.detail?.developerAnnouncement !== undefined) {
+        setDeveloperAnnouncement(e.detail.developerAnnouncement || '');
+      }
+    };
+    window.addEventListener('qaryati:dev-settings-updated', handleDevSettingsUpdated);
+    return () => {
+      window.removeEventListener('qaryati:dev-settings-updated', handleDevSettingsUpdated);
+    };
+  }, []);
 
   const userInitial = useMemo(() => {
     const raw = (userProfile?.displayName || currentUser?.email || '').trim();
@@ -194,6 +190,36 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     };
     window.addEventListener('flowapp:alerts-updated', handleAlertsUpdated);
     return () => window.removeEventListener('flowapp:alerts-updated', handleAlertsUpdated);
+  }, []);
+
+  // Real-time Village Store Delivery Orders counter for Merchant
+  const [deliveryOrdersCount, setDeliveryOrdersCount] = useState<number>(() => {
+    const all = getDeliveryOrders();
+    return all.filter((o) => o.status === 'NEW' || o.status === 'ACCEPTED' || o.status === 'READY_FOR_PICKUP').length;
+  });
+
+  const [hasNewIncomingOrders, setHasNewIncomingOrders] = useState<boolean>(() => {
+    const all = getDeliveryOrders();
+    return all.some((o) => o.status === 'NEW');
+  });
+
+  useEffect(() => {
+    const refreshDeliveryCount = () => {
+      const all = getDeliveryOrders();
+      const activeCount = all.filter(
+        (o) => o.status === 'NEW' || o.status === 'ACCEPTED' || o.status === 'READY_FOR_PICKUP'
+      ).length;
+      setDeliveryOrdersCount(activeCount);
+      setHasNewIncomingOrders(all.some((o) => o.status === 'NEW'));
+    };
+
+    window.addEventListener('qaryati:orders-updated', refreshDeliveryCount);
+    window.addEventListener('qaryati:new-order-received', refreshDeliveryCount);
+
+    return () => {
+      window.removeEventListener('qaryati:orders-updated', refreshDeliveryCount);
+      window.removeEventListener('qaryati:new-order-received', refreshDeliveryCount);
+    };
   }, []);
 
   const activeAlertsCount = useMemo(() => {
@@ -463,6 +489,37 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Right / End: All top controls in a single tidy row */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Merchant Orders Management Button */}
+          {onOpenMerchantOrders && (
+            <button
+              type="button"
+              id="top-merchant-delivery-orders-btn"
+              onClick={onOpenMerchantOrders}
+              className={`h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 shadow-md text-xs font-bold border ${
+                hasNewIncomingOrders
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-400 animate-pulse shadow-rose-950/60'
+                  : deliveryOrdersCount > 0
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white border-amber-400/50 shadow-amber-950/40'
+                  : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border-slate-700'
+              }`}
+              title={language === 'ar' ? 'إدارة طلبات التوصيل الواردة من المتجر' : 'Store Delivery Orders'}
+            >
+              <Truck className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${hasNewIncomingOrders ? 'text-white animate-bounce' : 'text-amber-300'}`} />
+              <span className="hidden sm:inline">
+                {language === 'ar' ? 'طلبات التوصيل' : 'Delivery Orders'}
+              </span>
+              {deliveryOrdersCount > 0 ? (
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                  hasNewIncomingOrders ? 'bg-white text-rose-600' : 'bg-amber-950 text-amber-300 border border-amber-400/30'
+                }`}>
+                  {deliveryOrdersCount}
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-400 hidden md:inline">(0)</span>
+              )}
+            </button>
+          )}
+
           {/* 0. Return to Store Main Button (دالة الخروج والعودة لواجهة المتجر الرئيسية) */}
           {onSwitchToStore && (
             <button
@@ -498,8 +555,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
             {showCurrencyDropdown && (
               <div
-                style={currencyDropdownStyle}
-                className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 p-2 text-xs space-y-1 animate-in fade-in zoom-in-95 overflow-y-auto max-h-[85vh] custom-scrollbar"
+                className="fixed sm:absolute top-14 sm:top-full mt-2 inset-x-2 sm:inset-x-auto end-0 sm:w-64 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 p-2 text-xs space-y-1 animate-in fade-in zoom-in-95 overflow-y-auto max-h-[85vh] custom-scrollbar"
               >
                 <div className="px-2 py-1 text-[11px] font-bold text-slate-300 border-b border-slate-800 mb-1">
                   {t.activeCurrency}
@@ -566,8 +622,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
             {showLanguageDropdown && (
               <div
-                style={languageDropdownStyle}
-                className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 p-2 text-xs space-y-1 animate-in fade-in zoom-in-95 overflow-y-auto max-h-[85vh] custom-scrollbar"
+                className="fixed sm:absolute top-14 sm:top-full mt-2 inset-x-2 sm:inset-x-auto end-0 sm:w-56 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 p-2 text-xs space-y-1 animate-in fade-in zoom-in-95 overflow-y-auto max-h-[85vh] custom-scrollbar"
               >
                 <div className="px-2 py-1 text-[11px] font-bold text-slate-300 border-b border-slate-800 mb-1">
                   {t.switchLanguage}
@@ -649,21 +704,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </div>
 
-          {/* 3.5. Village Customer Store Switch Button */}
-          {onSwitchToStore && (
-            <button
-              type="button"
-              onClick={onSwitchToStore}
-              className="h-8 sm:h-9 px-2.5 sm:px-3 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-200 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm text-xs font-bold"
-              title={language === 'ar' ? 'معاينة متجر القرية للعملاء' : 'View Village Customer Store'}
-            >
-              <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0" />
-              <span className="hidden sm:inline">
-                {language === 'ar' ? 'متجر القرية' : 'Store'}
-              </span>
-            </button>
-          )}
-
           {/* 4. Settings Button */}
           <button
             type="button"
@@ -717,8 +757,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             {/* Comprehensive User Profile Dropdown */}
             {showUserDropdown && currentUser && (
               <div
-                style={userDropdownStyle}
-                className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-3 text-xs space-y-2 overflow-y-auto max-h-[85vh] custom-scrollbar animate-in fade-in zoom-in-95"
+                className="fixed sm:absolute top-14 sm:top-full mt-2 inset-x-2 sm:inset-x-auto end-0 sm:w-80 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 p-3 text-xs space-y-2 overflow-y-auto max-h-[85vh] custom-scrollbar animate-in fade-in zoom-in-95"
               >
                 {/* User Header */}
                 <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-800">
@@ -730,7 +769,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                       <div className="font-bold text-white truncate text-xs">
                         {userProfile?.displayName || currentUser.email?.split('@')[0] || (language === 'ar' ? 'التاجر' : 'Merchant')}
                       </div>
-                      <div className="text-[10px] text-slate-400 truncate dir-ltr text-right">
+                      <div className="text-[10px] text-slate-400 truncate font-mono" dir="ltr">
                         {currentUser.email}
                       </div>
                       <div className="flex items-center gap-1 mt-0.5">
@@ -840,23 +879,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     >
                       <Share2 className="w-4 h-4 text-sky-400 shrink-0" />
                       <span>{language === 'ar' ? 'مشاركة رابط التطبيق' : 'Share App Link'}</span>
-                    </button>
-                  )}
-
-                  {isAccountAdmin && onOpenAdminLicenses && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowUserDropdown(false);
-                        onOpenAdminLicenses();
-                      }}
-                      className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-amber-200 hover:bg-amber-950/50 border border-transparent hover:border-amber-700/60 transition-colors cursor-pointer active:scale-98"
-                    >
-                      <div className="flex items-center gap-2">
-                        <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>{language === 'ar' ? 'لوحة تحكم المشرف (الأكواد)' : 'Admin License Panel'}</span>
-                      </div>
-                      <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-mono">ADMIN</span>
                     </button>
                   )}
 
@@ -974,9 +996,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <h1 className="font-black text-sm xs:text-base sm:text-lg md:text-xl text-white tracking-tight leading-tight select-none truncate max-w-[200px] xs:max-w-xs sm:max-w-sm md:max-w-md">
               {displayAppName}
             </h1>
-            <span className="hidden xs:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-300">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>{language === 'ar' ? 'المتجر الرئيسي' : 'Main Store'}</span>
+            {settings.address && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-[11px] font-bold text-emerald-300">
+                <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span>القرية: {settings.address}</span>
+              </span>
+            )}
+            <span className="hidden xs:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-[10px] font-bold text-purple-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
+              <span>حساب التاجر المحمي</span>
             </span>
           </div>
 
@@ -984,7 +1012,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             {settings.phone ? (
               <span>{language === 'ar' ? `هاتف: ${settings.phone}` : `Tel: ${settings.phone}`}</span>
             ) : (
-              <span>{language === 'ar' ? 'نظام المحاسبة وإدارة المخزون السحابي' : 'Cloud POS & Inventory Suite'}</span>
+              <span>{language === 'ar' ? 'نظام إدارة المخزون والمبيعات ونقاط البيع' : 'Cloud POS & Inventory Suite'}</span>
             )}
             {settings.taxNumber && (
               <>
@@ -998,86 +1026,34 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </div>
       </div>
 
-      {/* Dedicated Announcement / Promo / Ad Space */}
-      <div className="flex-1 min-w-0 max-w-full md:max-w-2xl flex items-center justify-end">
-        {isEditingAnnouncement ? (
-          <div className="w-full flex items-center gap-2 p-1.5 bg-slate-900 border border-amber-500/50 rounded-xl animate-in fade-in shadow-lg">
-            <input
-              type="text"
-              value={tempAnnouncement}
-              onChange={(e) => setTempAnnouncement(e.target.value)}
-              placeholder={
-                language === 'ar'
-                  ? 'اكتب نص الإعلان أو العرض هنا (اتركه فارغاً للوضع الافتراضي)...'
-                  : 'Enter announcement or promo text (leave empty for default)...'
-              }
-              className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveAnnouncement();
-                if (e.key === 'Escape') handleCancelAnnouncement();
-              }}
-            />
-            <button
-              type="button"
-              onClick={handleSaveAnnouncement}
-              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-              title={language === 'ar' ? 'حفظ الإعلان' : 'Save'}
-            >
-              <Check className="w-3.5 h-3.5" />
-              <span>{language === 'ar' ? 'حفظ' : 'Save'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleCancelAnnouncement}
-              className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
-              title={language === 'ar' ? 'إلغاء' : 'Cancel'}
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+      {/* Merchant Operational Status & Developer-Managed Platform Broadcast (Read-Only) */}
+      <div className="flex-1 min-w-0 flex items-center justify-end gap-2.5">
+        {/* If the platform developer has published a global platform notice, display it strictly read-only with NO edit button */}
+        {developerAnnouncement ? (
+          <div
+            id="top-platform-announcement-pill"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs shadow-sm max-w-full md:max-w-md truncate"
+            title={developerAnnouncement}
+          >
+            <div className="w-5 h-5 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+              <Megaphone className="w-3 h-3" />
+            </div>
+            <div className="min-w-0 truncate flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-amber-400 bg-amber-950/80 px-1 py-0.5 rounded border border-amber-500/30 shrink-0">
+                {language === 'ar' ? 'تنبيه المنصة' : 'Platform Alert'}
+              </span>
+              <span className="text-xs text-slate-200 font-medium truncate">
+                {developerAnnouncement}
+              </span>
+            </div>
           </div>
         ) : (
-          <div
-            id="top-announcement-banner"
-            className="w-full flex items-center justify-between gap-2 px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-slate-900 border border-amber-500/30 text-amber-200 text-xs shadow-sm group hover:border-amber-500/50 transition-colors"
-          >
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <div className="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-                <Megaphone className="w-3.5 h-3.5" />
-              </div>
-
-              <div className="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap">
-                <span className="font-extrabold text-amber-300 text-[10px] sm:text-[11px] uppercase tracking-wide bg-amber-950/80 px-1.5 py-0.2 rounded border border-amber-500/30 shrink-0">
-                  {announcementText
-                    ? language === 'ar'
-                      ? 'إعلان المتجر'
-                      : 'Notice'
-                    : language === 'ar'
-                    ? 'شريط التنبيهات'
-                    : 'Live Banner'}
-                </span>
-                <span className="text-[11px] sm:text-xs text-slate-200 truncate font-medium">
-                  {announcementText ||
-                    (language === 'ar'
-                      ? `مرحباً بكم في ${displayAppName} | نظام إدارة المبيعات والمخزون السحابي ⚡`
-                      : `Welcome to ${displayAppName} | Instant Cloud POS & Inventory System ⚡`)}
-                </span>
-              </div>
-            </div>
-
-            {/* Quick Edit Announcement Button */}
-            <button
-              type="button"
-              id="btn-edit-header-announcement"
-              onClick={handleStartEditAnnouncement}
-              className="opacity-75 group-hover:opacity-100 p-1 rounded-lg hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 transition-all cursor-pointer shrink-0 text-[10px] font-bold flex items-center gap-1"
-              title={language === 'ar' ? 'تعديل أو كتابة إعلان جديد للمتجر' : 'Edit announcement'}
-            >
-              <Edit3 className="w-3 h-3" />
-              <span className="hidden sm:inline">
-                {language === 'ar' ? 'تعديل' : 'Edit'}
-              </span>
-            </button>
+          /* Store Operational Status Indicator */
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 text-emerald-400 text-xs font-bold shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>{language === 'ar' ? 'نظام المتجر متصل وجاهز للمبيعات' : 'Store POS Active & Online'}</span>
+            </span>
           </div>
         )}
       </div>

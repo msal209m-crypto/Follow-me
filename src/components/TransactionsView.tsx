@@ -54,9 +54,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     currentCashier,
     showNotification,
     isCashierMode,
+    language,
+    t,
+    isRTL,
   } = useApp();
-
-  const language = settings.language || 'ar';
 
   // Active operation mode (بيع كاش / بيع أجل)
   const [operationType, setOperationType] = useState<TransactionType>('SALE');
@@ -84,6 +85,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [cart, setCart] = useState<TransactionCartItem[]>([]);
   const [discount, setDiscount] = useState<number>(0);
   const [paidAmountInput, setPaidAmountInput] = useState<string>('');
+
+  // POS Tabs & UI states
+  const [posActiveTab, setPosActiveTab] = useState<'TERMINAL' | 'HISTORY'>('TERMINAL');
+  const [showCustomerInputs, setShowCustomerInputs] = useState<boolean>(false);
 
   // Barcode / Search input
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -426,165 +431,175 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm">
-              <ArrowLeftRight className="w-4 h-4" />
-            </span>
-            <h2 className="text-xl sm:text-2xl font-black text-white">
-              الحركات ونقاط البيع (كاشير البيع السريع)
+    <div className="space-y-4">
+      {/* Compact Top Header & Navigation Tabs */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0">
+            <ArrowLeftRight className="w-4 h-4" />
+          </span>
+          <div>
+            <h2 className="text-base sm:text-lg font-black text-white leading-tight">
+              {posActiveTab === 'TERMINAL' ? 'شاشة الكاشير والبيع السريع (POS)' : 'سجل الفواتير والحركات المالية'}
             </h2>
+            <div className="text-[11px] text-slate-400">
+              {posActiveTab === 'TERMINAL'
+                ? 'إدخال فوري بالباركود والاسم مع إصدار وطباعة الإيصالات'
+                : `إجمالي ${filteredTransactions.length} حركة مسجلة`}
+            </div>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5 mr-10">
-            تسجيل عمليات البيع المباشر (نقد أو آجل) والشراء السريع عبر الباركود
-          </p>
         </div>
-      </div>
 
-      {/* Main Grid: POS Terminal & Cart on Left, Recent Log on Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: POS Terminal (Col 7) */}
-        <div className="lg:col-span-7 space-y-4">
-          {/* Operation Type Switcher */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm">
-            <div className="text-xs text-slate-400 font-bold mb-2">نوع العملية للكاشير:</div>
-            <div className={`grid ${isCashierMode ? 'grid-cols-2' : 'grid-cols-3'} gap-2`}>
+        {/* Operation mode buttons (when on Terminal) + Tab switcher */}
+        <div className="flex flex-wrap items-center gap-2">
+          {posActiveTab === 'TERMINAL' && (
+            <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 gap-1">
               <button
                 type="button"
                 id="btn-pos-sale-cash"
                 onClick={() => setOperationType('SALE')}
-                className={`text-xs py-2.5 px-3 rounded-lg font-extrabold border transition-all cursor-pointer ${
+                className={`text-xs py-1.5 px-3 rounded-md font-bold transition-all cursor-pointer ${
                   operationType === 'SALE'
-                    ? 'bg-emerald-600 border-emerald-500 text-white shadow-md shadow-emerald-950'
-                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
                 }`}
               >
-                🛒 بيع نقدي (كاش)
+                🛒 بيع نقدي
               </button>
-
               <button
                 type="button"
                 id="btn-pos-sale-credit"
                 onClick={() => setOperationType('CREDIT_SALE')}
-                className={`text-xs py-2.5 px-3 rounded-lg font-extrabold border transition-all cursor-pointer ${
+                className={`text-xs py-1.5 px-3 rounded-md font-bold transition-all cursor-pointer ${
                   operationType === 'CREDIT_SALE'
-                    ? 'bg-amber-600 border-amber-500 text-white shadow-md shadow-amber-950'
-                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
                 }`}
               >
-                ⏳ بيع أجل (دين)
+                ⏳ بيع آجل (دين)
               </button>
-
               {!isCashierMode && (
                 <button
                   type="button"
                   id="btn-pos-purchase-cash"
                   onClick={() => setOperationType('PURCHASE')}
-                  className={`text-xs py-2.5 px-3 rounded-lg font-extrabold border transition-all cursor-pointer ${
+                  className={`text-xs py-1.5 px-3 rounded-md font-bold transition-all cursor-pointer ${
                     operationType === 'PURCHASE'
-                      ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-950'
-                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  📥 شراء نقدي سريع
+                  📥 شراء سريع
                 </button>
               )}
             </div>
+          )}
+
+          {/* Tab Switcher */}
+          <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 gap-1">
+            <button
+              type="button"
+              onClick={() => setPosActiveTab('TERMINAL')}
+              className={`text-xs py-1.5 px-3 rounded-md font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                posActiveTab === 'TERMINAL'
+                  ? 'bg-teal-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShoppingCart className="w-3.5 h-3.5" />
+              <span>الكاشير</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPosActiveTab('HISTORY')}
+              className={`text-xs py-1.5 px-3 rounded-md font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                posActiveTab === 'HISTORY'
+                  ? 'bg-teal-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>السجل ({filteredTransactions.length})</span>
+            </button>
           </div>
+        </div>
+      </div>
 
-          {/* Mode Tabs: Barcode Scan VS Interactive Items Catalog */}
-          <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-1.5 rounded-xl text-xs font-bold">
-            <div className="flex items-center gap-1.5 flex-1">
-              <button
-                type="button"
-                onClick={() => setInputViewMode('BARCODE')}
-                className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                  inputViewMode === 'BARCODE'
-                    ? 'bg-slate-800 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Barcode className="w-3.5 h-3.5 text-emerald-400" />
-                <span>مسح الباركود والبحث السريع</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setInputViewMode('CATALOG')}
-                className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                  inputViewMode === 'CATALOG'
-                    ? 'bg-cyan-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Package className="w-3.5 h-3.5 text-cyan-300" />
-                <span>قائمة الأصناف لتحديد البضاعة ({items.length})</span>
-              </button>
-            </div>
-          </div>
-
-          {/* If Input View Mode is BARCODE */}
-          {inputViewMode === 'BARCODE' ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm space-y-3">
-              {/* Camera Scanner Quick Trigger Banner */}
-              <div className="bg-gradient-to-r from-emerald-950/60 via-teal-950/40 to-slate-950 border border-emerald-500/40 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                    <Camera className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-extrabold text-xs sm:text-sm text-white flex items-center gap-2">
-                      <span>كاشير الجوال: مسح الباركود بالكاميرا مباشرة</span>
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
-                        سريع وفوري
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-300">
-                      وجّه كاميرا الجوال نحو المنتج لإضافته للسلة فوراً مع إظهار السعر والكمية
-                    </div>
-                  </div>
-                </div>
+      {posActiveTab === 'TERMINAL' ? (
+        /* Main Grid: POS Terminal (Left: Barcode/Catalog + Cart, Right: Payment & Summary) */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Left Column: POS Terminal & Cart (Col 7 on lg, Col 7 on xl) */}
+          <div className="lg:col-span-7 xl:col-span-7 space-y-3">
+            {/* Mode Tabs: Barcode Scan VS Interactive Items Catalog */}
+            <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-1.5 rounded-xl text-xs font-bold">
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setInputViewMode('BARCODE')}
+                  className={`flex-1 py-1.5 px-2 sm:px-3 rounded-lg flex items-center justify-center gap-1 sm:gap-1.5 transition-colors cursor-pointer min-w-0 ${
+                    inputViewMode === 'BARCODE'
+                      ? 'bg-slate-800 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Barcode className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="truncate">{language === 'ar' ? 'مسح الباركود' : 'Barcode Scan'}</span>
+                </button>
 
                 <button
                   type="button"
-                  id="btn-open-camera-scanner-pos"
-                  onClick={() => setShowCameraScanner(true)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-3.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-950"
+                  onClick={() => setInputViewMode('CATALOG')}
+                  className={`flex-1 py-1.5 px-2 sm:px-3 rounded-lg flex items-center justify-center gap-1 sm:gap-1.5 transition-colors cursor-pointer min-w-0 ${
+                    inputViewMode === 'CATALOG'
+                      ? 'bg-cyan-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
                 >
-                  <Camera className="w-4 h-4" />
-                  <span>فتح كاميرا الباركود</span>
+                  <Package className="w-3.5 h-3.5 text-cyan-300 shrink-0" />
+                  <span className="truncate">{language === 'ar' ? `الأصناف (${items.length})` : `Catalog (${items.length})`}</span>
                 </button>
               </div>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Direct Barcode Entry */}
-                <form onSubmit={handleBarcodeSubmit} className="relative">
-                  <label className="text-[11px] text-slate-400 font-bold block mb-1">
-                    مسح الباركود (قارئ باركود أو إدخال يدوي):
-                  </label>
-                  <div className="relative">
-                    <Barcode className="w-4 h-4 text-emerald-400 absolute right-3 top-3" />
-                    <input
-                      ref={barcodeInputRef}
-                      type="text"
-                      placeholder="امسح الباركود ثم اضغط Enter..."
-                      value={barcodeInput}
-                      onChange={(e) => setBarcodeInput(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg pr-9 pl-10 py-2 text-xs font-mono text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCameraScanner(true)}
-                      className="absolute left-2 top-2 p-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 cursor-pointer"
-                      title="مسح بالكاميرا"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </form>
+            {/* If Input View Mode is BARCODE */}
+            {inputViewMode === 'BARCODE' ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm space-y-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Direct Barcode Entry */}
+                  <form onSubmit={handleBarcodeSubmit} className="relative">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] text-slate-400 font-bold block">
+                        مسح الباركود (قارئ أو يدوي):
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowCameraScanner(true)}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Camera className="w-3 h-3" />
+                        <span>كاميرا الجوال</span>
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <Barcode className="w-4 h-4 text-emerald-400 absolute right-2.5 top-2.5" />
+                      <input
+                        ref={barcodeInputRef}
+                        type="text"
+                        placeholder="امسح الباركود ثم اضغط Enter..."
+                        value={barcodeInput}
+                        onChange={(e) => setBarcodeInput(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg pr-8 pl-8 py-1.5 text-xs font-mono text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCameraScanner(true)}
+                        className="absolute left-1.5 top-1.5 p-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 cursor-pointer"
+                        title="مسح بالكاميرا"
+                      >
+                        <Camera className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </form>
 
                 {/* Item Name Quick Selector */}
                 <div className="relative">
@@ -896,13 +911,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-right text-xs">
+                <table className={`w-full ${isRTL ? 'text-right' : 'text-left'} text-xs`}>
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 font-bold">
-                      <th className="pb-2">الصنف</th>
-                      <th className="pb-2 text-center w-24">الكمية</th>
-                      <th className="pb-2 text-center w-24">السعر</th>
-                      <th className="pb-2 text-center w-24">الإجمالي</th>
+                      <th className={`pb-2 ${isRTL ? 'text-right' : 'text-left'}`}>{language === 'ar' ? 'الصنف' : 'Item'}</th>
+                      <th className="pb-2 text-center w-24">{language === 'ar' ? 'الكمية' : 'Qty'}</th>
+                      <th className="pb-2 text-center w-24">{language === 'ar' ? 'السعر' : 'Price'}</th>
+                      <th className="pb-2 text-center w-24">{language === 'ar' ? 'الإجمالي' : 'Total'}</th>
                       <th className="pb-2 text-center w-10"></th>
                     </tr>
                   </thead>
@@ -1018,120 +1033,165 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               </div>
             )}
           </div>
+        </div>
 
-          {/* Payment Method & Customer Details & Checkout Card */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm space-y-4">
+        {/* Right Column: Checkout & Payment & Summary (Col 5) */}
+        <div className="lg:col-span-5 xl:col-span-5 space-y-3">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-sm space-y-3">
             {/* Payment Method Selector (كاش أو تحويل أو دفع بالبطاقة) */}
             <div>
-              <label className="text-xs text-slate-400 font-bold block mb-2">
-                نوع وطريقة الدفع (مطلوب):
+              <label className="text-xs text-slate-400 font-bold block mb-1.5">
+                طريقة الدفع (مطلوب):
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('CASH')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-black border transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-black border transition-all cursor-pointer ${
                     paymentMethod === 'CASH'
                       ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                       : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                   }`}
                 >
-                  <DollarSign className="w-4 h-4 text-emerald-400" />
-                  <span>كاش (نقدي)</span>
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>كاش</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('TRANSFER')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-black border transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-black border transition-all cursor-pointer ${
                     paymentMethod === 'TRANSFER'
                       ? 'bg-blue-500/20 border-blue-500 text-blue-300'
                       : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                   }`}
                 >
-                  <Building2 className="w-4 h-4 text-blue-400" />
-                  <span>تحويل بنكي</span>
+                  <Building2 className="w-3.5 h-3.5 text-blue-400" />
+                  <span>تحويل</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('CARD')}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-black border transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-black border transition-all cursor-pointer ${
                     paymentMethod === 'CARD'
                       ? 'bg-teal-500/20 border-teal-500 text-teal-300'
                       : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                   }`}
                 >
-                  <CreditCard className="w-4 h-4 text-teal-400" />
-                  <span>دفع بالبطاقة / شبكة</span>
+                  <CreditCard className="w-3.5 h-3.5 text-teal-400" />
+                  <span>شبكة / بطاقة</span>
                 </button>
               </div>
             </div>
 
             {/* Customer / Supplier Information */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800">
-              <div>
-                <label className="text-[11px] text-slate-400 font-bold block mb-1">
-                  اسم {operationType.includes('SALE') ? 'العميل / المشتري' : 'المورد'}:
-                  {isCreditOperation && <span className="text-amber-400 mr-1">* (مطلوب للآجل)</span>}
-                </label>
-                <div className="relative">
-                  <User className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder={operationType.includes('SALE') ? 'مثال: عميل نقدي أو اسم العميل' : 'اسم المورد أو الشركة'}
-                    value={partyName}
-                    onChange={(e) => setPartyName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pr-9 pl-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                  />
+            {isCreditOperation ? (
+              /* Always visible and prominent when Credit operation */
+              <div className="bg-amber-950/20 border border-amber-800/40 rounded-xl p-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5" />
+                    <span>بيانات العميل للحساب الآجل (مطلوب):</span>
+                  </span>
+                  <span className="text-[10px] text-amber-400 font-mono">* إلزامي لتوثيق الدين</span>
                 </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] text-slate-400 font-bold block mb-1">
-                  رقم الهاتف (اختياري):
-                </label>
-                <div className="relative">
-                  <Phone className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="05XXXXXXXX"
-                    value={partyPhone}
-                    onChange={(e) => setPartyPhone(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg pr-9 pl-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 dir-ltr text-right"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Credit details if Credit Sale or Order Credit */}
-            {isCreditOperation && (
-              <div className="bg-amber-950/20 border border-amber-800/40 rounded-lg p-3 space-y-2">
-                <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                  <span>تفاصيل الحساب الآجل والدين:</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[11px] text-slate-400 font-semibold block mb-1">
-                      المبلغ المدفوع الآن نقد/تحويل:
+                    <label className="text-[10px] text-slate-400 font-bold block mb-1">اسم العميل:</label>
+                    <input
+                      type="text"
+                      placeholder="اسم العميل كاملاً..."
+                      value={partyName}
+                      onChange={(e) => setPartyName(e.target.value)}
+                      className="w-full bg-slate-950 border border-amber-700/60 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                      {language === 'ar' ? 'رقم الهاتف:' : 'Phone Number:'}
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="05XXXXXXXX"
+                      value={partyPhone}
+                      onChange={(e) => setPartyPhone(e.target.value)}
+                      className={`w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500 ${isRTL ? 'text-right' : 'text-left'} font-mono`}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-semibold block mb-1">
+                      {language === 'ar' ? 'المبلغ المدفوع مقدماً:' : 'Advance Paid:'}
                     </label>
                     <input
                       type="number"
                       placeholder="0.00"
                       value={paidAmountInput}
                       onChange={(e) => setPaidAmountInput(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs font-mono font-bold text-emerald-400"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-emerald-400"
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-slate-400 font-semibold block mb-1">
-                      المتبقي كدين آجل في الحساب:
+                    <label className="text-[10px] text-slate-400 font-semibold block mb-1">
+                      {language === 'ar' ? 'المتبقي كدين آجل:' : 'Remaining Debt:'}
                     </label>
-                    <div className="bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs font-mono font-bold text-amber-400">
+                    <div className="bg-slate-950 border border-amber-800/60 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-amber-400">
                       {remainingDebt.toFixed(2)} {settings.currency}
                     </div>
                   </div>
                 </div>
+              </div>
+            ) : (
+              /* Compact / Collapsible for Cash / Card sale */
+              <div className="border-t border-slate-800/80 pt-2">
+                {!showCustomerInputs && !partyName && !partyPhone ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomerInputs(true)}
+                    className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer transition-colors py-1"
+                  >
+                    <User className="w-3.5 h-3.5 text-slate-500" />
+                    <span>{language === 'ar' ? '+ إضافة بيانات العميل على الفاتورة (اختياري)' : '+ Add Customer Details (Optional)'}</span>
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400 font-bold flex items-center gap-1">
+                        <User className="w-3 h-3 text-slate-400" />
+                        <span>{language === 'ar' ? 'بيانات العميل (اختياري):' : 'Customer Info (Optional):'}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCustomerInputs(false);
+                          setPartyName('');
+                          setPartyPhone('');
+                        }}
+                        className="text-[10px] text-slate-500 hover:text-slate-400 cursor-pointer"
+                      >
+                        {language === 'ar' ? 'إخفاء' : 'Hide'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder={language === 'ar' ? 'اسم العميل (اختياري)...' : 'Customer Name...'}
+                        value={partyName}
+                        onChange={(e) => setPartyPhone ? setPartyName(e.target.value) : undefined}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                      />
+                      <input
+                        type="tel"
+                        placeholder={language === 'ar' ? 'رقم الهاتف (اختياري)...' : 'Phone Number...'}
+                        value={partyPhone}
+                        onChange={(e) => setPartyPhone(e.target.value)}
+                        className={`w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 ${isRTL ? 'text-right' : 'text-left'} font-mono`}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1337,10 +1397,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </div>
           </div>
         </div>
-
-        {/* Right Column: Transactions History Log (Col 5) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm space-y-3">
+      </div>
+      ) : (
+        /* Tab 2: Transactions History Log (Full Width) */
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-emerald-400" />
@@ -1428,7 +1489,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                           بواسطة: {tx.cashierName} • {getPaymentNameInArabic(tx.paymentMethod)}
                         </div>
                       </div>
-                      <div className="text-left font-mono">
+                      <div className={`${isRTL ? 'text-left' : 'text-right'} font-mono`}>
                         <div className="font-black text-emerald-400 text-sm">
                           {tx.totalAmount.toFixed(2)} {settings.currency}
                         </div>
@@ -1476,7 +1537,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Confirmation Modal for Safe Transaction Deletion */}
       {txToDelete && (

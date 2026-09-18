@@ -22,6 +22,8 @@ import {
   ArrowDownLeft,
   Activity,
   Crown,
+  Store,
+  MapPin,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useSubscription, FREE_ITEM_LIMIT } from '../context/SubscriptionContext';
@@ -211,6 +213,41 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Store & Village Identity Banner */}
+      <div className="bg-slate-900/95 border border-purple-500/30 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 flex-wrap shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center justify-center shrink-0">
+            <Store className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-black text-sm text-white">{settings.storeName || 'المتجر'}</span>
+              {settings.address && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-[11px] font-bold text-emerald-300">
+                  <MapPin className="w-3 h-3 text-emerald-400" />
+                  <span>القرية: {settings.address}</span>
+                </span>
+              )}
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                حساب التاجر المحمي لإضافة الأصناف 🔐
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              يمكنك هنا إضافة وتعديل أصناف المتجر، تحديد الأسعار والباركود وتتبع حركات البضاعة
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onOpenAddItem}
+          className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-purple-600/20 cursor-pointer active:scale-95 transition-all"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>إضافة صنف جديد</span>
+        </button>
+      </div>
+
       {/* View Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="flex items-center gap-3">
@@ -311,7 +348,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
           </div>
           <div>
             <div className="text-lg sm:text-2xl font-black text-white font-mono tracking-tight">
-              {salesSummary.totalSalesRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+              {(salesSummary?.totalSalesRevenue ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
               <span className="text-xs font-sans text-emerald-400 font-bold">{settings.currency}</span>
             </div>
             <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
@@ -330,11 +367,11 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
           </div>
           <div>
             <div className="text-lg sm:text-2xl font-black text-teal-300 font-mono tracking-tight">
-              +{salesSummary.realizedProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+              +{(salesSummary?.realizedProfit ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
               <span className="text-xs font-sans text-teal-400 font-bold">{settings.currency}</span>
             </div>
             <div className="text-[11px] text-slate-400 mt-1">
-              {t.stockMargin}: <strong className="text-teal-300 font-mono">+{expectedProfit.toLocaleString('en-US', { minimumFractionDigits: 0 })}</strong> ({profitMarginPercent}%)
+              {t.stockMargin}: <strong className="text-teal-300 font-mono">+{(expectedProfit ?? 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}</strong> ({profitMarginPercent}%)
             </div>
           </div>
         </div>
@@ -349,7 +386,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
           </div>
           <div>
             <div className="text-lg sm:text-2xl font-black text-cyan-300 font-mono tracking-tight">
-              {inventoryStats.totalCostValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+              {(inventoryStats?.totalCostValue ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
               <span className="text-xs font-sans text-cyan-400 font-bold">{settings.currency}</span>
             </div>
             <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">

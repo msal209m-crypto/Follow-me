@@ -154,6 +154,9 @@ interface AppContextType {
     cardBalance: number;
     totalCreditSalesDue: number;
     totalSupplierDebtsDue: number;
+    totalSales: number;
+    totalPurchases: number;
+    netProfit: number;
   };
 
   // Cloud Backups & Instant Disaster Recovery
@@ -1950,6 +1953,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let cashBalance = 0;
     let bankTransferBalance = 0;
     let cardBalance = 0;
+    let totalSales = 0;
+    let totalPurchases = 0;
+    let netProfit = 0;
 
     transactions.forEach((tx) => {
       const isIncome = tx.type === 'SALE' || tx.type === 'CREDIT_SALE';
@@ -1961,10 +1967,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const amountToTrack = tx.paidAmount !== undefined ? tx.paidAmount : tx.totalAmount;
 
       if (isIncome) {
+        totalSales += (tx.totalAmount || 0);
+        if (tx.items && tx.items.length > 0) {
+          let txProfit = 0;
+          tx.items.forEach((it) => {
+            const sale = (it.unitPrice || 0) * (it.quantity || 1);
+            const cost = (it.costPrice || 0) * (it.quantity || 1);
+            txProfit += sale - cost;
+          });
+          if (tx.discount) txProfit -= tx.discount;
+          netProfit += txProfit;
+        }
         if (tx.paymentMethod === 'CASH') cashBalance += amountToTrack;
         if (tx.paymentMethod === 'TRANSFER') bankTransferBalance += amountToTrack;
         if (tx.paymentMethod === 'CARD') cardBalance += amountToTrack;
       } else if (isExpense) {
+        totalPurchases += (tx.totalAmount || 0);
         if (tx.paymentMethod === 'CASH') cashBalance -= amountToTrack;
         if (tx.paymentMethod === 'TRANSFER') bankTransferBalance -= amountToTrack;
         if (tx.paymentMethod === 'CARD') cardBalance -= amountToTrack;
@@ -2009,6 +2027,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cardBalance: Number(cardBalance.toFixed(2)),
       totalCreditSalesDue: Number(totalCreditSalesDue.toFixed(2)),
       totalSupplierDebtsDue: Number(totalSupplierDebtsDue.toFixed(2)),
+      totalSales: Number(totalSales.toFixed(2)),
+      totalPurchases: Number(totalPurchases.toFixed(2)),
+      netProfit: Number(netProfit.toFixed(2)),
     };
   }, [transactions, debts]);
 

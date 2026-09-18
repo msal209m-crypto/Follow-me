@@ -14,12 +14,12 @@ export const DirectLoginBanner: React.FC<{ onOpenAuthModal: () => void }> = ({ o
         dir={isRTL ? 'rtl' : 'ltr'}
         className="no-print mb-4 sm:mb-6 p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-slate-900 to-teal-950/80 border-2 border-emerald-500/60 shadow-lg shadow-emerald-950/40 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-300"
       >
-        <div className="flex items-center gap-3 text-center sm:text-right min-w-0">
+        <div className={`flex items-center gap-3 text-center ${isRTL ? 'sm:text-right' : 'sm:text-left'} min-w-0`}>
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0 shadow-inner">
             <LogIn className="w-5 h-5 text-emerald-400 animate-pulse" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center justify-center sm:justify-start gap-2">
+            <div className={`flex items-center justify-center ${isRTL ? 'sm:justify-start' : 'sm:justify-start'} gap-2`}>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30">
                 {language === 'ar' ? 'وضع غير مسجل (ضيف)' : 'Guest Mode (Unregistered)'}
               </span>

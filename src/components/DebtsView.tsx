@@ -34,6 +34,8 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ onPrintDebtReceipt }) => {
     deleteDebtRecord,
     settings,
     showNotification,
+    isRTL,
+    language,
   } = useApp();
 
   const [filterType, setFilterType] = useState<'ALL' | 'CUSTOMER' | 'PERSONAL_LOAN' | 'SUPPLIER'>('ALL');
@@ -264,7 +266,7 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ onPrintDebtReceipt }) => {
             <UserCheck className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-2xl font-black text-emerald-400 font-mono">
-            {totalOutstandingCustomerDebt.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+            {(totalOutstandingCustomerDebt ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
             <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
           </div>
           <div className="text-xs text-slate-400 mt-1">
@@ -279,7 +281,7 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ onPrintDebtReceipt }) => {
             <HandCoins className="w-4 h-4 text-amber-400" />
           </div>
           <div className="text-2xl font-black text-amber-400 font-mono">
-            {totalOutstandingPersonalLoans.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+            {(totalOutstandingPersonalLoans ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
             <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
           </div>
           <div className="text-xs text-slate-400 mt-1">
@@ -294,7 +296,7 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ onPrintDebtReceipt }) => {
             <Building2 className="w-4 h-4 text-rose-400" />
           </div>
           <div className="text-2xl font-black text-rose-400 font-mono">
-            {totalOutstandingSupplierDebt.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+            {(totalOutstandingSupplierDebt ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
             <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
           </div>
           <div className="text-xs text-slate-400 mt-1">
@@ -685,7 +687,7 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ onPrintDebtReceipt }) => {
                 </button>
 
                 <div className="text-[11px] text-slate-500">
-                  آخر نشاط: {new Date(selectedDebt.lastTransactionDate).toLocaleDateString('ar-SA')}
+                  آخر نشاط: {selectedDebt.lastTransactionDate ? new Date(selectedDebt.lastTransactionDate).toLocaleDateString('ar-SA') : '—'}
                 </div>
               </div>
             </div>
@@ -889,15 +891,17 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ onPrintDebtReceipt }) => {
               </div>
 
               <div>
-                <label className="text-slate-300 font-bold block mb-1">رقم الجوال:</label>
+                <label className="text-slate-300 font-bold block mb-1">
+                  {language === 'ar' ? 'رقم الجوال:' : 'Phone Number:'}
+                </label>
                 <div className="relative">
-                  <Phone className="w-4 h-4 text-slate-500 absolute right-3 top-2.5" />
+                  <Phone className={`w-4 h-4 text-slate-500 absolute ${isRTL ? 'right-3' : 'left-3'} top-2.5`} />
                   <input
-                    type="text"
+                    type="tel"
                     placeholder="05XXXXXXXX"
                     value={loanPhone}
                     onChange={(e) => setLoanPhone(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg pr-9 pl-3 py-2 text-white focus:outline-none dir-ltr text-right"
+                    className={`w-full bg-slate-950 border border-slate-700 rounded-lg ${isRTL ? 'pr-9 pl-3 text-right' : 'pl-9 pr-3 text-left'} py-2 text-white focus:outline-none font-mono`}
                   />
                 </div>
               </div>
@@ -1143,13 +1147,15 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ onPrintDebtReceipt }) => {
               </div>
 
               <div>
-                <label className="text-slate-300 font-bold block mb-1">رقم الجوال:</label>
+                <label className="text-slate-300 font-bold block mb-1">
+                  {language === 'ar' ? 'رقم الجوال:' : 'Phone Number:'}
+                </label>
                 <input
-                  type="text"
+                  type="tel"
                   placeholder="05XXXXXXXX"
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none dir-ltr text-right"
+                  className={`w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none ${isRTL ? 'text-right' : 'text-left'} font-mono`}
                 />
               </div>
 

@@ -13,9 +13,15 @@ import {
   KeyRound,
   LogIn,
   Eye,
-  EyeOff
+  EyeOff,
+  Truck,
+  Building2,
+  Code2,
+  Sliders,
+  Crown
 } from 'lucide-react';
 import { StoreSettings } from '../types';
+import { verifyDeveloperPin } from '../services/platformSettingsService';
 
 interface PortalLandingScreenProps {
   settings: StoreSettings;
@@ -24,6 +30,8 @@ interface PortalLandingScreenProps {
   isAuthenticated: boolean;
   onEnterStore: () => void;
   onEnterMerchant: () => void;
+  onEnterDriver?: () => void;
+  onEnterAdmin?: () => void;
   onOpenAuthModal: () => void;
 }
 
@@ -34,12 +42,20 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   isAuthenticated,
   onEnterStore,
   onEnterMerchant,
+  onEnterDriver,
+  onEnterAdmin,
   onOpenAuthModal,
 }) => {
   const [showPinModal, setShowPinModal] = useState(false);
   const [enteredPin, setEnteredPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Developer / Owner PIN modal state
+  const [showAdminPinModal, setShowAdminPinModal] = useState(false);
+  const [adminPinInput, setAdminPinInput] = useState('');
+  const [adminPinError, setAdminPinError] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   // Retrieve or initialize merchant PIN
   const getStoredPin = () => {
@@ -71,6 +87,16 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
       onEnterMerchant();
     } else {
       setPinError('رمز الدخول غير صحيح، حاول مجدداً أو سجل دخولك بحسابك');
+    }
+  };
+
+  const handleVerifyAdminPin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (verifyDeveloperPin(adminPinInput)) {
+      setShowAdminPinModal(false);
+      onEnterAdmin?.();
+    } else {
+      setAdminPinError('رمز مطور ومالك المنصة غير صحيح (الرمز الافتراضي: admin أو 1234)');
     }
   };
 
@@ -220,7 +246,133 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Secondary Specialized Roles: Driver and Platform Super Admin */}
+        <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-3xl">
+          {onEnterDriver && (
+            <button
+              type="button"
+              onClick={onEnterDriver}
+              className="p-3.5 bg-slate-900/80 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 rounded-2xl flex items-center justify-between text-right transition-all cursor-pointer group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Truck className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-xs text-white group-hover:text-amber-300 transition-colors">
+                    بوابة المناديب والتوصيل
+                  </div>
+                  <div className="text-[11px] text-slate-400">استلام طلبات الأهالي والتوصيل السريع</div>
+                </div>
+              </div>
+              <div className="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center group-hover:text-white transition-colors">
+                {isRTL ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
+              </div>
+            </button>
+          )}
+
+          {onEnterAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setAdminPinInput('');
+                setAdminPinError('');
+                setShowAdminPinModal(true);
+              }}
+              className="p-3.5 bg-gradient-to-r from-purple-950/40 via-slate-900 to-slate-900/90 hover:from-purple-950/70 hover:to-slate-850 border border-purple-900/50 hover:border-purple-500/60 rounded-2xl flex items-center justify-between text-right transition-all cursor-pointer group shadow-lg shadow-purple-950/30"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-inner">
+                  <Code2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-bold text-xs text-white group-hover:text-purple-300 transition-colors">
+                      حساب مطور ومالك المنصة
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      إدارة شاملة
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    الباركود • الاشتراكات والتراخيص • الإعلانات • إعدادات التطبيق واللغة
+                  </div>
+                </div>
+              </div>
+              <div className="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center group-hover:text-white transition-colors">
+                {isRTL ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
+              </div>
+            </button>
+          )}
+        </div>
       </main>
+
+      {/* Developer / Owner PIN Verification Modal */}
+      {showAdminPinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div
+            className="bg-slate-900 border border-purple-500/30 rounded-3xl w-full max-w-sm p-6 shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                <Code2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-white">دخول مطور ومالك المنصة</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                التحكم بالباركود، الاشتراكات، الإعلانات، إعدادات التطبيق واللغة (الرمز الافتراضي: admin)
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyAdminPin} className="space-y-4">
+              <div className="relative">
+                <input
+                  type={showAdminPassword ? 'text' : 'password'}
+                  value={adminPinInput}
+                  onChange={(e) => {
+                    setAdminPinInput(e.target.value);
+                    setAdminPinError('');
+                  }}
+                  placeholder="أدخل رمز المطور (admin)..."
+                  autoFocus
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-center text-lg tracking-wider text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPassword(!showAdminPassword)}
+                  className="absolute top-1/2 -translate-y-1/2 left-3 text-slate-500 hover:text-slate-300"
+                >
+                  {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {adminPinError && (
+                <div className="flex items-center gap-1.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{adminPinError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-950/60 transition-colors cursor-pointer"
+                >
+                  فتح لوحة المطور والمالك
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPinModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Merchant PIN Verification Modal */}
       {showPinModal && (

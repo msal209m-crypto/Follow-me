@@ -515,12 +515,12 @@ export const DailyReportsView: React.FC = () => {
               <TrendingUp className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">
-              {reportSummary.totalSalesRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+              {(reportSummary?.totalSalesRevenue ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
               <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
             </div>
             <div className="text-xs text-slate-400 mt-1">
               {language === 'ar' ? 'إجمالي القطع المباعة:' : 'Items Sold:'}{' '}
-              <span className="font-bold text-slate-200">{reportSummary.totalItemsSold}</span>
+              <span className="font-bold text-slate-200">{reportSummary?.totalItemsSold ?? 0}</span>
             </div>
           </div>
 
@@ -531,7 +531,7 @@ export const DailyReportsView: React.FC = () => {
               <DollarSign className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">
-              {reportSummary.totalCashSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+              {(reportSummary?.totalCashSales ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
               <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
             </div>
             <div className="text-xs text-slate-400 mt-1">
@@ -546,7 +546,7 @@ export const DailyReportsView: React.FC = () => {
               <Building2 className="w-4 h-4 text-blue-400" />
             </div>
             <div className="text-xl sm:text-2xl font-black text-blue-400 font-mono">
-              {reportSummary.totalTransferSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+              {(reportSummary?.totalTransferSales ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
               <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
             </div>
             <div className="text-xs text-slate-400 mt-1">
@@ -561,17 +561,17 @@ export const DailyReportsView: React.FC = () => {
               <CreditCard className="w-4 h-4 text-teal-400" />
             </div>
             <div className="text-xl sm:text-2xl font-black text-teal-400 font-mono">
-              {(reportSummary.totalCardSales + reportSummary.totalCreditSales).toLocaleString('en-US', {
+              {((reportSummary?.totalCardSales ?? 0) + (reportSummary?.totalCreditSales ?? 0)).toLocaleString('en-US', {
                 minimumFractionDigits: 2,
               })}{' '}
               <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
             </div>
             <div className="text-[11px] text-slate-400 mt-1 flex justify-between font-mono">
               <span>
-                {language === 'ar' ? 'شبكة:' : 'Card:'} {reportSummary.totalCardSales.toFixed(2)}
+                {language === 'ar' ? 'شبكة:' : 'Card:'} {(reportSummary?.totalCardSales ?? 0).toFixed(2)}
               </span>
               <span>
-                {language === 'ar' ? 'آجل:' : 'Credit:'} {reportSummary.totalCreditSales.toFixed(2)}
+                {language === 'ar' ? 'آجل:' : 'Credit:'} {(reportSummary?.totalCreditSales ?? 0).toFixed(2)}
               </span>
             </div>
           </div>
@@ -598,7 +598,7 @@ export const DailyReportsView: React.FC = () => {
               {language === 'ar' ? 'صافي الربح التقديري:' : 'Estimated Net Profit:'}
             </span>
             <span className="text-xl font-black text-emerald-400">
-              +{reportSummary.netProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+              +{((reportSummary?.netProfit ?? 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
               <span className="text-xs text-slate-300 font-sans">{settings.currency}</span>
             </span>
           </div>

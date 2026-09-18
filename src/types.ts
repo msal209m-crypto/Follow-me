@@ -268,3 +268,77 @@ export interface ActivityLog {
   targetName?: string;
   diffs?: ActivityChangeDiff[];
 }
+
+export type PortalMode = 'landing' | 'store' | 'merchant' | 'driver' | 'admin';
+
+export type DeliveryOrderStatus =
+  | 'NEW'               // طلب جديد من العميل
+  | 'ACCEPTED'          // تم القبول من التاجر وبدء التجهيز
+  | 'READY_FOR_PICKUP'  // تم تجهيز الطلب - جاهز لاستلام السائق
+  | 'ON_THE_WAY'        // في الطريق إليك (مع السائق)
+  | 'OUT_FOR_DELIVERY'  // خرج للتوصيل (مع السائق)
+  | 'DELIVERED'         // تم تسليم الطلب بنجاح
+  | 'CANCELLED';        // تم الإلغاء
+
+export interface DeliveryOrderItem {
+  itemId?: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  unit?: string;
+  total: number;
+}
+
+export interface DeliveryOrder {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  storeName: string;
+  storePhone?: string;
+  storeAddress?: string;
+  items: DeliveryOrderItem[];
+  subtotal: number;
+  deliveryFee: number;
+  totalAmount: number;
+  paymentMethod: 'CASH_ON_DELIVERY' | 'TRANSFER' | 'CARD';
+  status: DeliveryOrderStatus;
+  notes?: string;
+  driverId?: string;
+  driverName?: string;
+  driverPhone?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DriverProfile {
+  id: string;
+  name: string;
+  phone: string;
+  photo?: string;
+  vehicleType: 'BICYCLE' | 'MOTORCYCLE' | 'CAR';
+  vehiclePlate?: string;
+  zone?: string;
+  active?: boolean;
+  isOnline?: boolean;
+  rating?: number;
+  completedOrdersCount?: number;
+  totalDelivered?: number;
+  currentOrderId?: string;
+  registeredAt?: string;
+}
+
+export interface StoreDirectoryRecord {
+  id: string;
+  name: string;
+  ownerName: string;
+  phone: string;
+  cityOrVillage: string;
+  itemsCount: number;
+  isPro: boolean;
+  planName: string;
+  status: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
+  joinedAt: string;
+  merchantPin?: string;
+}

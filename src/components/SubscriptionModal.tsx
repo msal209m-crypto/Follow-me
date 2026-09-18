@@ -18,20 +18,13 @@ import {
   Cloud,
   Layers,
   FileSpreadsheet,
-  Lock,
-  ShieldAlert,
 } from 'lucide-react';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useApp } from '../context/AppContext';
 import { LICENSE_PLANS, LicensePlanCode } from '../utils/licenseEngine';
-import { createLicenseKey } from '../services/licenseKeyService';
 import { OWNER_CONTACT } from '../config/ownerContact';
 
-interface SubscriptionModalProps {
-  onOpenAdminPanel?: () => void;
-}
-
-export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onOpenAdminPanel }) => {
+export const SubscriptionModal: React.FC = () => {
   const {
     subscription,
     isPro,
@@ -39,12 +32,11 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onOpenAdmi
     setShowSubscriptionModal,
     activateLicenseKey,
     activateOnlinePayment,
-    generateAdminKey,
   } = useSubscription();
 
   const { isRTL, language, settings, items } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'PLANS' | 'OFFLINE_KEY' | 'ONLINE_PAY' | 'ADMIN_GEN'>('PLANS');
+  const [activeTab, setActiveTab] = useState<'PLANS' | 'OFFLINE_KEY' | 'ONLINE_PAY'>('PLANS');
   const [selectedPlanCode, setSelectedPlanCode] = useState<LicensePlanCode>('1Y');
   
   // Offline Key State
@@ -60,12 +52,6 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onOpenAdmi
   const [cardCvv, setCardCvv] = useState('');
   const [isPaying, setIsPaying] = useState(false);
   const [paySuccess, setPaySuccess] = useState('');
-
-  // Admin Generator State
-  const [adminPin, setAdminPin] = useState('');
-  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
-  const [generatedKey, setGeneratedKey] = useState('');
-  const [copiedKey, setCopiedKey] = useState(false);
 
   if (!showSubscriptionModal) return null;
 
@@ -108,30 +94,6 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onOpenAdmi
         setPaySuccess(res.message);
       }
     }, 1200);
-  };
-
-  const handleAdminUnlock = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (adminPin === '1234' || adminPin === 'admin' || adminPin === '2026') {
-      setIsAdminUnlocked(true);
-      const initialKey = generateAdminKey(selectedPlanCode);
-      setGeneratedKey(initialKey);
-    } else {
-      alert(language === 'ar' ? 'رمز مرور المدير غير صحيح' : 'Invalid Admin PIN');
-    }
-  };
-
-  const handleGenerateAdminKey = (plan: LicensePlanCode) => {
-    setSelectedPlanCode(plan);
-    const key = generateAdminKey(plan);
-    setGeneratedKey(key);
-    setCopiedKey(false);
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2500);
   };
 
   const openWhatsAppContact = (customPlanCode?: LicensePlanCode) => {
@@ -236,19 +198,6 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onOpenAdmi
           >
             <CreditCard className="w-3.5 h-3.5" />
             <span>{language === 'ar' ? '💳 دفع إلكتروني مباشر' : 'Online Payment'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('ADMIN_GEN')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-t-xl transition-all whitespace-nowrap cursor-pointer ${
-              activeTab === 'ADMIN_GEN'
-                ? 'bg-slate-900 text-amber-400 border-t-2 border-x border-amber-500/60 border-b-transparent shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span>{language === 'ar' ? '⚙️ توليد الأكواد (للمدير)' : 'Admin Generator'}</span>
           </button>
         </div>
 
@@ -633,117 +582,6 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ onOpenAdmi
                     </button>
                   </div>
                 </form>
-              )}
-            </div>
-          )}
-
-          {/* TAB 4: ADMIN KEY GENERATOR (FOR OWNER/DISTRIBUTORS) */}
-          {activeTab === 'ADMIN_GEN' && (
-            <div className="space-y-4">
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs space-y-1">
-                <span className="font-bold text-amber-400 block">
-                  {language === 'ar' ? 'خاص بمدير النظام والموزعين المعتمدين:' : 'Admin & Distributor License Tool:'}
-                </span>
-                <p className="text-slate-400 text-[11px]">
-                  {language === 'ar'
-                    ? 'هذا القسم مخصص لك كمالك للنظام لتوليد أكواد تفعيل مشفرة حقيقية وبيعها للعملاء نقداً في المناطق النائية.'
-                    : 'Generate cryptographic offline keys to sell to cash clients in remote areas.'}
-                </p>
-              </div>
-
-              {!isAdminUnlocked ? (
-                <form onSubmit={handleAdminUnlock} className="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-3">
-                  <div className="text-xs font-bold text-slate-300">
-                    {language === 'ar' ? 'أدخل رمز مرور إدارة التراخيص:' : 'Enter Admin PIN:'}
-                  </div>
-                  <input
-                    type="password"
-                    value={adminPin}
-                    onChange={(e) => setAdminPin(e.target.value)}
-                    placeholder="الرمز الافتراضي: 1234 أو 2026"
-                    className="w-full font-mono text-center py-2.5 px-3 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-amber-400"
-                  />
-                  <button
-                    type="submit"
-                    className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl cursor-pointer"
-                  >
-                    {language === 'ar' ? 'فتح لوحة توليد الأكواد' : 'Unlock Generator'}
-                  </button>
-                </form>
-              ) : (
-                <div className="space-y-3 p-3.5 bg-slate-950 border border-amber-500/40 rounded-2xl">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-200">
-                      {language === 'ar' ? 'اختر مدة الترخيص المطلوب توليده:' : 'Select Plan Duration:'}
-                    </span>
-                    <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950 px-2 py-0.5 rounded">
-                      {language === 'ar' ? 'لوحة المالك مفعلة' : 'Admin Active'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(['1M', '3M', '6M', '1Y', 'LIFE'] as LicensePlanCode[]).map((plan) => (
-                      <button
-                        key={plan}
-                        type="button"
-                        onClick={() => handleGenerateAdminKey(plan)}
-                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all ${
-                          selectedPlanCode === plan
-                            ? 'bg-amber-500 text-slate-950 border-amber-400'
-                            : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
-                        }`}
-                      >
-                        {plan === 'LIFE' ? 'مدى الحياة' : plan}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Generated Key Display */}
-                  <div className="mt-3 p-3 bg-slate-900 border border-slate-700 rounded-xl space-y-2">
-                    <span className="text-[10px] text-slate-400 block">{language === 'ar' ? 'كود التفعيل المشفر المولد:' : 'Generated Offline Key:'}</span>
-                    <div className="font-mono text-center text-sm font-black text-amber-300 bg-slate-950 py-2 px-3 rounded-lg border border-slate-800 select-all break-all">
-                      {generatedKey}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(generatedKey)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-all cursor-pointer active:scale-95"
-                      >
-                        {copiedKey ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedKey ? (language === 'ar' ? 'تم نسخ الكود!' : 'Copied!') : (language === 'ar' ? 'نسخ كود التفعيل' : 'Copy Key')}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const msg = encodeURIComponent(`كود تفعيل باقة التاجر المحترف (FlowApp Pro):\n${generatedKey}\nصالح للاستخدام الفوري بدون إنترنت.`);
-                          window.open(`https://wa.me/?text=${msg}`, '_blank');
-                        }}
-                        className="p-2 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 rounded-lg border border-emerald-500/40"
-                        title={language === 'ar' ? 'إرسال عبر الواتساب' : 'Send via WhatsApp'}
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Open Full Database Admin Panel Button */}
-                    {onOpenAdminPanel && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowSubscriptionModal(false);
-                          onOpenAdminPanel();
-                        }}
-                        className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 px-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-                      >
-                        <ShieldAlert className="w-4 h-4 text-amber-400" />
-                        <span>{language === 'ar' ? 'فتح لوحة المشرف الشاملة (قاعدة البيانات والسجلات) ↗' : 'Open Full Admin License Panel ↗'}</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
               )}
             </div>
           )}
