@@ -22,6 +22,9 @@ import { QuickItemModal } from './components/QuickItemModal';
 import { SettingsModal } from './components/SettingsModal';
 import { OrderGoodsModal } from './components/OrderGoodsModal';
 import { AuthModal } from './components/AuthModal';
+import { RBACAuthModal } from './components/RBACAuthModal';
+import { SessionInactivityGuard } from './components/SessionInactivityGuard';
+import { clearAllSystemSessions } from './services/rbacAuthService';
 import { ShareModal } from './components/ShareModal';
 import { ToastNotification } from './components/ToastNotification';
 import { VillageStoreView } from './components/VillageStoreView';
@@ -547,6 +550,41 @@ const PortalRouter: React.FC = () => {
   });
 
   const [showGlobalAuthModal, setShowGlobalAuthModal] = useState(false);
+  const [showRBACAuthModal, setShowRBACAuthModal] = useState(false);
+  const [rbacInitialRole, setRbacInitialRole] = useState<'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER'>('MERCHANT');
+
+  const handleOpenRBACAuth = (role?: 'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER') => {
+    if (role) {
+      setRbacInitialRole(role);
+    }
+    setShowRBACAuthModal(true);
+  };
+
+  // Dedicated close handler for AuthModal / RBACAuthModal:
+  // When closing via (X), it immediately closes the modal and seamlessly transitions to
+  // the core application interface (Village Store & Customers), ensuring it will not reappear
+  // unless explicitly requested via the dedicated page icon.
+  const handleCloseAuthAndGoToStore = () => {
+    setShowGlobalAuthModal(false);
+    setShowRBACAuthModal(false);
+    handleSwitchToStore();
+  };
+
+  const handleRoleAuthSuccess = (role: 'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER', user: any) => {
+    setShowRBACAuthModal(false);
+    if (role === 'DEVELOPER') {
+      handleSwitchToAdmin();
+    } else if (role === 'MERCHANT') {
+      handleSwitchToMerchant({
+        name: user.storeName || settings.storeName,
+        village: user.village || settings.address,
+      });
+    } else if (role === 'DRIVER') {
+      handleSwitchToDriver();
+    } else if (role === 'CUSTOMER') {
+      handleSwitchToStore();
+    }
+  };
 
   const handleSwitchToStore = () => {
     setPortalMode('store');
@@ -623,6 +661,11 @@ const PortalRouter: React.FC = () => {
     };
     window.addEventListener('store:return-to-main', onCustomReturnEvent);
 
+    const onGlobalLogout = () => {
+      handleSwitchToLanding();
+    };
+    window.addEventListener('flowapp:global-logout', onGlobalLogout);
+
     const onPopState = () => {
       try {
         const search = window.location.search;
@@ -665,6 +708,7 @@ const PortalRouter: React.FC = () => {
 
     return () => {
       window.removeEventListener('store:return-to-main', onCustomReturnEvent);
+      window.removeEventListener('flowapp:global-logout', onGlobalLogout);
       window.removeEventListener('popstate', onPopState);
       if (observer) observer.disconnect();
     };
@@ -682,15 +726,29 @@ const PortalRouter: React.FC = () => {
           onEnterMerchant={handleSwitchToMerchant}
           onEnterDriver={handleSwitchToDriver}
           onEnterAdmin={handleSwitchToAdmin}
-          onOpenAuthModal={() => setShowGlobalAuthModal(true)}
+          onOpenAuthModal={(role) => handleOpenRBACAuth(role)}
         />
         {/* Placeholder containers with id so document.getElementById queries never fail */}
         <div id="merchant-dashboard" style={{ display: 'none' }} className="hidden" />
         <div id="main-store-view" style={{ display: 'none' }} className="hidden" />
+
         {showGlobalAuthModal && (
           <AuthModal
             isOpen={showGlobalAuthModal}
-            onClose={() => setShowGlobalAuthModal(false)}
+            onClose={handleCloseAuthAndGoToStore}
+            onCloseToStore={handleCloseAuthAndGoToStore}
+          />
+        )}
+
+        {showRBACAuthModal && (
+          <RBACAuthModal
+            isOpen={showRBACAuthModal}
+            onClose={handleCloseAuthAndGoToStore}
+            onCloseToStore={handleCloseAuthAndGoToStore}
+            initialRole={rbacInitialRole}
+            onSuccess={handleRoleAuthSuccess}
+            onRoleLoginSuccess={handleRoleAuthSuccess}
+            isRTL={isRTL}
           />
         )}
       </>
@@ -699,29 +757,80 @@ const PortalRouter: React.FC = () => {
 
   if (portalMode === 'driver') {
     return (
-      <DriverPortalView
-        settings={settings}
-        isRTL={isRTL}
-        onReturnToStore={handleSwitchToStore}
-        onOpenLanding={handleSwitchToLanding}
-      />
+      <>
+        <SessionInactivityGuard
+          isActiveSession={true}
+          onAutoLogout={() => {
+            clearAllSystemSessions();
+            handleSwitchToLanding();
+          }}
+          isRTL={isRTL}
+        />
+        <DriverPortalView
+          settings={settings}
+          isRTL={isRTL}
+          onReturnToStore={handleSwitchToStore}
+          onOpenLanding={handleSwitchToLanding}
+        />
+        {showRBACAuthModal && (
+          <RBACAuthModal
+            isOpen={showRBACAuthModal}
+            onClose={handleCloseAuthAndGoToStore}
+            onCloseToStore={handleCloseAuthAndGoToStore}
+            initialRole={rbacInitialRole}
+            onSuccess={handleRoleAuthSuccess}
+            onRoleLoginSuccess={handleRoleAuthSuccess}
+            isRTL={isRTL}
+          />
+        )}
+      </>
     );
   }
 
   if (portalMode === 'admin') {
     return (
-      <PlatformAdminView
-        settings={settings}
-        isRTL={isRTL}
-        onReturnToStore={handleSwitchToStore}
-        onOpenMerchant={handleSwitchToMerchant}
-        onOpenLanding={handleSwitchToLanding}
-      />
+      <>
+        <SessionInactivityGuard
+          isActiveSession={true}
+          onAutoLogout={() => {
+            clearAllSystemSessions();
+            handleSwitchToLanding();
+          }}
+          isRTL={isRTL}
+        />
+        <PlatformAdminView
+          settings={settings}
+          isRTL={isRTL}
+          onReturnToStore={handleSwitchToStore}
+          onOpenMerchant={handleSwitchToMerchant}
+          onOpenLanding={handleSwitchToLanding}
+        />
+        {showRBACAuthModal && (
+          <RBACAuthModal
+            isOpen={showRBACAuthModal}
+            onClose={handleCloseAuthAndGoToStore}
+            onCloseToStore={handleCloseAuthAndGoToStore}
+            initialRole={rbacInitialRole}
+            onSuccess={handleRoleAuthSuccess}
+            onRoleLoginSuccess={handleRoleAuthSuccess}
+            isRTL={isRTL}
+          />
+        )}
+      </>
     );
   }
 
   return (
     <>
+      <SessionInactivityGuard
+        isActiveSession={portalMode === 'merchant'}
+        onAutoLogout={() => {
+          clearAllSystemSessions();
+          handleSwitchToLanding();
+        }}
+        isRTL={isRTL}
+      />
+
       <div
         id="merchant-dashboard"
         style={{ display: portalMode === 'merchant' ? 'block' : 'none' }}
@@ -744,13 +853,27 @@ const PortalRouter: React.FC = () => {
           isRTL={isRTL}
           onOpenMerchantPortal={handleSwitchToMerchant}
           onOpenLanding={handleSwitchToLanding}
+          onOpenAuthModal={(role) => handleOpenRBACAuth(role)}
         />
       </div>
 
       {showGlobalAuthModal && (
         <AuthModal
           isOpen={showGlobalAuthModal}
-          onClose={() => setShowGlobalAuthModal(false)}
+          onClose={handleCloseAuthAndGoToStore}
+          onCloseToStore={handleCloseAuthAndGoToStore}
+        />
+      )}
+
+      {showRBACAuthModal && (
+        <RBACAuthModal
+          isOpen={showRBACAuthModal}
+          onClose={handleCloseAuthAndGoToStore}
+          onCloseToStore={handleCloseAuthAndGoToStore}
+          initialRole={rbacInitialRole}
+          onSuccess={handleRoleAuthSuccess}
+          onRoleLoginSuccess={handleRoleAuthSuccess}
+          isRTL={isRTL}
         />
       )}
     </>

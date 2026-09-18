@@ -43,6 +43,7 @@ import { useSubscription } from '../context/SubscriptionContext';
 import { POPULAR_CURRENCIES, getDefaultRatesForBase } from '../data/currencies';
 import { ReorderAlertsDropdown } from './ReorderAlertsDropdown';
 import { Item } from '../types';
+import { clearAllSystemSessions } from '../services/rbacAuthService';
 import { OWNER_CONTACT } from '../config/ownerContact';
 import { getDismissedAlertIds } from '../utils/alertUtils';
 import { getDeliveryOrders } from '../services/deliveryService';
@@ -961,7 +962,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     type="button"
                     onClick={async () => {
                       setShowUserDropdown(false);
+                      clearAllSystemSessions();
                       await logout();
+                      if (onOpenLanding) onOpenLanding();
                     }}
                     className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-rose-300 hover:bg-rose-950/40 hover:text-rose-200 border border-transparent hover:border-rose-700/60 transition-colors cursor-pointer active:scale-98 mt-1"
                   >
@@ -972,6 +975,28 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               </div>
             )}
           </div>
+
+          {/* 6. Prominent & Immediate Fast Logout Button (زر تسجيل خروج فوري وبارز) */}
+          {currentUser && (
+            <button
+              type="button"
+              id="top-immediate-logout-btn"
+              onClick={async () => {
+                clearAllSystemSessions();
+                await logout();
+                if (onOpenLanding) {
+                  onOpenLanding();
+                } else if (onSwitchToStore) {
+                  onSwitchToStore();
+                }
+              }}
+              className="h-8 sm:h-9 px-2 sm:px-3 bg-rose-950/50 hover:bg-rose-900/60 border border-rose-600/50 hover:border-rose-500 text-rose-200 hover:text-white rounded-xl flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0 shadow-md active:scale-95 text-xs font-black"
+              title={language === 'ar' ? 'تسجيل الخروج الفوري وإنهاء الجلسة' : 'Immediate Logout'}
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">{language === 'ar' ? 'تسجيل خروج' : 'Logout'}</span>
+            </button>
+          )}
         </div>
     </div>
 

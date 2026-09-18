@@ -16,7 +16,8 @@ import {
   AlertCircle,
   Home,
   MessageSquare,
-  Navigation
+  Navigation,
+  LogOut,
 } from 'lucide-react';
 import { DeliveryOrder, DriverProfile, StoreSettings } from '../types';
 import {
@@ -27,6 +28,7 @@ import {
   clearDriverProfile,
   playNotificationChime
 } from '../services/deliveryService';
+import { clearAllSystemSessions } from '../services/rbacAuthService';
 
 interface DriverPortalViewProps {
   settings: StoreSettings;
@@ -115,9 +117,13 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
   };
 
   const handleLogout = () => {
-    if (window.confirm('هل تريد تسجيل الخروج من جلسة المندوب؟')) {
-      clearDriverProfile();
-      setProfile(null);
+    clearAllSystemSessions();
+    clearDriverProfile();
+    setProfile(null);
+    if (onOpenLanding) {
+      onOpenLanding();
+    } else if (onReturnToStore) {
+      onReturnToStore();
     }
   };
 
@@ -351,10 +357,11 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
             <button
               type="button"
               onClick={handleLogout}
-              className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer"
-              title="تسجيل الخروج"
+              className="px-3 py-2 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 text-rose-200 hover:text-white border border-rose-600/50 hover:border-rose-500 text-xs font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer active:scale-95"
+              title="تسجيل الخروج الفوري"
             >
-              <Power className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">تسجيل خروج</span>
             </button>
           </div>
         </div>

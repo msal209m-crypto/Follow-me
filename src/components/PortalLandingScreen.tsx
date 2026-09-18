@@ -32,7 +32,7 @@ interface PortalLandingScreenProps {
   onEnterMerchant: () => void;
   onEnterDriver?: () => void;
   onEnterAdmin?: () => void;
-  onOpenAuthModal: () => void;
+  onOpenAuthModal: (role?: 'MERCHANT' | 'DRIVER' | 'CUSTOMER' | 'DEVELOPER') => void;
 }
 
 export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
@@ -370,6 +370,20 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
                 </button>
               </div>
             </form>
+
+            <div className="mt-4 pt-3 border-t border-slate-800 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAdminPinModal(false);
+                  onOpenAuthModal('DEVELOPER');
+                }}
+                className="text-xs text-purple-400 hover:text-purple-300 font-bold flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
+              >
+                <Code2 className="w-3.5 h-3.5" />
+                <span>تسجيل دخول المطور (نظام الحماية المتقدم)</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -437,16 +451,17 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
               </div>
             </form>
 
-            <div className="mt-5 pt-4 border-t border-slate-800 text-center">
+            <div className="mt-5 pt-4 border-t border-slate-800 text-center space-y-2">
               <button
+                type="button"
                 onClick={() => {
                   setShowPinModal(false);
-                  onOpenAuthModal();
+                  onOpenAuthModal('MERCHANT');
                 }}
-                className="text-xs text-emerald-400 hover:text-emerald-300 font-medium flex items-center justify-center gap-1.5 mx-auto"
+                className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span>أو تسجيل الدخول بحساب البريد الإلكتروني السحابي</span>
+                <span>دخول التاجر عبر الاسم ورقم الهوية / الجوال (نظام الحماية)</span>
               </button>
             </div>
           </div>

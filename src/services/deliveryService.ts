@@ -4,95 +4,11 @@ const ORDERS_STORAGE_KEY = 'qaryati_delivery_orders';
 const DRIVER_PROFILE_KEY = 'qaryati_driver_profile';
 const STORES_DIRECTORY_KEY = 'qaryati_stores_directory';
 
-// Sample initial stores for Platform Admin
-const INITIAL_STORES: StoreDirectoryRecord[] = [
-  {
-    id: 'store-1',
-    name: 'تموينات الأمل المركزية',
-    ownerName: 'أبو أحمد السالمي',
-    phone: '0501234567',
-    cityOrVillage: 'قرية السعادة - الشارع العام',
-    itemsCount: 142,
-    isPro: true,
-    planName: 'باقة PRO السنوية',
-    status: 'ACTIVE',
-    joinedAt: '2025-01-10',
-  },
-  {
-    id: 'store-2',
-    name: 'ميني ماركت البركة',
-    ownerName: 'سعيد القحطاني',
-    phone: '0559876543',
-    cityOrVillage: 'الحي الشرقي - بجوار المسجد',
-    itemsCount: 88,
-    isPro: false,
-    planName: 'الباقة المجانية',
-    status: 'ACTIVE',
-    joinedAt: '2025-02-15',
-  },
-  {
-    id: 'store-3',
-    name: 'مخبز وحلويات الريف',
-    ownerName: 'محمد العمري',
-    phone: '0543322110',
-    cityOrVillage: 'ميدان القرية الشمالي',
-    itemsCount: 35,
-    isPro: true,
-    planName: 'باقة PRO 6 شهور',
-    status: 'ACTIVE',
-    joinedAt: '2025-03-01',
-  },
-];
+// Sample initial stores for Platform Admin (empty by default for clean start)
+const INITIAL_STORES: StoreDirectoryRecord[] = [];
 
-// Sample initial delivery orders to demo the workflow
-const INITIAL_ORDERS: DeliveryOrder[] = [
-  {
-    id: 'ord-101',
-    orderNumber: 'ORD-7821',
-    customerName: 'أم عبد الله السبيعي',
-    customerPhone: '0509988776',
-    customerAddress: 'حي النسيم - شارع النخيل - منزل 14',
-    storeName: 'متجر قريتي الرقمي',
-    storePhone: '0501234567',
-    storeAddress: 'شارع السوق القديم',
-    items: [
-      { name: 'حليب المراعي كامل الدسم 2 لتر', quantity: 2, unitPrice: 11, unit: 'حبة', total: 22 },
-      { name: 'خبز صامولي طازج كيس', quantity: 3, unitPrice: 1.5, unit: 'كيس', total: 4.5 },
-      { name: 'أرز الشعلان سيلا 5 كجم', quantity: 1, unitPrice: 42, unit: 'كيس', total: 42 },
-    ],
-    subtotal: 68.5,
-    deliveryFee: 10,
-    totalAmount: 78.5,
-    paymentMethod: 'CASH_ON_DELIVERY',
-    status: 'READY_FOR_PICKUP',
-    notes: 'الرجاء الاتصال قبل الوصول بدقائق',
-    createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-    updatedAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
-  },
-  {
-    id: 'ord-102',
-    orderNumber: 'ORD-7822',
-    customerName: 'أبو فهد الزهراني',
-    customerPhone: '0567744332',
-    customerAddress: 'قرية الروابي - بجوار المدرسة الابتدائية',
-    storeName: 'متجر قريتي الرقمي',
-    storePhone: '0501234567',
-    storeAddress: 'شارع السوق القديم',
-    items: [
-      { name: 'شاي الربيع فرط 400 جم', quantity: 1, unitPrice: 16.5, unit: 'حبة', total: 16.5 },
-      { name: 'سكر الأسرة ناعم 5 كجم', quantity: 1, unitPrice: 21, unit: 'كيس', total: 21 },
-      { name: 'زيت عافية ذرة 1.5 لتر', quantity: 2, unitPrice: 22, unit: 'حبة', total: 44 },
-    ],
-    subtotal: 81.5,
-    deliveryFee: 12,
-    totalAmount: 93.5,
-    paymentMethod: 'TRANSFER',
-    status: 'NEW',
-    notes: 'الدفع تم بالتحويل وسيتم إبراز الإشعار',
-    createdAt: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
-    updatedAt: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
-  },
-];
+// Sample initial delivery orders to demo the workflow (empty by default for clean start)
+const INITIAL_ORDERS: DeliveryOrder[] = [];
 
 export function getDeliveryOrders(): DeliveryOrder[] {
   try {

@@ -42,8 +42,10 @@ import {
   ExternalLink,
   Code2,
   Info,
-  PackagePlus
+  PackagePlus,
+  LogOut,
 } from 'lucide-react';
+import { clearAllSystemSessions } from '../services/rbacAuthService';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
 import { useApp } from '../context/AppContext';
@@ -400,6 +402,19 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
             >
               <Store className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">لوحة التاجر</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                clearAllSystemSessions();
+                onOpenLanding();
+              }}
+              className="px-3 py-1.5 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 text-rose-200 hover:text-white border border-rose-600/50 hover:border-rose-500 text-xs font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer active:scale-95"
+              title="تسجيل الخروج الفوري ومسح الجلسة"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">تسجيل خروج</span>
             </button>
 
             <button

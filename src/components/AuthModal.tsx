@@ -18,12 +18,27 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 
-export const AuthModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
+export interface AuthModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onCloseToStore?: () => void;
+}
+
+export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
+  onCloseToStore,
 }) => {
   const { signInWithEmail, signUpWithEmail, signInWithGoogle, sendPasswordReset } = useAuth();
   const { t, isRTL, language } = useApp();
+
+  const handleModalClose = () => {
+    if (typeof onCloseToStore === 'function') {
+      onCloseToStore();
+    } else {
+      onClose();
+    }
+  };
 
   const [mode, setMode] = useState<'LOGIN' | 'SIGNUP' | 'FORGOT_PASSWORD'>('LOGIN');
   const [email, setEmail] = useState('');
@@ -124,13 +139,17 @@ export const AuthModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
         dir={isRTL ? 'rtl' : 'ltr'}
         className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200 relative"
       >
-        {/* Close Modal Button */}
+        {/* Close Modal Button - Return directly to Main Store */}
         <button
           type="button"
-          onClick={onClose}
-          className={`absolute top-3 ${isRTL ? 'left-3' : 'right-3'} z-10 p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer border border-slate-700/50`}
-          title={language === 'ar' ? 'إغلاق' : 'Close'}
+          onClick={handleModalClose}
+          className={`absolute top-3 ${isRTL ? 'left-3' : 'right-3'} z-10 p-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer border border-slate-700/60 shadow-md group flex items-center gap-1.5`}
+          title={language === 'ar' ? 'إغلاق والانتقال إلى واجهة المتجر والعملاء' : 'Close and go to store'}
+          aria-label={language === 'ar' ? 'إغلاق والانتقال إلى واجهة المتجر' : 'Close and navigate to store'}
         >
+          <span className="text-[10px] font-bold text-slate-400 group-hover:text-emerald-400 transition-colors hidden sm:inline">
+            {language === 'ar' ? 'المتجر الأساسي' : 'Store'}
+          </span>
           <X className="w-4 h-4" />
         </button>
 

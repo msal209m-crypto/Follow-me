@@ -29,15 +29,25 @@ import {
   Package,
   Check,
   Megaphone,
-  Tag
+  Tag,
+  LogOut,
+  UserCheck,
+  Building,
+  KeyRound,
 } from 'lucide-react';
 import { Item, StoreSettings, DeliveryOrder } from '../types';
 import {
   createDeliveryOrder,
   getDeliveryOrders,
-  playNotificationChime
+  playNotificationChime,
+  getStoresDirectory,
 } from '../services/deliveryService';
 import { getPlatformAds, PlatformAd } from '../services/platformSettingsService';
+import {
+  getActiveCustomer,
+  saveActiveCustomer,
+  clearActiveCustomer,
+} from '../services/rbacAuthService';
 
 interface VillageStoreViewProps {
   items: Item[];
@@ -45,6 +55,7 @@ interface VillageStoreViewProps {
   isRTL: boolean;
   onOpenMerchantPortal: () => void;
   onOpenLanding: () => void;
+  onOpenAuthModal?: (role?: 'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER') => void;
 }
 
 interface CartItem {
@@ -58,6 +69,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   isRTL,
   onOpenMerchantPortal,
   onOpenLanding,
+  onOpenAuthModal,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -71,6 +83,67 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'CASH_ON_DELIVERY' | 'TRANSFER'>('CASH_ON_DELIVERY');
   const [copiedLink, setCopiedLink] = useState(false);
   const [customStorePhone, setCustomStorePhone] = useState(settings.phone || '');
+
+  // Customer Session & Identity (RBAC Customer)
+  const [activeCustomer, setActiveCustomer] = useState(() => getActiveCustomer());
+  const [showCustomerAuthModal, setShowCustomerAuthModal] = useState(false);
+  const [custModalName, setCustModalName] = useState(activeCustomer?.name || '');
+  const [custModalPhone, setCustModalPhone] = useState(activeCustomer?.phone || '');
+  const [custModalVillage, setCustModalVillage] = useState(activeCustomer?.village || '');
+
+  // Sync activeCustomer fields with cart inputs
+  useEffect(() => {
+    if (activeCustomer) {
+      if (activeCustomer.name) setCustomerName(activeCustomer.name);
+      if (activeCustomer.phone) setCustomerPhone(activeCustomer.phone);
+      if (activeCustomer.village) setCustomerAddress(activeCustomer.village);
+    }
+  }, [activeCustomer]);
+
+  // Village & Store Selection
+  const allStores = useMemo(() => getStoresDirectory(), []);
+  const [selectedVillage, setSelectedVillage] = useState<string>('ALL');
+  const [selectedStoreId, setSelectedStoreId] = useState<string>('default');
+
+  // List of villages extracted from stores
+  const villageList = useMemo(() => {
+    const list = new Set<string>();
+    allStores.forEach((s) => {
+      if (s.cityOrVillage) list.add(s.cityOrVillage);
+    });
+    if (settings.address) list.add(settings.address);
+    return Array.from(list);
+  }, [allStores, settings.address]);
+
+  // Stores available in the selected village
+  const availableStores = useMemo(() => {
+    if (selectedVillage === 'ALL') return allStores;
+    return allStores.filter((s) => s.cityOrVillage === selectedVillage);
+  }, [allStores, selectedVillage]);
+
+  // Currently active selected store target
+  const activeSelectedStore = useMemo(() => {
+    if (selectedStoreId === 'default') {
+      return {
+        name: settings.storeName || 'متجر قريتي',
+        phone: settings.phone || '',
+        village: settings.address || '',
+      };
+    }
+    const found = allStores.find((s) => s.id === selectedStoreId);
+    if (found) {
+      return {
+        name: found.name,
+        phone: found.phone,
+        village: found.cityOrVillage,
+      };
+    }
+    return {
+      name: settings.storeName || 'متجر قريتي',
+      phone: settings.phone || '',
+      village: settings.address || '',
+    };
+  }, [selectedStoreId, allStores, settings]);
 
   // Track active placed order
   const [trackedOrderId, setTrackedOrderId] = useState<string | null>(() => {
@@ -275,13 +348,17 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     const subtotal = totalCartPrice;
     const totalAmount = subtotal + deliveryFee;
 
+    // Save customer identity for future quick visits
+    saveActiveCustomer(validName, validPhone, validAddress);
+    setActiveCustomer({ name: validName, phone: validPhone, village: validAddress });
+
     const newOrder = createDeliveryOrder({
       customerName: validName,
       customerPhone: validPhone,
       customerAddress: validAddress,
-      storeName: settings.storeName || 'متجر قريتي',
-      storePhone: settings.phone || '',
-      storeAddress: settings.address || '',
+      storeName: activeSelectedStore.name || settings.storeName || 'متجر قريتي',
+      storePhone: activeSelectedStore.phone || settings.phone || '',
+      storeAddress: activeSelectedStore.village || settings.address || '',
       items: cartItemsList.map((ci) => ({
         itemId: ci.item.id,
         name: ci.item.name,
@@ -483,12 +560,25 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             {/* Merchant / Admin Door Button */}
             <button
               onClick={onOpenMerchantPortal}
-              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 transition-colors border border-slate-800 flex items-center gap-1.5 text-xs font-medium"
+              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 transition-colors border border-slate-800 flex items-center gap-1.5 text-xs font-medium cursor-pointer"
               title="دخول التاجر والإدارة (محمي)"
             >
               <ShieldCheck className="w-4 h-4 text-slate-400 hover:text-emerald-400" />
               <span className="hidden lg:inline">بوابة التاجر</span>
             </button>
+
+            {/* Dedicated Roles & Auth Modal Icon Button */}
+            {onOpenAuthModal && (
+              <button
+                type="button"
+                onClick={() => onOpenAuthModal('MERCHANT')}
+                className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-emerald-400 transition-all border border-slate-700/60 flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
+                title="تسجيل الدخول وإدارة الأدوار والصلاحيات (المطور، التاجر، السائق، العميل)"
+              >
+                <KeyRound className="w-4 h-4 text-emerald-400" />
+                <span className="hidden xl:inline">نافذة الأدوار</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -506,6 +596,97 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
           <p className="mt-2 text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
             اختر ما تحتاجه من أصناف، أضفها إلى سلتك، واضغط زر إرسال الطلب ليتواصل معك المتجر فوراً عبر الواتساب وتجهيز طلبك.
           </p>
+        </div>
+      </div>
+
+      {/* Customer Account & Village/Store Selector Toolbar */}
+      <div className="bg-slate-900/95 border-b border-slate-800/80 px-4 py-3 shadow-inner">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Customer Profile Status */}
+          <div className="flex items-center gap-2.5">
+            {activeCustomer ? (
+              <div className="flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-2xl">
+                <div className="w-7 h-7 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center font-black text-xs">
+                  <UserCheck className="w-4 h-4" />
+                </div>
+                <div className="text-xs">
+                  <div className="font-bold text-white flex items-center gap-1.5">
+                    <span>مرحباً، {activeCustomer.name}</span>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold">
+                      عميل القرية
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono" dir="ltr">
+                    {activeCustomer.phone}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearActiveCustomer();
+                    setActiveCustomer(null);
+                  }}
+                  className="mr-2 p-1 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-rose-950/40 transition-colors cursor-pointer"
+                  title="تسجيل خروج العميل"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowCustomerAuthModal(true)}
+                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-emerald-500/50 text-slate-200 px-3.5 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <User className="w-4 h-4 text-emerald-400" />
+                <span>تسجيل دخول العميل (الاسم والجوال)</span>
+              </button>
+            )}
+          </div>
+
+          {/* Village and Store Picker */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Village Selector */}
+            <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs">
+              <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <select
+                aria-label="تحديد القرية أو الحي"
+                value={selectedVillage}
+                onChange={(e) => {
+                  setSelectedVillage(e.target.value);
+                  setSelectedStoreId('default');
+                }}
+                className="bg-transparent text-slate-200 focus:outline-hidden text-xs font-bold cursor-pointer"
+              >
+                <option value="ALL" className="bg-slate-900 text-white">كل القرى والأحياء</option>
+                {villageList.map((vil) => (
+                  <option key={vil} value={vil} className="bg-slate-900 text-white">
+                    {vil}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Store Selector */}
+            <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs">
+              <Store className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              <select
+                aria-label="اختيار المتجر"
+                value={selectedStoreId}
+                onChange={(e) => setSelectedStoreId(e.target.value)}
+                className="bg-transparent text-slate-200 focus:outline-hidden text-xs font-bold cursor-pointer max-w-[180px] truncate"
+              >
+                <option value="default" className="bg-slate-900 text-white">
+                  {settings.storeName || 'متجر قريتي'} (الأساسي)
+                </option>
+                {availableStores.map((st) => (
+                  <option key={st.id} value={st.id} className="bg-slate-900 text-white">
+                    {st.name} {st.isPro ? '👑' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1275,6 +1456,96 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
         </div>
       )}
 
+      {/* Customer Quick Login Modal (تسجيل دخول العميل البسيط) */}
+      {showCustomerAuthModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div
+            dir={isRTL ? 'rtl' : 'ltr'}
+            className="bg-slate-900 border border-emerald-500/40 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95"
+          >
+            <div className="text-center">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto mb-2">
+                <UserCheck className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-black text-white">تسجيل دخول العميل</h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                سجل بياناتك مرة واحدة لتسهيل الطلب وتعبئة العناوين تلقائياً
+              </p>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!custModalName.trim() || !custModalPhone.trim()) return;
+                saveActiveCustomer(custModalName.trim(), custModalPhone.trim(), custModalVillage.trim() || undefined);
+                setActiveCustomer({
+                  name: custModalName.trim(),
+                  phone: custModalPhone.trim(),
+                  village: custModalVillage.trim() || undefined,
+                });
+                setCustomerName(custModalName.trim());
+                setCustomerPhone(custModalPhone.trim());
+                if (custModalVillage.trim()) setCustomerAddress(custModalVillage.trim());
+                setShowCustomerAuthModal(false);
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">اسم العميل الكاشف</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="مثال: خالد محمد"
+                  value={custModalName}
+                  onChange={(e) => setCustModalName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">رقم الهاتف / الجوال</label>
+                <input
+                  type="tel"
+                  required
+                  dir="ltr"
+                  placeholder="05xxxxxxxx"
+                  value={custModalPhone}
+                  onChange={(e) => setCustModalPhone(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500 font-mono text-right"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">القرية أو الحي السكني</label>
+                <input
+                  type="text"
+                  placeholder="مثال: قرية السعادة - الحي الشرقي"
+                  value={custModalVillage}
+                  onChange={(e) => setCustModalVillage(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+                >
+                  حفظ وتسجيل
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerAuthModal(false)}
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <footer className="mt-auto border-t border-slate-800/80 bg-slate-900/40 py-5 px-4 text-center text-xs text-slate-500">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -1282,16 +1553,27 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             {settings.storeName || 'متجر قريتي'} © {new Date().getFullYear()} - منصة تصفح وطلب المنتجات
           </p>
           <div className="flex items-center gap-4">
+            {onOpenAuthModal && (
+              <button
+                type="button"
+                onClick={() => onOpenAuthModal('DEVELOPER')}
+                className="text-slate-400 hover:text-cyan-400 flex items-center gap-1 transition-colors cursor-pointer"
+                title="لوحة المطور وإدارة الصلاحيات"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>إدارة الصلاحيات والمطور</span>
+              </button>
+            )}
             <button
               onClick={onOpenMerchantPortal}
-              className="text-slate-400 hover:text-emerald-400 flex items-center gap-1 transition-colors"
+              className="text-slate-400 hover:text-emerald-400 flex items-center gap-1 transition-colors cursor-pointer"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>دخول التاجر والإدارة</span>
             </button>
             <button
               onClick={onOpenLanding}
-              className="text-slate-400 hover:text-white transition-colors"
+              className="text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               شاشة البوابات
             </button>

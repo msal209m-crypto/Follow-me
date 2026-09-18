@@ -113,7 +113,16 @@ export interface DebtRecord {
 
 export type Language = 'ar' | 'en';
 
-export type UserRole = 'OWNER' | 'MANAGER' | 'CASHIER' | 'ADMIN' | 'admin';
+export type UserRole =
+  | 'DEVELOPER'   // المطور / المصمم - صلاحيات كاملة
+  | 'MERCHANT'    // التاجر - حسابه ومتاجره
+  | 'DRIVER'      // السائق / المندوب - توصيل الطلبات
+  | 'CUSTOMER'    // العميل - تصفح القرية والطلب
+  | 'OWNER'
+  | 'MANAGER'
+  | 'CASHIER'
+  | 'ADMIN'
+  | 'admin';
 
 export type SubscriptionTier = 'FREE' | 'PRO';
 
@@ -143,12 +152,26 @@ export interface SubscriptionInfo {
   daysRemaining: number;
 }
 
+export interface CustomerSession {
+  name: string;
+  phone: string;
+  village?: string;
+  savedAt?: string;
+  lastActiveAt?: string;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
   displayName: string;
-  storeName?: string;
+  phone?: string;
+  nationalId?: string; // رقم بطاقة الأحوال للتاجر
+  avatar?: string;     // الصورة الشخصية للسائق أو التاجر
   role: UserRole;
+  storeName?: string;
+  storeId?: string;
+  village?: string;
+  vehicleType?: string;
   subscriptionTier?: SubscriptionTier;
   subscriptionExpiresAt?: string | null;
   licenseKey?: string | null;
