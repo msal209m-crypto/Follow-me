@@ -155,6 +155,7 @@ export interface SubscriptionInfo {
 export interface CustomerSession {
   name: string;
   phone: string;
+  nationalId?: string;
   village?: string;
   savedAt?: string;
   lastActiveAt?: string;

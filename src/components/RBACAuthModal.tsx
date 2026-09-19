@@ -32,6 +32,19 @@ import { useAuth } from '../context/AuthContext';
 
 export type RBACRoleTab = 'MERCHANT' | 'DRIVER' | 'CUSTOMER' | 'DEVELOPER';
 
+const FIXED_VILLAGES = [
+  'قرية الفصور',
+  'قرية الحقالي',
+  'قرية الباركة',
+  'قرية الانهوم',
+  'قرية مشيجبه',
+  'سوق حول جباري',
+  'قرية المداد',
+  'قرية الجامع',
+  'قرية المسيلة',
+  'قرية المكيل',
+];
+
 export interface RBACAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -69,7 +82,8 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
   const [merchantNationalId, setMerchantNationalId] = useState('');
   const [merchantPassword, setMerchantPassword] = useState('');
   const [merchantStoreName, setMerchantStoreName] = useState('');
-  const [merchantVillage, setMerchantVillage] = useState('قرية السعادة');
+  const [merchantVillage, setMerchantVillage] = useState(FIXED_VILLAGES[0]);
+  const [merchantPhoto, setMerchantPhoto] = useState<string>('https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80');
 
   // Driver Fields
   const [driverName, setDriverName] = useState('');
@@ -82,7 +96,8 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
   // Customer Fields
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [customerVillage, setCustomerVillage] = useState('قرية السعادة');
+  const [customerNationalId, setCustomerNationalId] = useState('');
+  const [customerVillage, setCustomerVillage] = useState(FIXED_VILLAGES[0]);
 
   // Developer Fields
   const [devPin, setDevPin] = useState('');
@@ -153,6 +168,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
           password: merchantPassword,
           storeName: merchantStoreName,
           village: merchantVillage,
+          photo: merchantPhoto,
         });
         setLoading(false);
         if (res.success) {
@@ -224,13 +240,18 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
       setErrorMessage('يرجى إدخال رقم الجوال لتأكيد طلبك وتسهيل التوصيل');
       return;
     }
+    if (!customerNationalId.trim() || customerNationalId.trim().length < 8) {
+      setErrorMessage('يرجى إدخال رقم بطاقة الأحوال (الهوية الوطنية) الإلزامي للعميل');
+      return;
+    }
 
     setLoading(true);
     setTimeout(() => {
       saveCustomerSession({
         name: customerName.trim(),
         phone: customerPhone.trim(),
-        village: customerVillage.trim() || 'القرية',
+        nationalId: customerNationalId.trim(),
+        village: customerVillage.trim() || FIXED_VILLAGES[0],
         savedAt: new Date().toISOString(),
       });
       setLoading(false);
@@ -238,6 +259,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
       handleSuccess('CUSTOMER', {
         name: customerName.trim(),
         phone: customerPhone.trim(),
+        nationalId: customerNationalId.trim(),
         village: customerVillage.trim(),
       });
     }, 200);
@@ -470,6 +492,47 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                             className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
                               isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
                             } py-2 text-xs text-white focus:outline-none focus:border-emerald-500`}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">القرية التابعة للمتجر</label>
+                        <div className="relative">
+                          <MapPin className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                          <select
+                            value={merchantVillage}
+                            onChange={(e) => setMerchantVillage(e.target.value)}
+                            className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
+                              isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                            } py-2 text-xs text-white focus:outline-none focus:border-emerald-500`}
+                          >
+                            {FIXED_VILLAGES.map((v) => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">رابط الصورة الشخصية الواضحة أو التقاطها</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="url"
+                            value={merchantPhoto}
+                            onChange={(e) => setMerchantPhoto(e.target.value)}
+                            placeholder="https://... رابط صورة واضحة للتاجر"
+                            className={`flex-1 bg-slate-950 border border-slate-800 rounded-xl ${
+                              isRTL ? 'pr-3 pl-3' : 'px-3'
+                            } py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono`}
+                          />
+                          <img
+                            src={merchantPhoto}
+                            alt="معاينة"
+                            className="w-9 h-9 rounded-xl object-cover border border-emerald-500/50 shrink-0"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80';
+                            }}
                           />
                         </div>
                       </div>
@@ -779,7 +842,25 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">القرية أو الحي السكني</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">رقم بطاقة الأحوال (الهوية الوطنية) الإلزامي</label>
+                    <div className="relative">
+                      <IdCard className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                      <input
+                        type="text"
+                        required
+                        maxLength={10}
+                        value={customerNationalId}
+                        onChange={(e) => setCustomerNationalId(e.target.value)}
+                        placeholder="10xxxxxxxx (10 أرقام)"
+                        className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
+                          isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                        } py-2 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono`}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">اختر القرية (من القائمة المعتمدة)</label>
                     <div className="relative">
                       <MapPin className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
                       <select
@@ -789,11 +870,9 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                           isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
                         } py-2 text-xs text-white focus:outline-none focus:border-cyan-500`}
                       >
-                        <option value="قرية السعادة">قرية السعادة (الشارع العام)</option>
-                        <option value="الحي الشرقي">الحي الشرقي (بجوار المسجد)</option>
-                        <option value="ميدان القرية الشمالي">ميدان القرية الشمالي</option>
-                        <option value="قرية الروابي">قرية الروابي والحي الغربي</option>
-                        <option value="القرية">منطقة أخرى بالقرية</option>
+                        {FIXED_VILLAGES.map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
                       </select>
                     </div>
                   </div>

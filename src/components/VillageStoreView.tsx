@@ -105,9 +105,22 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   const [selectedVillage, setSelectedVillage] = useState<string>('ALL');
   const [selectedStoreId, setSelectedStoreId] = useState<string>('default');
 
-  // List of villages extracted from stores
+  const FIXED_VILLAGES = [
+    'قرية الفصور',
+    'قرية الحقالي',
+    'قرية الباركة',
+    'قرية الانهوم',
+    'قرية مشيجبه',
+    'سوق حول جباري',
+    'قرية المداد',
+    'قرية الجامع',
+    'قرية المسيلة',
+    'قرية المكيل',
+  ];
+
+  // List of villages extracted from stores + fixed list
   const villageList = useMemo(() => {
-    const list = new Set<string>();
+    const list = new Set<string>(FIXED_VILLAGES);
     allStores.forEach((s) => {
       if (s.cityOrVillage) list.add(s.cityOrVillage);
     });

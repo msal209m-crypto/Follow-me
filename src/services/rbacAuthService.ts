@@ -17,6 +17,7 @@ export interface MerchantAccountRecord {
   passwordHash: string;
   storeName: string;
   village: string;
+  photo?: string; // الصورة الشخصية للتاجر
   createdAt: string;
   updatedAt: string;
   isApproved: boolean;
@@ -137,6 +138,7 @@ export function registerMerchant(params: {
   password: string;
   storeName: string;
   village: string;
+  photo?: string;
 }): { success: boolean; message: string; merchant?: MerchantAccountRecord } {
   const cleanPhone = params.phone.trim().replace(/\s+/g, '');
   const cleanNationalId = params.nationalId.trim();
@@ -165,6 +167,7 @@ export function registerMerchant(params: {
     passwordHash: params.password,
     storeName: params.storeName.trim() || `متجر ${cleanName}`,
     village: params.village.trim() || 'القرية',
+    photo: params.photo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     isApproved: true,
