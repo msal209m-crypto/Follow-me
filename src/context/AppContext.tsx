@@ -257,38 +257,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }));
         }
       }
-      // Check for products saved in 'qaryati_products'
-      const qaryatiSaved = localStorage.getItem('qaryati_products');
-      if (qaryatiSaved) {
-        try {
-          const qList = JSON.parse(qaryatiSaved);
-          if (Array.isArray(qList)) {
-            qList.forEach((qp: any) => {
-              if (qp && qp.name && !list.some((it) => String(it.id) === String(qp.id) || it.name === qp.name)) {
-                list.push({
-                  id: String(qp.id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`),
-                  barcode: `628${Math.floor(100000000 + Math.random() * 900000000)}`,
-                  name: qp.name,
-                  category: 'مواد غذائية',
-                  quantity: 50,
-                  costPrice: Math.round(Number(qp.price || 0) * 0.75 * 100) / 100,
-                  salePrice: Number(qp.price || 0),
-                  price: Number(qp.price || 0),
-                  image: qp.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60',
-                  imageUrl: qp.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60',
-                  available: qp.available !== false,
-                  minStockAlert: 5,
-                  unit: 'حبة',
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                });
-              }
-            });
-          }
-        } catch (e) {
-          console.warn('Error reading qaryati_products:', e);
-        }
-      }
       return list;
     } catch {
       return [];

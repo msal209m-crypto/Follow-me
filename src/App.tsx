@@ -29,12 +29,14 @@ import { ShareModal } from './components/ShareModal';
 import { ToastNotification } from './components/ToastNotification';
 import { VillageStoreView } from './components/VillageStoreView';
 import { PortalLandingScreen } from './components/PortalLandingScreen';
+import { WelcomeSplashScreen } from './components/WelcomeSplashScreen';
 import { DriverPortalView } from './components/DriverPortalView';
 import { PlatformAdminView } from './components/PlatformAdminView';
 import { MerchantOrdersModal } from './components/MerchantOrdersModal';
 import { MerchantOrderAlertPopup } from './components/MerchantOrderAlertPopup';
 import { useAuth } from './context/AuthContext';
 import { Item, Transaction, DebtRecord, DebtPaymentHistoryItem } from './types';
+import { getPlatformDeveloperSettings } from './services/platformSettingsService';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -534,6 +536,8 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
 const PortalRouter: React.FC = () => {
   const { items, settings, isRTL, updateSettings, setActiveTab } = useApp();
   const { currentUser } = useAuth();
+  const devSettings = getPlatformDeveloperSettings();
+  const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
   
   // Check URL query parameters or hash to support direct linking (?portal=store, ?portal=merchant, ?portal=driver, ?portal=admin)
   const [portalMode, setPortalMode] = useState<'landing' | 'store' | 'merchant' | 'driver' | 'admin'>(() => {
@@ -715,6 +719,16 @@ const PortalRouter: React.FC = () => {
   }, []);
 
   if (portalMode === 'landing') {
+    if (devSettings.showWelcomeSplash && !hasSeenWelcome) {
+      return (
+        <WelcomeSplashScreen
+          settings={settings}
+          isRTL={isRTL}
+          onEnterPortal={() => setHasSeenWelcome(true)}
+        />
+      );
+    }
+
     return (
       <>
         <PortalLandingScreen

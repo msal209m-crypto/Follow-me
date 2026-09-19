@@ -74,6 +74,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
   // Driver Fields
   const [driverName, setDriverName] = useState('');
   const [driverPhone, setDriverPhone] = useState('');
+  const [driverNationalId, setDriverNationalId] = useState('');
   const [driverPassword, setDriverPassword] = useState('');
   const [driverVehicle, setDriverVehicle] = useState<'MOTORCYCLE' | 'CAR' | 'BICYCLE'>('MOTORCYCLE');
   const [driverPhoto, setDriverPhoto] = useState<string>('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80');
@@ -190,6 +191,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
         const res = registerDriver({
           name: driverName,
           phone: driverPhone,
+          nationalId: driverNationalId,
           password: driverPassword,
           photo: driverPhoto,
           vehicleType: driverVehicle,
@@ -646,6 +648,25 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                         </div>
                       </div>
                     </>
+                  )}
+
+                  {mode === 'REGISTER' && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">رقم بطاقة الأحوال (الهوية الوطنية) الإلزامي</label>
+                      <div className="relative">
+                        <IdCard className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                        <input
+                          type="text"
+                          required
+                          value={driverNationalId}
+                          onChange={(e) => setDriverNationalId(e.target.value)}
+                          placeholder="رقم الهوية / بطاقة الأحوال (10 أرقام)"
+                          className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
+                            isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                          } py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono`}
+                        />
+                      </div>
+                    </div>
                   )}
 
                   <div>

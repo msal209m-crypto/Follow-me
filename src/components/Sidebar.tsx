@@ -441,7 +441,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   >
                     <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors border ${
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110 border ${
                         isActive
                           ? 'bg-white/20 text-white border-white/30'
                           : item.alert

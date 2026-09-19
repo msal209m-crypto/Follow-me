@@ -461,7 +461,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-emerald-500/60 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
             >
               <div className="flex items-center justify-between w-full">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
                   <TrendingUp className="w-4 h-4" />
                 </div>
                 <Maximize2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
@@ -491,7 +491,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/60 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
             >
               <div className="flex items-center justify-between w-full">
-                <div className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
                   <Wallet className="w-4 h-4" />
                 </div>
                 <Maximize2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 transition-colors" />
@@ -525,7 +525,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               }`}
             >
               <div className="flex items-center justify-between w-full">
-                <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
+                <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${
                   inventoryStats.lowStockCount > 0
                     ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 animate-pulse'
                     : 'bg-slate-800 text-slate-400 border-slate-700'
@@ -570,7 +570,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/60 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
             >
               <div className="flex items-center justify-between w-full">
-                <div className="w-8 h-8 rounded-xl bg-teal-500/15 text-teal-400 border border-teal-500/30 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-teal-500/15 text-teal-400 border border-teal-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
                   <Package className="w-4 h-4" />
                 </div>
                 <Maximize2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-teal-400 transition-colors" />
@@ -600,7 +600,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-rose-500/60 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 text-right cursor-pointer shadow-sm min-h-[110px]"
             >
               <div className="flex items-center justify-between w-full">
-                <div className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
                   <CreditCard className="w-4 h-4" />
                 </div>
                 <Maximize2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-rose-400 transition-colors" />
@@ -630,7 +630,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-indigo-500/60 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 text-right cursor-pointer shadow-sm min-h-[110px]"
             >
               <div className="flex items-center justify-between w-full">
-                <div className="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
                   <FileSpreadsheet className="w-4 h-4" />
                 </div>
                 <span className="text-[10px] font-bold bg-indigo-950/80 text-indigo-300 border border-indigo-700/50 px-2 py-0.5 rounded-full">

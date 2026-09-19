@@ -1239,6 +1239,71 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                   </span>
                 </div>
 
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    رابط صورة الواجهة الرئيسية والشاشة (Hero Image URL 🖼️)
+                  </label>
+                  <input
+                    type="url"
+                    value={devSettings.heroImageUrl || ''}
+                    onChange={(e) => setDevSettings({ ...devSettings, heroImageUrl: e.target.value })}
+                    placeholder="https://images.unsplash.com/... (رابط الصورة الخلفية أو البانر الرئيسي)"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-left focus:outline-none focus:border-purple-500"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    تستطيع كمطور تغيير صورة الغلاف والبانر الرئيسي للشاشة الأولى للمنصة مباشرة عبر هذا الرابط.
+                  </span>
+                </div>
+
+                {/* Welcome Splash Configuration */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-emerald-400">إعدادات شاشة الترحيب الخاصة (Welcome Splash Screen)</span>
+                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={devSettings.showWelcomeSplash}
+                        onChange={(e) => setDevSettings({ ...devSettings, showWelcomeSplash: e.target.checked })}
+                        className="w-4 h-4 rounded text-emerald-600 bg-slate-900 border-slate-700"
+                      />
+                      <span>تفعيل شاشة الترحيب عند بدء التطبيق</span>
+                    </label>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">عنوان الترحيب الرئيسي</label>
+                    <input
+                      type="text"
+                      value={devSettings.welcomeTitle || ''}
+                      onChange={(e) => setDevSettings({ ...devSettings, welcomeTitle: e.target.value })}
+                      placeholder="البوابة الرسمية لمنظومة قريتي الرقمية"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">النص التعريفي / التوصيف</label>
+                    <input
+                      type="text"
+                      value={devSettings.welcomeSubtitle || ''}
+                      onChange={(e) => setDevSettings({ ...devSettings, welcomeSubtitle: e.target.value })}
+                      placeholder="منصة موحدة لإدارة متجر القرية، طلبات التوصيل..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">رابط صورة شاشة الترحيب (Image URL)</label>
+                    <input
+                      type="url"
+                      value={devSettings.welcomeImageUrl || ''}
+                      onChange={(e) => setDevSettings({ ...devSettings, welcomeImageUrl: e.target.value })}
+                      placeholder="https://images.unsplash.com/..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-left focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
                 {/* Security PIN Change */}
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">

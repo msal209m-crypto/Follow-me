@@ -26,6 +26,7 @@ export interface DriverAccountRecord {
   id: string;
   name: string;
   phone: string;
+  nationalId: string; // رقم بطاقة الأحوال الإلزامي
   passwordHash: string;
   photo?: string;
   vehicleType: 'BICYCLE' | 'MOTORCYCLE' | 'CAR';
@@ -265,6 +266,7 @@ export function getDrivers(): DriverAccountRecord[] {
         id: 'driver-default-1',
         name: 'خالد السبيعي',
         phone: '0555544433',
+        nationalId: '1088899911',
         passwordHash: '123456',
         vehicleType: 'MOTORCYCLE',
         zone: 'قرية السعادة',
@@ -288,6 +290,7 @@ export function saveDrivers(drivers: DriverAccountRecord[]): void {
 export function registerDriver(params: {
   name: string;
   phone: string;
+  nationalId: string;
   password: string;
   photo?: string;
   vehicleType: 'BICYCLE' | 'MOTORCYCLE' | 'CAR';
@@ -295,22 +298,25 @@ export function registerDriver(params: {
   zone?: string;
 }): { success: boolean; message: string; driver?: DriverAccountRecord } {
   const cleanPhone = params.phone.trim().replace(/\s+/g, '');
+  const cleanNationalId = params.nationalId.trim();
   const cleanName = params.name.trim();
 
-  if (!cleanName) return { success: false, message: 'يرجى إدخال اسم السائق / المندوب' };
-  if (!cleanPhone || cleanPhone.length < 8) return { success: false, message: 'يرجى إدخال رقم جوال السائق' };
+  if (!cleanName) return { success: false, message: 'يرجى إدخال اسم السائق / المندوب كاملاً' };
+  if (!cleanPhone || cleanPhone.length < 8) return { success: false, message: 'يرجى إدخال رقم جوال صحيح' };
+  if (!cleanNationalId || cleanNationalId.length < 8) return { success: false, message: 'يرجى إدخال رقم بطاقة الأحوال المدنية (الهوية) الإلزامي' };
   if (!params.password || params.password.length < 4) return { success: false, message: 'كلمة المرور يجب ألا تقل عن 4 خانات' };
 
   const drivers = getDrivers();
-  const existing = drivers.find((d) => d.phone === cleanPhone);
+  const existing = drivers.find((d) => d.phone === cleanPhone || d.nationalId === cleanNationalId);
   if (existing) {
-    return { success: false, message: 'رقم الجوال مسجل مسبقاً لسائق آخر، يرجى تسجيل الدخول' };
+    return { success: false, message: 'يوجد سائق مسجل مسبقاً بنفس رقم الجوال أو رقم بطاقة الأحوال' };
   }
 
   const newDriver: DriverAccountRecord = {
     id: `driver-${Date.now()}`,
     name: cleanName,
     phone: cleanPhone,
+    nationalId: cleanNationalId,
     passwordHash: params.password,
     photo: params.photo,
     vehicleType: params.vehicleType || 'MOTORCYCLE',
