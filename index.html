@@ -2,7 +2,9 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="HandheldFriendly" content="true" />
+    <meta name="MobileOptimized" content="width" />
     <title>Remix فلو اب - إدارة المخزون والمبيعات والحسابات</title>
     <meta name="description" content="تطبيق فلو اب الشامل لإدارة قائمة الأصناف، استيكرات الباركود، الحركات (بيع، شراء، أجل)، جدول الحسابات، الديون والسداد، والتقارير اليومية للمبيعات والموظفين" />
     <meta property="og:title" content="Remix فلو اب - إدارة المخزون والمبيعات والحسابات" />
@@ -68,6 +70,31 @@
         }
       }
       window.returnToStoreMain = returnToStoreMain;
+
+      // منع التكبير والتصغير اليدوي بالأصابع (Pinch-to-Zoom) والنقر المزدوج على الأجهزة الذكية
+      (function() {
+        document.addEventListener('gesturestart', function(e) {
+          e.preventDefault();
+        }, { passive: false });
+        document.addEventListener('gesturechange', function(e) {
+          e.preventDefault();
+        }, { passive: false });
+        document.addEventListener('gestureend', function(e) {
+          e.preventDefault();
+        }, { passive: false });
+
+        var lastTouchEnd = 0;
+        document.addEventListener('touchend', function(e) {
+          var now = Date.now();
+          if (now - lastTouchEnd <= 300) {
+            var tag = e.target && e.target.tagName;
+            if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+              e.preventDefault();
+            }
+          }
+          lastTouchEnd = now;
+        }, { passive: false });
+      })();
     </script>
   </head>
   <body class="font-sans antialiased bg-slate-950 text-slate-100 selection:bg-emerald-500 selection:text-white">

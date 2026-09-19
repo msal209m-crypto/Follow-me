@@ -36,6 +36,7 @@ import {
 } from '../data/initialData';
 import { translations, Translations } from '../i18n/translations';
 import { sanitizeProductImage, DEFAULT_PRODUCT_IMAGE } from '../utils/imageUtils';
+import { saveStoreProducts } from '../services/deliveryService';
 
 // Sets of dummy demo IDs used only to purge and prevent unwanted mock data pre-fill
 const DEMO_ITEM_IDS = new Set(INITIAL_ITEMS.map((i) => i.id));
@@ -208,8 +209,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedStickerItemId, setSelectedStickerItemId] = useState<string | null>(null);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>('offline');
 
-  // User-isolated storage keys
-  const userPrefix = currentUser ? `user_${currentUser.uid}_` : 'guest_';
+  // Multi-Vendor Security Filter: User and Merchant isolated storage keys
+  const activeMerchantId = currentUser?.uid || userProfile?.id || 'guest';
+  const userPrefix =
+    activeMerchantId !== 'guest'
+      ? activeMerchantId.startsWith('merchant_')
+        ? `${activeMerchantId}_`
+        : `user_${activeMerchantId}_`
+      : 'guest_';
 
   // Language state: 'ar' or 'en'
   const [language, setLanguageState] = useState<Language>(() => {
@@ -448,53 +455,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [activityLogs.length, transactions, settings.currency, userPrefix, currentCashier.name]);
 
-  // Whenever active user changes, load their local storage cache immediately
+  // Whenever active merchant/user changes, load their isolated storage cache immediately
   useEffect(() => {
-    const pfx = currentUser ? `user_${currentUser.uid}_` : 'guest_';
-    try {
-      const savedItems = localStorage.getItem(pfx + STORAGE_KEYS.ITEMS);
-      const savedTrans = localStorage.getItem(pfx + STORAGE_KEYS.TRANSACTIONS);
-      const savedDebts = localStorage.getItem(pfx + STORAGE_KEYS.DEBTS);
-      const savedSettings = localStorage.getItem(pfx + STORAGE_KEYS.SETTINGS);
+    const loadMerchantData = (targetId: string, storeTitle?: string, storeVillage?: string) => {
+      const pfx =
+        targetId !== 'guest'
+          ? targetId.startsWith('merchant_')
+            ? `${targetId}_`
+            : `user_${targetId}_`
+          : 'guest_';
 
-      if (savedItems) {
-        const parsed = JSON.parse(savedItems);
-        const cleaned = Array.isArray(parsed) ? parsed.filter((i: Item) => !DEMO_ITEM_IDS.has(i.id)) : [];
-        setItems(cleaned);
-      } else {
-        setItems([]);
-      }
+      try {
+        const savedItems = localStorage.getItem(pfx + STORAGE_KEYS.ITEMS);
+        const savedTrans = localStorage.getItem(pfx + STORAGE_KEYS.TRANSACTIONS);
+        const savedDebts = localStorage.getItem(pfx + STORAGE_KEYS.DEBTS);
+        const savedSettings = localStorage.getItem(pfx + STORAGE_KEYS.SETTINGS);
 
-      if (savedTrans) {
-        const parsed = JSON.parse(savedTrans);
-        const cleaned = Array.isArray(parsed) ? parsed.filter((t: Transaction) => !DEMO_TX_IDS.has(t.id)) : [];
-        setTransactions(cleaned);
-      } else {
-        setTransactions([]);
-      }
+        if (savedItems) {
+          const parsed = JSON.parse(savedItems);
+          const cleaned = Array.isArray(parsed) ? parsed.filter((i: Item) => !DEMO_ITEM_IDS.has(i.id)) : [];
+          setItems(cleaned);
+        } else {
+          setItems([]);
+        }
 
-      if (savedDebts) {
-        const parsed = JSON.parse(savedDebts);
-        const cleaned = Array.isArray(parsed) ? parsed.filter((d: DebtRecord) => !DEMO_DEBT_IDS.has(d.id)) : [];
-        setDebts(cleaned);
-      } else {
-        setDebts([]);
-      }
+        if (savedTrans) {
+          const parsed = JSON.parse(savedTrans);
+          const cleaned = Array.isArray(parsed) ? parsed.filter((t: Transaction) => !DEMO_TX_IDS.has(t.id)) : [];
+          setTransactions(cleaned);
+        } else {
+          setTransactions([]);
+        }
 
-      if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
-      } else if (userProfile?.storeName) {
-        setSettings((prev) => ({ ...prev, storeName: userProfile.storeName || prev.storeName }));
+        if (savedDebts) {
+          const parsed = JSON.parse(savedDebts);
+          const cleaned = Array.isArray(parsed) ? parsed.filter((d: DebtRecord) => !DEMO_DEBT_IDS.has(d.id)) : [];
+          setDebts(cleaned);
+        } else {
+          setDebts([]);
+        }
+
+        if (savedSettings) {
+          setSettings(JSON.parse(savedSettings));
+        } else {
+          const sName = storeTitle || userProfile?.storeName || 'متجري الذكي';
+          const sAddr = storeVillage || userProfile?.village || '';
+          setSettings((prev) => ({ ...prev, storeName: sName, address: sAddr }));
+        }
+      } catch (e) {
+        console.warn('Error reading merchant storage cache:', e);
       }
-    } catch (e) {
-      console.warn('Error reading user storage cache:', e);
-    }
-  }, [currentUser?.uid]);
+    };
+
+    loadMerchantData(activeMerchantId, userProfile?.storeName, userProfile?.village);
+
+    const onUserChanged = (ev: any) => {
+      const uid = ev?.detail?.uid;
+      const profile = ev?.detail?.profile;
+      if (uid) {
+        loadMerchantData(uid, profile?.storeName, profile?.village);
+      }
+    };
+
+    window.addEventListener('flowapp:user-changed', onUserChanged);
+    return () => {
+      window.removeEventListener('flowapp:user-changed', onUserChanged);
+    };
+  }, [activeMerchantId, userProfile?.storeName, userProfile?.village]);
 
   // Sync state to local storage cache for instant offline responsiveness
   useEffect(() => {
     try {
       localStorage.setItem(userPrefix + STORAGE_KEYS.ITEMS, JSON.stringify(items));
+      // Sync store products in multi-vendor directory
+      if (activeMerchantId && activeMerchantId !== 'guest') {
+        saveStoreProducts(activeMerchantId, items);
+      }
       // Keep qaryati_products synchronized with all items using lightweight sanitized images
       const qaryatiFormat = items.map((item) => ({
         id: item.id,
@@ -506,7 +542,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('qaryati_products', JSON.stringify(qaryatiFormat));
     } catch (e) {
       console.error('Failed to sync items to localStorage (quota or serialization issue):', e);
-      // Fallback: If quota exceeded, strip heavy base64 strings from cache to protect responsiveness
       try {
         const lightweightItems = items.map((item) => ({
           ...item,
@@ -518,7 +553,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.error('Critical localStorage quota exceeded:', innerE);
       }
     }
-  }, [items, userPrefix]);
+  }, [items, userPrefix, activeMerchantId]);
 
   useEffect(() => {
     try {
@@ -836,6 +871,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const safeName = String(itemData.name ?? '').trim();
     const newItem: Item = {
       ...itemData,
+      merchantId: activeMerchantId,
+      storeId: activeMerchantId,
       barcode: safeBarcode,
       name: safeName,
       id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
@@ -1232,6 +1269,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const createdDebt: DebtRecord = {
         id: debtId,
+        merchantId: activeMerchantId,
         personName: person,
         phone: data.phone,
         type: 'PERSONAL_LOAN',
@@ -1436,6 +1474,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const invoicePrefix = isSupplyOrder && !isDirect ? 'PO-' : 'INV-';
     const newTransaction: Transaction = {
       id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      merchantId: activeMerchantId,
       invoiceNumber: `${invoicePrefix}${Date.now().toString().slice(-7)}`,
       type: data.type,
       paymentMethod: data.paymentMethod,

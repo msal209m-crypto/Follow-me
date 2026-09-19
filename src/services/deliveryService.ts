@@ -1,14 +1,83 @@
-import { DeliveryOrder, DeliveryOrderStatus, DriverProfile, StoreDirectoryRecord } from '../types';
+import { DeliveryOrder, DeliveryOrderStatus, DriverProfile, StoreDirectoryRecord, Item } from '../types';
 
 const ORDERS_STORAGE_KEY = 'qaryati_delivery_orders';
 const DRIVER_PROFILE_KEY = 'qaryati_driver_profile';
 const STORES_DIRECTORY_KEY = 'qaryati_stores_directory';
+const DB_RESET_FLAG_KEY = 'qaryati_db_reset_multivendor_v2';
 
-// Sample initial stores for Platform Admin (empty by default for clean start)
+// Clean initial stores - strictly empty by default for multi-vendor registration
 const INITIAL_STORES: StoreDirectoryRecord[] = [];
 
-// Sample initial delivery orders to demo the workflow (empty by default for clean start)
+// Clean initial delivery orders - empty by default
 const INITIAL_ORDERS: DeliveryOrder[] = [];
+
+/**
+ * Execute automatic purge of legacy demo stores (like 'عنوان القهوة' or mock items)
+ */
+export function purgeDemoDatabaseIfNeeded() {
+  try {
+    const isPurged = localStorage.getItem(DB_RESET_FLAG_KEY);
+    if (!isPurged) {
+      // 1. Remove demo store directory if it contains mock stores
+      const rawStores = localStorage.getItem(STORES_DIRECTORY_KEY);
+      if (rawStores) {
+        try {
+          const stores: StoreDirectoryRecord[] = JSON.parse(rawStores);
+          const filteredStores = stores.filter(
+            (s) =>
+              !s.name.includes('عنوان القهوة') &&
+              !s.name.includes('تموينات الأمل') &&
+              !s.name.includes('مقهى') &&
+              s.id !== 'store-1' &&
+              s.id !== 'store-2' &&
+              s.id !== 'store-3' &&
+              s.id !== 'store-4' &&
+              s.id !== 'store-5'
+          );
+          localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify(filteredStores));
+        } catch {
+          localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify([]));
+        }
+      } else {
+        localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify([]));
+      }
+
+      // 2. Remove mock orders if any
+      const rawOrders = localStorage.getItem(ORDERS_STORAGE_KEY);
+      if (rawOrders) {
+        try {
+          const orders: DeliveryOrder[] = JSON.parse(rawOrders);
+          const filteredOrders = orders.filter(
+            (o) => !o.storeName.includes('عنوان القهوة') && !o.storeName.includes('تموينات الأمل')
+          );
+          localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(filteredOrders));
+        } catch {
+          localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify([]));
+        }
+      }
+
+      // 3. Remove old dummy merchants
+      const rawMerchants = localStorage.getItem('flowapp_rbac_merchants_v1');
+      if (rawMerchants) {
+        try {
+          const merchants = JSON.parse(rawMerchants);
+          const filtered = Array.isArray(merchants)
+            ? merchants.filter((m: any) => m.id !== 'merchant-default-1' && !m.storeName?.includes('تموينات الأمل') && !m.storeName?.includes('عنوان القهوة'))
+            : [];
+          localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify(filtered));
+        } catch {}
+      }
+
+      // 4. Mark purged
+      localStorage.setItem(DB_RESET_FLAG_KEY, 'true');
+    }
+  } catch (e) {
+    console.warn('Error purging demo database:', e);
+  }
+}
+
+// Run purge once on import
+purgeDemoDatabaseIfNeeded();
 
 export function getDeliveryOrders(): DeliveryOrder[] {
   try {
@@ -214,4 +283,154 @@ export function toggleStoreProStatus(storeId: string): StoreDirectoryRecord | nu
   stores[idx] = updated;
   saveStoresDirectory(stores);
   return updated;
+}
+
+/**
+ * Get products/items for a specific store in the multi-vendor system
+ */
+export function getStoreProducts(storeId: string): Item[] {
+  try {
+    // 1. Check store-specific items
+    const raw = localStorage.getItem(`merchant_${storeId}_items`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+    // 2. Check user-isolated items if storeId matches a userId
+    const userRaw = localStorage.getItem(`user_${storeId}_items`);
+    if (userRaw) {
+      const parsed = JSON.parse(userRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save products for a specific store and update store items count
+ */
+export function saveStoreProducts(storeId: string, products: Item[]) {
+  try {
+    localStorage.setItem(`merchant_${storeId}_items`, JSON.stringify(products));
+    
+    // Update store items count in directory
+    const stores = getStoresDirectory();
+    const idx = stores.findIndex((s) => s.id === storeId || s.merchantId === storeId);
+    if (idx !== -1) {
+      stores[idx] = {
+        ...stores[idx],
+        itemsCount: products.length,
+      };
+      saveStoresDirectory(stores);
+    }
+    window.dispatchEvent(new CustomEvent('qaryati:store-products-updated', { detail: { storeId, count: products.length } }));
+  } catch (e) {
+    console.warn('Error saving store products:', e);
+  }
+}
+
+/**
+ * Rate a delivery order, the store, and the driver
+ */
+export function rateDeliveryOrder(params: {
+  orderId: string;
+  storeRating: number;
+  driverRating: number;
+  feedback?: string;
+}): { success: boolean; message: string; order?: DeliveryOrder } {
+  const orders = getDeliveryOrders();
+  const idx = orders.findIndex((o) => o.id === params.orderId);
+  if (idx === -1) {
+    return { success: false, message: 'لم يتم العثور على الطلب' };
+  }
+
+  const order = orders[idx];
+  const updatedOrder: DeliveryOrder = {
+    ...order,
+    storeRating: params.storeRating,
+    driverRating: params.driverRating,
+    ratingFeedback: params.feedback,
+    isRated: true,
+    updatedAt: new Date().toISOString(),
+  };
+
+  orders[idx] = updatedOrder;
+  saveDeliveryOrders(orders);
+
+  // Update store rating in directory
+  const stores = getStoresDirectory();
+  const storeIdx = stores.findIndex(
+    (s) => (order.storeId && s.id === order.storeId) || s.name === order.storeName
+  );
+
+  if (storeIdx !== -1) {
+    const s = stores[storeIdx];
+    const prevRating = s.rating || 5;
+    const prevCount = s.ratingCount || 0;
+    const newCount = prevCount + 1;
+    const newAvg = Number(((prevRating * prevCount + params.storeRating) / newCount).toFixed(1));
+
+    stores[storeIdx] = {
+      ...s,
+      rating: newAvg,
+      ratingCount: newCount,
+    };
+    saveStoresDirectory(stores);
+  }
+
+  // Update driver rating if driver assigned
+  if (order.driverId) {
+    const driver = getDriverProfile();
+    if (driver && driver.id === order.driverId) {
+      const prevRating = driver.rating || 5;
+      const prevCount = driver.ratingCount || 0;
+      const newCount = prevCount + 1;
+      const newAvg = Number(((prevRating * prevCount + params.driverRating) / newCount).toFixed(1));
+
+      saveDriverProfile({
+        ...driver,
+        rating: newAvg,
+        ratingCount: newCount,
+      });
+    }
+  }
+
+  window.dispatchEvent(new CustomEvent('qaryati:order-rated', { detail: updatedOrder }));
+  return { success: true, message: 'شكراً لك! تم تسجيل تقييمك بنجاح ⭐', order: updatedOrder };
+}
+
+/**
+ * Hard reset database to clean state
+ */
+export function resetAllPlatformData() {
+  try {
+    localStorage.removeItem(STORES_DIRECTORY_KEY);
+    localStorage.removeItem(ORDERS_STORAGE_KEY);
+    localStorage.removeItem('flowapp_rbac_merchants_v1');
+    localStorage.removeItem('flowapp_v4_active_local_user');
+    localStorage.removeItem('qaryati_products');
+    
+    // Purge any merchant keys
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('merchant_') || k.startsWith('guest_'))) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+    
+    localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify([]));
+    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify([]));
+    localStorage.setItem(DB_RESET_FLAG_KEY, 'true');
+    window.location.reload();
+  } catch (e) {
+    console.error('Failed to reset platform data:', e);
+  }
 }

@@ -37,6 +37,7 @@ import { MerchantOrderAlertPopup } from './components/MerchantOrderAlertPopup';
 import { useAuth } from './context/AuthContext';
 import { Item, Transaction, DebtRecord, DebtPaymentHistoryItem } from './types';
 import { getPlatformDeveloperSettings } from './services/platformSettingsService';
+import { startMerchantOnboardingTour, hasCompletedTour } from './services/tourService';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -68,6 +69,8 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
     items,
     isCashierMode,
   } = useApp();
+  const { currentUser } = useAuth();
+  const activeMerchantId = currentUser?.uid;
   const { isPro, setShowSubscriptionModal, canAddItemWithCount } = useSubscription();
 
   // Sidebar collapse & mobile state
@@ -130,6 +133,35 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
     setReceiptData({ debtPayment: { debt, payment } });
   };
 
+  // Onboarding Tour Trigger
+  const handleStartTour = () => {
+    startMerchantOnboardingTour({
+      language,
+      activeMerchantId,
+      storeName: settings.appName || settings.storeName,
+      onNavigateToTab: (tab) => setActiveTab(tab as any),
+      onOpenAddItem: () => handleOpenAddItem(),
+      onOpenSettings: () => {
+        setSettingsInitialTab('GENERAL');
+        setShowSettingsModal(true);
+      },
+    });
+  };
+
+  // Auto-launch Onboarding Tour for new merchants entering the dashboard for the first time
+  useEffect(() => {
+    if (isCashierMode) return;
+
+    // Small delay to ensure all header and dashboard elements are fully painted in the DOM
+    const timer = setTimeout(() => {
+      if (!hasCompletedTour(activeMerchantId)) {
+        handleStartTour();
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [activeMerchantId, isCashierMode]);
+
   return (
     <div
       dir={isRTL ? 'rtl' : 'ltr'}
@@ -147,6 +179,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
         onOpenShareModal={() => setShowShareModal(true)}
         onSwitchToStore={onSwitchToStore}
         onOpenLanding={onOpenLanding}
+        onStartTour={isCashierMode ? undefined : handleStartTour}
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
         mobileOpen={mobileMenuOpen}
@@ -178,6 +211,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
           onOpenMerchantOrders={() => setShowMerchantOrdersModal(true)}
           onNavigateToItems={isCashierMode ? () => {} : () => setActiveTab('items')}
           onNavigateToDashboard={isCashierMode ? () => {} : () => setActiveTab('dashboard')}
+          onStartTour={isCashierMode ? undefined : handleStartTour}
         />
 
         {/* Top Fast Navigation Tabs Bar for Merchant Dashboard */}
@@ -311,6 +345,83 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Mobile Sub-Tabs Row: Visible on phones to eliminate navigation friction */}
+            {(activeTab === 'items' || activeTab === 'stickers' || activeTab === 'order_goods') && (
+              <div className="md:hidden flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 mt-1 border-t border-slate-800/80 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('items')}
+                  className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
+                    activeTab === 'items'
+                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
+                      : 'text-slate-400 bg-slate-950/60'
+                  }`}
+                >
+                  {language === 'ar' ? 'الأصناف' : 'Items'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('stickers')}
+                  className={`flex-1 min-w-[100px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
+                    activeTab === 'stickers'
+                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
+                      : 'text-slate-400 bg-slate-950/60'
+                  }`}
+                >
+                  {language === 'ar' ? 'طباعة الباركود' : 'Barcode Labels'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('order_goods')}
+                  className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
+                    activeTab === 'order_goods'
+                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
+                      : 'text-slate-400 bg-slate-950/60'
+                  }`}
+                >
+                  {language === 'ar' ? 'طلب بضاعة' : 'Purchase Orders'}
+                </button>
+              </div>
+            )}
+
+            {(activeTab === 'daily_reports' || activeTab === 'accounts' || activeTab === 'debts') && (
+              <div className="md:hidden flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 mt-1 border-t border-slate-800/80 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('daily_reports')}
+                  className={`flex-1 min-w-[100px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
+                    activeTab === 'daily_reports'
+                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
+                      : 'text-slate-400 bg-slate-950/60'
+                  }`}
+                >
+                  {language === 'ar' ? 'التقارير اليومية' : 'Daily Reports'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('accounts')}
+                  className={`flex-1 min-w-[80px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
+                    activeTab === 'accounts'
+                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
+                      : 'text-slate-400 bg-slate-950/60'
+                  }`}
+                >
+                  {language === 'ar' ? 'الحسابات' : 'Accounts'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('debts')}
+                  className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
+                    activeTab === 'debts'
+                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
+                      : 'text-slate-400 bg-slate-950/60'
+                  }`}
+                >
+                  {language === 'ar' ? 'الديون والسلف' : 'Debts & Loans'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

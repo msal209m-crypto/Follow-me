@@ -35,13 +35,16 @@ import {
   Building,
   KeyRound,
   AlertTriangle,
+  Star,
 } from 'lucide-react';
-import { Item, StoreSettings, DeliveryOrder } from '../types';
+import { Item, StoreSettings, DeliveryOrder, StoreDirectoryRecord } from '../types';
 import {
   createDeliveryOrder,
   getDeliveryOrders,
   playNotificationChime,
   getStoresDirectory,
+  rateDeliveryOrder,
+  getStoreProducts,
 } from '../services/deliveryService';
 import { getPlatformAds, PlatformAd, getPlatformDeveloperSettings } from '../services/platformSettingsService';
 import {
@@ -90,6 +93,9 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   const [showCustomerAuthModal, setShowCustomerAuthModal] = useState(false);
   const [custModalName, setCustModalName] = useState(activeCustomer?.name || '');
   const [custModalPhone, setCustModalPhone] = useState(activeCustomer?.phone || '');
+  const [custModalNationalId, setCustModalNationalId] = useState(activeCustomer?.nationalId || '');
+  const [custModalHousePhoto, setCustModalHousePhoto] = useState(activeCustomer?.housePhoto || '');
+  const [custModalPassword, setCustModalPassword] = useState(activeCustomer?.passwordHash || '');
   const [custModalVillage, setCustModalVillage] = useState(activeCustomer?.village || '');
 
   // Sync activeCustomer fields with cart inputs
@@ -102,9 +108,54 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   }, [activeCustomer]);
 
   // Village & Store Selection
-  const allStores = useMemo(() => getStoresDirectory().filter(s => s.status !== 'SUSPENDED'), []);
+  const [allStores, setAllStores] = useState<StoreDirectoryRecord[]>(() =>
+    getStoresDirectory().filter((s) => s.status !== 'SUSPENDED')
+  );
   const [selectedVillage, setSelectedVillage] = useState<string>('ALL');
   const [selectedStoreId, setSelectedStoreId] = useState<string>('default');
+
+  useEffect(() => {
+    const handleStoresRefresh = () => {
+      setAllStores(getStoresDirectory().filter((s) => s.status !== 'SUSPENDED'));
+    };
+    window.addEventListener('qaryati:stores-updated', handleStoresRefresh);
+    window.addEventListener('qaryati:order-rated', handleStoresRefresh);
+    return () => {
+      window.removeEventListener('qaryati:stores-updated', handleStoresRefresh);
+      window.removeEventListener('qaryati:order-rated', handleStoresRefresh);
+    };
+  }, []);
+
+  // Rating State for Customer Order Review
+  const [ratingStoreScore, setRatingStoreScore] = useState<number>(5);
+  const [ratingDriverScore, setRatingDriverScore] = useState<number>(5);
+  const [ratingComment, setRatingComment] = useState<string>('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState<boolean>(false);
+  const [ratingSuccessMsg, setRatingSuccessMsg] = useState<string>('');
+
+  // Store-specific products in multi-vendor directory
+  const [storeSpecificProducts, setStoreSpecificProducts] = useState<Item[]>([]);
+
+  useEffect(() => {
+    if (selectedStoreId && selectedStoreId !== 'default') {
+      const prods = getStoreProducts(selectedStoreId);
+      setStoreSpecificProducts(prods);
+    } else {
+      setStoreSpecificProducts([]);
+    }
+  }, [selectedStoreId]);
+
+  // Active items for the selected store
+  const activeDisplayItems = useMemo(() => {
+    if (selectedStoreId !== 'default') {
+      if (storeSpecificProducts.length > 0) return storeSpecificProducts;
+      const matched = items.filter(
+        (i) => i.merchantId === selectedStoreId || i.storeId === selectedStoreId
+      );
+      return matched;
+    }
+    return items;
+  }, [selectedStoreId, storeSpecificProducts, items]);
 
   const [devSettings, setDevSettings] = useState(() => getPlatformDeveloperSettings());
 
@@ -236,17 +287,17 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   // Extract unique categories
   const categories = useMemo(() => {
     const set = new Set<string>();
-    items.forEach((item) => {
+    activeDisplayItems.forEach((item) => {
       if (item.category && item.category.trim()) {
         set.add(item.category.trim());
       }
     });
     return Array.from(set);
-  }, [items]);
+  }, [activeDisplayItems]);
 
   // Filter items (Read-Only)
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
+    return activeDisplayItems.filter((item) => {
       const matchSearch =
         !searchQuery.trim() ||
         String(item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -260,10 +311,16 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
       return matchSearch && matchCategory && matchStock;
     });
-  }, [items, searchQuery, selectedCategory, onlyInStock]);
+  }, [activeDisplayItems, searchQuery, selectedCategory, onlyInStock]);
 
   // Cart operations
   const addToCart = (item: Item, qty = 1) => {
+    if (!activeCustomer || !activeCustomer.name || !activeCustomer.phone || !activeCustomer.nationalId || !activeCustomer.housePhoto || !activeCustomer.passwordHash) {
+      alert('⚠️ تنبيه أمني: لا يمكن إضافة أي صنف إلى السلة إلا بعد تسجيل الحساب بالكامل (الاسم، رقم الجوال، رقم البطاقة الشخصية، صورة واجهة المنزل، وكلمة السر). يرجى إتمام التسجيل أولاً.');
+      setShowCustomerAuthModal(true);
+      return;
+    }
+
     setCart((prev) => {
       const existing = prev[item.id];
       const newQty = existing ? existing.quantity + qty : qty;
@@ -383,8 +440,22 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     const totalAmount = subtotal + deliveryFee;
 
     // Save customer identity for future quick visits
-    saveActiveCustomer(validName, validPhone, validAddress);
-    setActiveCustomer({ name: validName, phone: validPhone, village: validAddress });
+    saveActiveCustomer({
+      name: validName,
+      phone: validPhone,
+      nationalId: activeCustomer?.nationalId,
+      housePhoto: activeCustomer?.housePhoto,
+      passwordHash: activeCustomer?.passwordHash,
+      village: validAddress,
+    });
+    setActiveCustomer({
+      name: validName,
+      phone: validPhone,
+      nationalId: activeCustomer?.nationalId,
+      housePhoto: activeCustomer?.housePhoto,
+      passwordHash: activeCustomer?.passwordHash,
+      village: validAddress,
+    });
 
     const newOrder = createDeliveryOrder({
       customerName: validName,
@@ -735,36 +806,175 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
       {/* Main Container */}
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 flex flex-col gap-6">
-        {/* Promotional Campaign Ads Carousel (Platform Owner / Developer Managed) */}
-        {platformAds.length > 0 && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {platformAds.map((ad) => (
-                <div
-                  key={ad.id}
-                  className={`bg-gradient-to-r ${ad.bgGradient} rounded-2xl p-4 text-white shadow-xl flex items-center justify-between gap-3 relative overflow-hidden transition-transform hover:scale-[1.01]`}
-                >
-                  <div className="space-y-1 relative z-10">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-white/20 backdrop-blur-md">
-                        {ad.badge}
+        {selectedVillage === 'ALL' ? (
+          <div className="space-y-6 py-4">
+            <div className="text-center space-y-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <MapPin className="w-3.5 h-3.5" />
+                اختر قريتك للبدء في التسوق
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-black text-white">أسماء القرى المتاحة في المنصة</h2>
+              <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
+                مجرد ما تضغط على القرية (مثل قرية الفصور أو غيرها)، ستظهر لك فوراً المتاجر المسجلة في هذه القرية فقط.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {villageList.map((village) => {
+                const villageStores = allStores.filter((s) => s.cityOrVillage === village);
+                return (
+                  <button
+                    key={village}
+                    onClick={() => {
+                      setSelectedVillage(village);
+                      setSelectedStoreId('default');
+                    }}
+                    className="bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-6 text-right transition-all cursor-pointer group shadow-lg shadow-black/30 hover:scale-[1.02] flex flex-col justify-between"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors">
+                        <MapPin className="w-6 h-6" />
+                      </div>
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-slate-800 text-emerald-400 border border-slate-700">
+                        {villageStores.length} متجر
                       </span>
-                      {ad.discountCode && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white text-slate-900 shadow-sm">
-                          كود الخصم: {ad.discountCode}
-                        </span>
-                      )}
                     </div>
-                    <h3 className="font-black text-sm sm:text-base text-white">{ad.title}</h3>
-                    <p className="text-xs text-white/85 leading-relaxed">{ad.subtitle}</p>
-                  </div>
-                  <div className="shrink-0 relative z-10">
-                    <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white border border-white/20 shadow-inner">
-                      <Megaphone className="w-5 h-5" />
+                    <div>
+                      <h3 className="font-extrabold text-white text-base sm:text-lg group-hover:text-emerald-300 transition-colors">
+                        {village}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {villageStores.length > 0
+                          ? `المتاجر: ${villageStores.map((s) => s.name).join('، ')}`
+                          : 'لا توجد متاجر مسجلة حالياً'}
+                      </p>
                     </div>
-                  </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Selected Village Header Bar */}
+            <div className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <MapPin className="w-5 h-5" />
                 </div>
-              ))}
+                <div>
+                  <div className="text-xs text-slate-400">القرية المحددة حالياً:</div>
+                  <h3 className="font-black text-white text-base sm:text-lg">{selectedVillage}</h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedVillage('ALL');
+                  setSelectedStoreId('default');
+                }}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all border border-slate-700 cursor-pointer flex items-center gap-1.5"
+              >
+                {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
+                <span>تغيير القرية / عرض كل القرى</span>
+              </button>
+            </div>
+
+            {/* List of Stores Registered in this Village */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs sm:text-sm font-bold text-slate-200 flex items-center gap-2">
+                  <Store className="w-4 h-4 text-emerald-400" />
+                  <span>المتاجر المسجلة في {selectedVillage} ({availableStores.length}):</span>
+                </h4>
+                <span className="text-[11px] text-slate-400">اختر المتجر لتصفح منتجاته والطلب منه مباشرة</span>
+              </div>
+
+              {availableStores.length === 0 ? (
+                <div className="p-8 text-center bg-slate-900/60 border border-dashed border-slate-800 rounded-2xl">
+                  <Store className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-slate-300">لا توجد متاجر مسجلة في {selectedVillage} حتى الآن</p>
+                  <p className="text-xs text-slate-500 mt-1">هل أنت تاجر في هذه القرية؟ يمكنك تسجيل متجرك الآن بكل سهولة.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onOpenAuthModal) onOpenAuthModal('MERCHANT');
+                      else onOpenMerchantPortal();
+                    }}
+                    className="mt-3 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>تسجيل متجر جديد في {selectedVillage}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {availableStores.map((st) => {
+                    const isSelected = selectedStoreId === st.id;
+                    const ratingVal = st.rating || 5;
+                    const ratingCount = st.ratingCount || 0;
+                    return (
+                      <div
+                        key={st.id}
+                        onClick={() => setSelectedStoreId(st.id)}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-emerald-950/40 border-emerald-500/70 shadow-lg shadow-emerald-950/30 ring-1 ring-emerald-500/50'
+                            : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shrink-0">
+                              <Store className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h5 className="font-extrabold text-white text-sm leading-tight flex items-center gap-1.5">
+                                <span>{st.name}</span>
+                                {st.isPro && <span className="text-xs" title="تاجر معتمد">👑</span>}
+                              </h5>
+                              <p className="text-[11px] text-slate-400 mt-0.5">المالك: {st.ownerName}</p>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-slate-950 shrink-0">
+                              المحدد للتسوق ✓
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Store Ratings (Stars) */}
+                        <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            <div className="flex text-amber-400">
+                              {[1, 2, 3, 4, 5].map((starIdx) => (
+                                <Star
+                                  key={starIdx}
+                                  className={`w-3.5 h-3.5 ${
+                                    starIdx <= Math.round(ratingVal)
+                                      ? 'fill-amber-400 text-amber-400'
+                                      : 'text-slate-600'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-xs font-mono font-bold text-amber-300 ml-1">
+                              {ratingVal.toFixed(1)}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              ({ratingCount > 0 ? `${ratingCount} تقييم` : 'جديد'})
+                            </span>
+                          </div>
+
+                          <span className="text-[11px] font-bold text-emerald-400">
+                            {isSelected ? 'المتجر النشط' : 'تصفح المتجر ←'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1477,6 +1687,148 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                 </div>
               </div>
 
+              {/* Order Rating Section (Store & Driver Rating) */}
+              {trackedOrder.isRated ? (
+                <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/40 rounded-2xl text-xs space-y-1.5 animate-in fade-in">
+                  <div className="font-bold text-emerald-300 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>تم تسجيل تقييمك لهذا الطلب بنجاح ⭐</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-slate-300 text-[11px] pt-1">
+                    <div className="flex items-center gap-1">
+                      <Store className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>تقييم المتجر:</span>
+                      <span className="font-bold text-amber-300">⭐ {trackedOrder.storeRating || 5}/5</span>
+                    </div>
+                    {trackedOrder.driverRating && (
+                      <div className="flex items-center gap-1">
+                        <Truck className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>تقييم السائق:</span>
+                        <span className="font-bold text-amber-300">⭐ {trackedOrder.driverRating}/5</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-4 space-y-3 shadow-md">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                        <Star className="w-4 h-4 fill-amber-400" />
+                      </div>
+                      <div>
+                        <h5 className="font-bold text-xs text-white">تقييم الخدمة بالنجوم (5 نجوم)</h5>
+                        <p className="text-[10px] text-slate-400">شاركنا رأيك في المتجر والسائق لتحسين الخدمة</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">
+                      تقييم العميل
+                    </span>
+                  </div>
+
+                  {ratingSuccessMsg && (
+                    <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-500/60 text-emerald-300 text-xs flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>{ratingSuccessMsg}</span>
+                    </div>
+                  )}
+
+                  {/* 1. Store Rating */}
+                  <div className="space-y-1 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                        <Store className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>تقييم المتجر ({trackedOrder.storeName}):</span>
+                      </span>
+                      <span className="font-mono text-amber-300 font-bold">{ratingStoreScore} من 5</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      {[1, 2, 3, 4, 5].map((starVal) => (
+                        <button
+                          key={starVal}
+                          type="button"
+                          onClick={() => setRatingStoreScore(starVal)}
+                          className="p-1 hover:scale-125 transition-transform cursor-pointer"
+                          title={`${starVal} نجوم للمتجر`}
+                        >
+                          <Star
+                            className={`w-6 h-6 transition-colors ${
+                              starVal <= ratingStoreScore
+                                ? 'fill-amber-400 text-amber-400'
+                                : 'text-slate-600 hover:text-amber-300'
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 2. Driver Rating (خمس نجوم) */}
+                  <div className="space-y-1 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                        <Truck className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>تقييم السائق ({trackedOrder.driverName || 'سائق التوصيل'}):</span>
+                      </span>
+                      <span className="font-mono text-amber-300 font-bold">{ratingDriverScore} من 5</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      {[1, 2, 3, 4, 5].map((starVal) => (
+                        <button
+                          key={starVal}
+                          type="button"
+                          onClick={() => setRatingDriverScore(starVal)}
+                          className="p-1 hover:scale-125 transition-transform cursor-pointer"
+                          title={`${starVal} نجوم للسائق`}
+                        >
+                          <Star
+                            className={`w-6 h-6 transition-colors ${
+                              starVal <= ratingDriverScore
+                                ? 'fill-amber-400 text-amber-400'
+                                : 'text-slate-600 hover:text-amber-300'
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Notes / Feedback */}
+                  <input
+                    type="text"
+                    value={ratingComment}
+                    onChange={(e) => setRatingComment(e.target.value)}
+                    placeholder="ملاحظات أو تعليق إضافي على الخدمة (اختياري)..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-500"
+                  />
+
+                  {/* Submit Rating Button */}
+                  <button
+                    type="button"
+                    disabled={isSubmittingRating}
+                    onClick={() => {
+                      if (!trackedOrder) return;
+                      setIsSubmittingRating(true);
+                      const res = rateDeliveryOrder({
+                        orderId: trackedOrder.id,
+                        storeRating: ratingStoreScore,
+                        driverRating: ratingDriverScore,
+                        feedback: ratingComment.trim() || undefined,
+                      });
+                      setIsSubmittingRating(false);
+                      if (res.success && res.order) {
+                        setTrackedOrder(res.order);
+                        setRatingSuccessMsg('شكراً لك! تم إرسال تقييمك للمتجر والسائق بنجاح ⭐');
+                      }
+                    }}
+                    className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer active:scale-95"
+                  >
+                    <Star className="w-3.5 h-3.5 fill-slate-950" />
+                    <span>إرسال التقييم للمتجر والسائق (5 نجوم)</span>
+                  </button>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center gap-2">
                 <button
@@ -1510,35 +1862,43 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto mb-2">
                 <UserCheck className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-black text-white">تسجيل دخول العميل</h3>
+              <h3 className="text-base font-black text-white">تسجيل حساب العميل الإلزامي</h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                سجل بياناتك مرة واحدة لتسهيل الطلب وتعبئة العناوين تلقائياً
+                يجب إكمال تسجيل الحساب (الاسم، الجوال، رقم البطاقة الشخصية، صورة واجهة المنزل، وكلمة السر) للتمكن من إضافة الأصناف إلى السلة.
               </p>
             </div>
 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!custModalName.trim() || !custModalPhone.trim()) return;
-                saveActiveCustomer(custModalName.trim(), custModalPhone.trim(), custModalVillage.trim() || undefined);
-                setActiveCustomer({
+                if (!custModalName.trim() || !custModalPhone.trim() || !custModalNationalId.trim() || !custModalPassword.trim()) {
+                  alert('يرجى تعبئة الحقول الإلزامية: الاسم الكامل، رقم الجوال، رقم البطاقة الشخصية، وكلمة السر');
+                  return;
+                }
+                const customerData = {
                   name: custModalName.trim(),
                   phone: custModalPhone.trim(),
+                  nationalId: custModalNationalId.trim(),
+                  housePhoto: custModalHousePhoto.trim() || 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&q=80&w=600',
+                  passwordHash: custModalPassword.trim(),
                   village: custModalVillage.trim() || undefined,
-                });
-                setCustomerName(custModalName.trim());
-                setCustomerPhone(custModalPhone.trim());
-                if (custModalVillage.trim()) setCustomerAddress(custModalVillage.trim());
+                };
+                saveActiveCustomer(customerData);
+                setActiveCustomer(customerData);
+                setCustomerName(customerData.name);
+                setCustomerPhone(customerData.phone);
+                if (customerData.village) setCustomerAddress(customerData.village);
                 setShowCustomerAuthModal(false);
+                alert('✅ تم التسجيل بنجاح! يمكنك الآن إضافة الأصناف إلى السلة واستكمال الطلب.');
               }}
-              className="space-y-3"
+              className="space-y-2.5 max-h-[70vh] overflow-y-auto px-1"
             >
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">اسم العميل الكاشف</label>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">الاسم الكامل *</label>
                 <input
                   type="text"
                   required
-                  placeholder="مثال: خالد محمد"
+                  placeholder="مثال: خالد محمد السبيعي"
                   value={custModalName}
                   onChange={(e) => setCustModalName(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500"
@@ -1546,7 +1906,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">رقم الهاتف / الجوال</label>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">رقم الهاتف / الجوال *</label>
                 <input
                   type="tel"
                   required
@@ -1559,14 +1919,69 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">القرية أو الحي السكني</label>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">رقم البطاقة الشخصية (الهوية) *</label>
                 <input
                   type="text"
-                  placeholder="مثال: قرية السعادة - الحي الشرقي"
+                  required
+                  dir="ltr"
+                  placeholder="مثال: 1088998877"
+                  value={custModalNationalId}
+                  onChange={(e) => setCustModalNationalId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500 font-mono text-right"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">صورة واجهة المنزل (رابط الصورة أو وصفها)</label>
+                <input
+                  type="text"
+                  placeholder="مثال: رابط صورة واجهة المنزل أو وصفها"
+                  value={custModalHousePhoto}
+                  onChange={(e) => setCustModalHousePhoto(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">كلمة السر *</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={custModalPassword}
+                  onChange={(e) => setCustModalPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">القرية أو الحي السكني</label>
+                <input
+                  type="text"
+                  placeholder="مثال: قرية الفصور"
                   value={custModalVillage}
                   onChange={(e) => setCustModalVillage(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500"
                 />
+              </div>
+
+              <div className="pt-1 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const pInput = prompt('أدخل رقم جوالك المسجل لاستعادة كلمة السر عبر زر الأمان:');
+                    if (!pInput) return;
+                    if (activeCustomer && activeCustomer.phone === pInput.trim()) {
+                      alert(`🔒 نظام الأمان:\nكلمة السر الخاصة بك هي: ${activeCustomer.passwordHash || 'غير متوفرة'}`);
+                    } else {
+                      alert('⚠️ رقم الجوال غير مطابق للحساب الحالي على هذا الجهاز.');
+                    }
+                  }}
+                  className="text-xs text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer flex items-center gap-1"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>زر الأمان لاستعادة كلمة السر</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-2">
@@ -1574,7 +1989,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                   type="submit"
                   className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
                 >
-                  حفظ وتسجيل
+                  تم التسجيل بنجاح
                 </button>
                 <button
                   type="button"

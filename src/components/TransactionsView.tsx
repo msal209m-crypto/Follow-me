@@ -1645,6 +1645,48 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           }}
         />
       )}
+
+      {/* Mobile Floating Quick-Checkout Bar: Cashier can complete transaction from anywhere on the screen */}
+      {posActiveTab === 'TERMINAL' && cart.length > 0 && (
+        <div className="lg:hidden fixed bottom-3 inset-x-3 z-40 animate-fadeIn safe-bottom">
+          <div className="bg-slate-900/98 backdrop-blur-md border border-emerald-500/50 p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[11px] text-slate-400 font-bold flex items-center gap-1.5">
+                <ShoppingCart className="w-3.5 h-3.5 text-emerald-400" />
+                <span>السلة ({cart.reduce((sum, it) => sum + it.quantity, 0)} قطع)</span>
+              </div>
+              <div className="text-base font-black text-emerald-400 font-mono truncate mt-0.5">
+                {totalAmount.toFixed(2)}{' '}
+                <span className="text-xs font-sans text-slate-400">{settings.currency}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              id="mobile-btn-complete-transaction"
+              onClick={handleCompleteTransaction}
+              disabled={hasOversoldItems}
+              className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer shrink-0 ${
+                hasOversoldItems
+                  ? 'bg-rose-950 text-rose-300 border border-rose-700 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-950/80'
+              }`}
+            >
+              {hasOversoldItems ? (
+                <>
+                  <AlertTriangle className="w-4 h-4 text-rose-300" />
+                  <span>تجاوز المخزون</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>إتمام وطباعة الإيصال</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

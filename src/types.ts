@@ -10,6 +10,8 @@ export type NavigationTab =
 
 export interface Item {
   id: string;
+  merchantId?: string; // معرّف التاجر لفلترة أمان الجداول
+  storeId?: string;    // معرّف المتجر
   barcode: string;
   name: string;
   category: string;
@@ -52,6 +54,7 @@ export interface TransactionCartItem {
 
 export interface Transaction {
   id: string;
+  merchantId?: string; // معرّف التاجر لفلترة أمان المبيعات والفواتير
   invoiceNumber: string;
   type: TransactionType;
   paymentMethod: PaymentMethod;
@@ -98,6 +101,7 @@ export interface DebtAdvanceLoanItem {
 
 export interface DebtRecord {
   id: string;
+  merchantId?: string; // معرّف التاجر لفلترة أمان الديون
   personName: string;
   phone: string;
   type: 'CUSTOMER' | 'SUPPLIER' | 'PERSONAL_LOAN'; // عميل آجل أو مورد آجل أو سلفة شخصية
@@ -156,6 +160,8 @@ export interface CustomerSession {
   name: string;
   phone: string;
   nationalId?: string;
+  housePhoto?: string;
+  passwordHash?: string;
   village?: string;
   savedAt?: string;
   lastActiveAt?: string;
@@ -322,6 +328,8 @@ export interface DeliveryOrder {
   storeName: string;
   storePhone?: string;
   storeAddress?: string;
+  storeId?: string;
+  merchantId?: string;
   items: DeliveryOrderItem[];
   subtotal: number;
   deliveryFee: number;
@@ -332,6 +340,10 @@ export interface DeliveryOrder {
   driverId?: string;
   driverName?: string;
   driverPhone?: string;
+  storeRating?: number;   // تقييم المتجر بالنجوم (1 إلى 5)
+  driverRating?: number;  // تقييم السائق بالنجوم (1 إلى 5)
+  ratingFeedback?: string;
+  isRated?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -347,6 +359,7 @@ export interface DriverProfile {
   active?: boolean;
   isOnline?: boolean;
   rating?: number;
+  ratingCount?: number;
   completedOrdersCount?: number;
   totalDelivered?: number;
   currentOrderId?: string;
@@ -355,6 +368,7 @@ export interface DriverProfile {
 
 export interface StoreDirectoryRecord {
   id: string;
+  merchantId?: string; // معرّف التاجر المالك
   name: string;
   ownerName: string;
   phone: string;
@@ -366,4 +380,6 @@ export interface StoreDirectoryRecord {
   suspendReason?: string;
   joinedAt: string;
   merchantPin?: string;
+  rating?: number;       // متوسط التقييم بالنجوم
+  ratingCount?: number;  // عدد المقيمين
 }

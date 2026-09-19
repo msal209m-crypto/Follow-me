@@ -415,6 +415,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="bg-slate-900/90 border border-slate-800 p-2 rounded-2xl flex items-center justify-between gap-2 overflow-x-auto no-scrollbar shadow-sm">
             <button
               type="button"
+              id="dashboard-btn-pos"
               onClick={() => onNavigate('transactions')}
               className="flex-1 min-w-[130px] py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
             >
@@ -423,6 +424,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
             <button
               type="button"
+              id="dashboard-btn-add-item"
               onClick={onOpenAddItem}
               className="flex-1 min-w-[105px] py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95 transition-all cursor-pointer"
             >
@@ -431,6 +433,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
             <button
               type="button"
+              id="dashboard-btn-order-goods"
               onClick={() => onOpenOrderGoods(undefined, 'CASH')}
               className="flex-1 min-w-[105px] py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95 transition-all cursor-pointer"
             >
@@ -439,6 +442,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
             <button
               type="button"
+              id="dashboard-btn-invoices"
               onClick={() => {
                 setModalSearch('');
                 setActiveModal('today_invoices');

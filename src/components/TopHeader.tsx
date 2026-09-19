@@ -35,6 +35,7 @@ import {
   Tag,
   Truck,
   MapPin,
+  Compass,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -61,6 +62,7 @@ interface TopHeaderProps {
   onSwitchToStore?: () => void;
   onOpenLanding?: () => void;
   onOpenMerchantOrders?: () => void;
+  onStartTour?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -75,6 +77,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onSwitchToStore,
   onOpenLanding,
   onOpenMerchantOrders,
+  onStartTour,
 }) => {
   const {
     currentCashier,
@@ -489,7 +492,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </div>
 
         {/* Right / End: All top controls in a single tidy row */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 overflow-x-auto no-scrollbar max-w-full py-0.5">
           {/* Merchant Orders Management Button */}
           {onOpenMerchantOrders && (
             <button
@@ -715,6 +718,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           >
             <SettingsIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-300" />
           </button>
+
+          {/* 4.5. Onboarding Tour Button */}
+          {onStartTour && (
+            <button
+              type="button"
+              id="top-btn-tour"
+              onClick={onStartTour}
+              className="h-8 sm:h-9 px-2 sm:px-2.5 bg-slate-800/90 hover:bg-slate-750 border border-amber-500/50 hover:border-amber-400 text-amber-200 hover:text-amber-100 rounded-xl flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm text-xs font-bold"
+              title={language === 'ar' ? 'الجولة التعريفية بالنظام وإضافة أول صنف' : 'System Onboarding Tour'}
+            >
+              <Compass className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+              <span className="hidden lg:inline">
+                {language === 'ar' ? 'جولة تعريفية' : 'Tour'}
+              </span>
+            </button>
+          )}
 
           {/* 5. User Account Profile / Direct Sign In */}
           <div className="relative" ref={userMenuRef}>
@@ -1012,6 +1031,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     <div className="relative z-10 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 sm:gap-4 px-2 xs:px-3 sm:px-6 py-2 sm:py-2.5 bg-gradient-to-r from-slate-950/95 via-slate-900/98 to-slate-950/95 border-t border-slate-800/60 w-full min-w-0">
       {/* Store Brand / Identity */}
       <div
+        id="merchant-top-header-store-info"
         onClick={onNavigateToDashboard}
         className={`flex items-center gap-2.5 sm:gap-3 shrink-0 ${
           onNavigateToDashboard ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''

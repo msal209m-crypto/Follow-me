@@ -97,27 +97,15 @@ export function clearAllSystemSessions(): void {
 }
 
 // ----------------------------------------------------
+// ----------------------------------------------------
 // 3. Merchant RBAC Management
 // ----------------------------------------------------
 export function getMerchants(): MerchantAccountRecord[] {
   try {
     const raw = localStorage.getItem(MERCHANTS_STORE_KEY);
     if (!raw) {
-      // Seed default merchant if none exists
-      const initialMerchant: MerchantAccountRecord = {
-        id: 'merchant-default-1',
-        name: 'أبو أحمد السالمي',
-        phone: '0501234567',
-        nationalId: '1098765432',
-        passwordHash: '123456',
-        storeName: 'تموينات الأمل المركزية',
-        village: 'قرية السعادة',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        isApproved: true,
-      };
-      localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify([initialMerchant]));
-      return [initialMerchant];
+      localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify([]));
+      return [];
     }
     return JSON.parse(raw);
   } catch {
@@ -159,14 +147,16 @@ export function registerMerchant(params: {
     };
   }
 
+  const merchantId = `merchant_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
   const newMerchant: MerchantAccountRecord = {
-    id: `merchant-${Date.now()}`,
+    id: merchantId,
     name: cleanName,
     phone: cleanPhone,
     nationalId: cleanNationalId,
     passwordHash: params.password,
     storeName: params.storeName.trim() || `متجر ${cleanName}`,
-    village: params.village.trim() || 'القرية',
+    village: params.village.trim() || 'قرية الفصور',
     photo: params.photo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -176,11 +166,12 @@ export function registerMerchant(params: {
   merchants.unshift(newMerchant);
   saveMerchants(merchants);
 
-  // Sync to stores directory if not already present
+  // Sync to stores directory under merchant's unique ID
   const stores = getStoresDirectory();
-  if (!stores.some((s) => s.phone === cleanPhone)) {
+  if (!stores.some((s) => s.phone === cleanPhone || s.id === merchantId)) {
     const newStoreRecord: StoreDirectoryRecord = {
-      id: `store-${Date.now()}`,
+      id: merchantId,
+      merchantId: merchantId,
       name: newMerchant.storeName,
       ownerName: newMerchant.name,
       phone: newMerchant.phone,
@@ -191,11 +182,14 @@ export function registerMerchant(params: {
       status: 'ACTIVE',
       joinedAt: new Date().toISOString().split('T')[0],
       merchantPin: params.password,
+      rating: 5.0,
+      ratingCount: 0,
     };
     saveStoresDirectory([newStoreRecord, ...stores]);
   }
 
-  // Also sync to local users so AuthContext seamlessly authenticates this merchant
+  // Also sync to local users so AuthContext and AppContext seamlessly authenticate this merchant
+  setActiveSessionRole('MERCHANT');
   syncMerchantToAuth(newMerchant);
 
   return { success: true, message: 'تم تسجيل حساب التاجر بنجاح!', merchant: newMerchant };
@@ -255,6 +249,13 @@ function syncMerchantToAuth(merchant: MerchantAccountRecord) {
     const localUsers = saved ? JSON.parse(saved) : {};
     localUsers[profile.email] = { profile, passwordHash: merchant.passwordHash };
     localStorage.setItem('flowapp_v4_local_users', JSON.stringify(localUsers));
+
+    // Dispatch global event so AuthContext & AppContext immediately switch to this merchant
+    window.dispatchEvent(
+      new CustomEvent('flowapp:user-changed', {
+        detail: { uid: merchant.id, profile },
+      })
+    );
   } catch {}
 }
 
@@ -265,18 +266,8 @@ export function getDrivers(): DriverAccountRecord[] {
   try {
     const raw = localStorage.getItem(DRIVERS_STORE_KEY);
     if (!raw) {
-      const initialDriver: DriverAccountRecord = {
-        id: 'driver-default-1',
-        name: 'خالد السبيعي',
-        phone: '0555544433',
-        nationalId: '1088899911',
-        passwordHash: '123456',
-        vehicleType: 'MOTORCYCLE',
-        zone: 'قرية السعادة',
-        createdAt: new Date().toISOString(),
-      };
-      localStorage.setItem(DRIVERS_STORE_KEY, JSON.stringify([initialDriver]));
-      return [initialDriver];
+      localStorage.setItem(DRIVERS_STORE_KEY, JSON.stringify([]));
+      return [];
     }
     return JSON.parse(raw);
   } catch {
@@ -414,21 +405,28 @@ export function clearCustomerSession(): void {
   } catch {}
 }
 
-export function getActiveCustomer(): { name: string; phone: string; village?: string } | null {
+export function getActiveCustomer(): CustomerSession | null {
   const session = getCustomerSession();
   if (!session) return null;
-  return {
-    name: session.name,
-    phone: session.phone,
-    village: session.village,
-  };
+  return session;
 }
 
-export function saveActiveCustomer(name: string, phone: string, village?: string): void {
+export function saveActiveCustomer(params: {
+  name: string;
+  phone: string;
+  nationalId?: string;
+  housePhoto?: string;
+  passwordHash?: string;
+  village?: string;
+}): void {
   saveCustomerSession({
-    name,
-    phone,
-    village,
+    name: params.name,
+    phone: params.phone,
+    nationalId: params.nationalId,
+    housePhoto: params.housePhoto,
+    passwordHash: params.passwordHash,
+    village: params.village,
+    savedAt: new Date().toISOString(),
     lastActiveAt: new Date().toISOString(),
   });
 }

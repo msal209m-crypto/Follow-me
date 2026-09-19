@@ -32,6 +32,7 @@ import {
   ShoppingCart,
   Check,
   X,
+  Compass,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -48,6 +49,7 @@ interface SidebarProps {
   onOpenShareModal?: () => void;
   onSwitchToStore?: () => void;
   onOpenLanding?: () => void;
+  onStartTour?: () => void;
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
   mobileOpen: boolean;
@@ -62,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenShareModal,
   onSwitchToStore,
   onOpenLanding,
+  onStartTour,
   isCollapsed,
   setIsCollapsed,
   mobileOpen,
@@ -681,6 +684,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <span>{language === 'ar' ? 'EN' : 'عربي'}</span>
                   </button>
                 </div>
+
+                {/* Onboarding Tour Button in Sidebar */}
+                {onStartTour && !isCashierMode && (
+                  <button
+                    type="button"
+                    id="sidebar-btn-tour"
+                    onClick={() => {
+                      setMobileOpen(false);
+                      onStartTour();
+                    }}
+                    className="w-full flex items-center justify-between py-2 px-3 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/50 text-amber-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                    title={language === 'ar' ? 'الجولة التعريفية بالنظام' : 'System Onboarding Tour'}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Compass className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{language === 'ar' ? 'الجولة التعريفية' : 'Onboarding Tour'}</span>
+                    </div>
+                    <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">
+                      {language === 'ar' ? 'دليل البدء' : 'Guide'}
+                    </span>
+                  </button>
+                )}
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2">
@@ -721,6 +746,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     className="p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-650 shadow-sm"
                   >
                     <SettingsIcon className="w-4 h-4 text-teal-400" />
+                  </button>
+                )}
+
+                {onStartTour && !isCashierMode && (
+                  <button
+                    type="button"
+                    onClick={onStartTour}
+                    title={language === 'ar' ? 'الجولة التعريفية' : 'Onboarding Tour'}
+                    className="p-2 text-amber-300 hover:text-amber-200 bg-amber-950/70 hover:bg-amber-900/80 rounded-lg border border-amber-500/50 shadow-sm cursor-pointer active:scale-95"
+                  >
+                    <Compass className="w-4 h-4 text-amber-400" />
                   </button>
                 )}
               </div>

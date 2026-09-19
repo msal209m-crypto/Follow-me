@@ -70,6 +70,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
+    const handleUserChanged = (e: any) => {
+      if (e?.detail?.profile && e?.detail?.uid) {
+        setCurrentUser({
+          uid: e.detail.uid,
+          email: e.detail.profile.email,
+          displayName: e.detail.profile.displayName,
+        });
+        setUserProfile(e.detail.profile);
+      }
+    };
+
+    const handleGlobalLogout = () => {
+      setCurrentUser(null);
+      setUserProfile(null);
+    };
+
+    window.addEventListener('flowapp:user-changed', handleUserChanged);
+    window.addEventListener('flowapp:global-logout', handleGlobalLogout);
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser({ uid: user.uid, email: user.email, displayName: user.displayName });
@@ -115,7 +134,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      window.removeEventListener('flowapp:user-changed', handleUserChanged);
+      window.removeEventListener('flowapp:global-logout', handleGlobalLogout);
+      unsubscribe();
+    };
   }, []);
 
   const signInWithEmail = async (email: string, pass: string) => {

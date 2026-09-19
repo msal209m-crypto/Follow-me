@@ -60,6 +60,20 @@ service cloud.firestore {
       }
     }
 
+    // Public Village Stores Directory (Browsing stores by village)
+    match /stores/{storeId} {
+      allow read: if true;
+      allow write: if isAdmin() || (request.auth != null && (storeId == request.auth.uid || request.resource.data.ownerId == request.auth.uid));
+    }
+
+    // Orders collection: Customers and Merchants can access their respective orders
+    match /delivery_orders/{orderId} {
+      allow create: if true;
+      allow read: if isAdmin() || (request.auth != null && (resource.data.merchantId == request.auth.uid || resource.data.customerId == request.auth.uid));
+      allow update: if isAdmin() || (request.auth != null && (resource.data.merchantId == request.auth.uid || request.resource.data.merchantId == request.auth.uid));
+      allow delete: if isAdmin();
+    }
+
     // Default deny all other requests
     match /{document=**} {
       allow read, write: if false;
