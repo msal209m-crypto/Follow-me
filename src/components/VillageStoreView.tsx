@@ -34,6 +34,7 @@ import {
   UserCheck,
   Building,
   KeyRound,
+  AlertTriangle,
 } from 'lucide-react';
 import { Item, StoreSettings, DeliveryOrder } from '../types';
 import {
@@ -42,7 +43,7 @@ import {
   playNotificationChime,
   getStoresDirectory,
 } from '../services/deliveryService';
-import { getPlatformAds, PlatformAd } from '../services/platformSettingsService';
+import { getPlatformAds, PlatformAd, getPlatformDeveloperSettings } from '../services/platformSettingsService';
 import {
   getActiveCustomer,
   saveActiveCustomer,
@@ -101,9 +102,23 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   }, [activeCustomer]);
 
   // Village & Store Selection
-  const allStores = useMemo(() => getStoresDirectory(), []);
+  const allStores = useMemo(() => getStoresDirectory().filter(s => s.status !== 'SUSPENDED'), []);
   const [selectedVillage, setSelectedVillage] = useState<string>('ALL');
   const [selectedStoreId, setSelectedStoreId] = useState<string>('default');
+
+  const [devSettings, setDevSettings] = useState(() => getPlatformDeveloperSettings());
+
+  useEffect(() => {
+    const handleDevSettingsUpdate = (e: any) => {
+      if (e.detail) {
+        setDevSettings(e.detail);
+      } else {
+        setDevSettings(getPlatformDeveloperSettings());
+      }
+    };
+    window.addEventListener('qaryati:dev-settings-updated', handleDevSettingsUpdate);
+    return () => window.removeEventListener('qaryati:dev-settings-updated', handleDevSettingsUpdate);
+  }, []);
 
   const FIXED_VILLAGES = [
     'قرية الفصور',
@@ -352,6 +367,12 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
   // Send Order Directly to Store with System Notification & Driver Flow
   const handlePlaceOrderToStore = () => {
+    const currentDevSettings = getPlatformDeveloperSettings();
+    if (currentDevSettings.maintenanceMode) {
+      alert(currentDevSettings.maintenanceMessage || 'عذراً، المنصة في وضع الصيانة والتحديثات الكبرى حالياً. لا يمكن استقبال طلبات جديدة مؤقتاً.');
+      return;
+    }
+
     if (cartItemsList.length === 0) return;
 
     const validName = customerName.trim() || 'عميل المتجر';
@@ -494,6 +515,15 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       dir={isRTL ? 'rtl' : 'ltr'}
       className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white font-sans"
     >
+      {devSettings.maintenanceMode && (
+        <div className="bg-amber-950/95 border-b-2 border-amber-600 px-4 py-3 text-amber-200 text-center text-xs sm:text-sm font-bold shadow-xl flex items-center justify-center gap-2 z-40 sticky top-0">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 animate-bounce" />
+          <span>
+            <strong>تنبيه صيانة المنصة:</strong> {devSettings.maintenanceMessage || 'عذراً، المنصة في وضع الصيانة والتحديثات الكبرى حالياً. لا يمكن استقبال طلبات جديدة مؤقتاً.'}
+          </span>
+        </div>
+      )}
+
       {/* Top Customer Store Header */}
       <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-slate-800 shadow-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">

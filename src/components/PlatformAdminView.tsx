@@ -44,6 +44,8 @@ import {
   Info,
   PackagePlus,
   LogOut,
+  Edit3,
+  Save,
 } from 'lucide-react';
 import { clearAllSystemSessions } from '../services/rbacAuthService';
 import JsBarcode from 'jsbarcode';
@@ -76,7 +78,10 @@ import {
   getBarcodePlatformConfig,
   saveBarcodePlatformConfig,
   getPlatformDeveloperSettings,
-  savePlatformDeveloperSettings
+  savePlatformDeveloperSettings,
+  getApprovedVillages,
+  addApprovedVillage,
+  deleteApprovedVillage
 } from '../services/platformSettingsService';
 
 interface PlatformAdminViewProps {
@@ -87,7 +92,7 @@ interface PlatformAdminViewProps {
   onOpenLanding: () => void;
 }
 
-type AdminTab = 'LICENSES' | 'BARCODE' | 'ADS' | 'SETTINGS' | 'LANGUAGE' | 'STORES_ORDERS';
+type AdminTab = 'LICENSES' | 'BARCODE' | 'ADS' | 'SETTINGS' | 'LANGUAGE' | 'STORES_ORDERS' | 'VILLAGES_STORES';
 
 export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   settings: propSettings,
@@ -310,6 +315,117 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   const [newMerchantPin, setNewMerchantPin] = useState('1234');
   const [newIsPro, setNewIsPro] = useState(true);
   const [createdStoreModal, setCreatedStoreModal] = useState<StoreDirectoryRecord | null>(null);
+
+  // --- Approved Villages & Store Editing State ---
+  const [approvedVillages, setApprovedVillages] = useState<string[]>(() => getApprovedVillages());
+  const [newVillageInput, setNewVillageInput] = useState('');
+  const [editingStoreId, setEditingStoreId] = useState<string | null>(null);
+  const [editStoreName, setEditStoreName] = useState('');
+  const [editOwnerName, setEditOwnerName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editVillage, setEditVillage] = useState('');
+  const [editStatus, setEditStatus] = useState<'ACTIVE' | 'SUSPENDED'>('ACTIVE');
+  const [suspendModalStore, setSuspendModalStore] = useState<StoreDirectoryRecord | null>(null);
+  const [suspendReasonInput, setSuspendReasonInput] = useState('');
+
+  const handleOpenSuspendModal = (store: StoreDirectoryRecord) => {
+    setSuspendModalStore(store);
+    setSuspendReasonInput(store.suspendReason || '');
+  };
+
+  const handleConfirmSuspend = () => {
+    if (!suspendModalStore) return;
+    const currentStores = getStoresDirectory();
+    const updated = currentStores.map((s) => {
+      if (s.id === suspendModalStore.id) {
+        return {
+          ...s,
+          status: 'SUSPENDED' as const,
+          suspendReason: suspendReasonInput.trim() || 'تم حظر وتجميد المتجر من قِبل إدارة المنصة لمخالفة الشروط والأحكام.',
+        };
+      }
+      return s;
+    });
+    saveStoresDirectory(updated);
+    setStores(updated);
+    setSuspendModalStore(null);
+    setSuspendReasonInput('');
+    showToast('تم حظر وتجميد المتجر بنجاح وإخفائه من تطبيق العملاء');
+  };
+
+  const handleUnsuspendStore = (storeId: string) => {
+    const currentStores = getStoresDirectory();
+    const updated = currentStores.map((s) => {
+      if (s.id === storeId) {
+        return {
+          ...s,
+          status: 'ACTIVE' as const,
+          suspendReason: undefined,
+        };
+      }
+      return s;
+    });
+    saveStoresDirectory(updated);
+    setStores(updated);
+    showToast('تم إلغاء الحظر وإعادة تنشيط المتجر بنجاح');
+  };
+
+  const handleDeleteStorePermanent = (storeId: string, storeName: string) => {
+    if (confirm(`⚠️ هل أنت متأكد من الحذف النهائي للمتجر "${storeName}"؟ سيتم إزالته تماماً من المنصة ولن يظهر في تطبيق العملاء أبداً.`)) {
+      const currentStores = getStoresDirectory();
+      const updated = currentStores.filter((s) => s.id !== storeId);
+      saveStoresDirectory(updated);
+      setStores(updated);
+      showToast(`تم الحذف النهائي للمتجر ${storeName}`);
+    }
+  };
+
+  const handleAddVillageSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVillageInput.trim()) return;
+    const updated = addApprovedVillage(newVillageInput.trim());
+    setApprovedVillages(updated);
+    setNewVillageInput('');
+    showToast('تمت إضافة القرية المعتمدة بنجاح');
+  };
+
+  const handleDeleteVillageItem = (vil: string) => {
+    if (confirm(`هل أنت متأكد من حذف ${vil} من قائمة القرى المعتمدة؟`)) {
+      const updated = deleteApprovedVillage(vil);
+      setApprovedVillages(updated);
+      showToast('تم حذف القرية بنجاح');
+    }
+  };
+
+  const handleStartEditStore = (store: StoreDirectoryRecord) => {
+    setEditingStoreId(store.id);
+    setEditStoreName(store.name);
+    setEditOwnerName(store.ownerName);
+    setEditPhone(store.phone);
+    setEditVillage(store.cityOrVillage);
+    setEditStatus(store.status || 'ACTIVE');
+  };
+
+  const handleSaveStoreEdit = (storeId: string) => {
+    const currentStores = getStoresDirectory();
+    const updated = currentStores.map((s) => {
+      if (s.id === storeId) {
+        return {
+          ...s,
+          name: editStoreName.trim() || s.name,
+          ownerName: editOwnerName.trim() || s.ownerName,
+          phone: editPhone.trim() || s.phone,
+          cityOrVillage: editVillage.trim() || s.cityOrVillage,
+          status: editStatus,
+        };
+      }
+      return s;
+    });
+    saveStoresDirectory(updated);
+    setStores(updated);
+    setEditingStoreId(null);
+    showToast('تم تحديث بيانات المتجر بنجاح بواسطة المطور');
+  };
 
   const refreshStoresAndOrders = () => {
     setStores(getStoresDirectory());
@@ -555,6 +671,19 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
           >
             <Truck className="w-3.5 h-3.5 text-teal-400" />
             <span>المتاجر والطلبات ({stores.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('VILLAGES_STORES')}
+            className={`py-2 px-3.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              activeTab === 'VILLAGES_STORES'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <MapPin className="w-3.5 h-3.5 text-rose-400" />
+            <span>إدارة القرى والمتاجر المستقلة ({approvedVillages.length})</span>
           </button>
         </div>
 
@@ -1304,6 +1433,41 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                   </div>
                 </div>
 
+                {/* Maintenance Mode Configuration */}
+                <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-500/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-400" />
+                      <div>
+                        <span className="font-black text-xs text-amber-300">وضع الصيانة والتحديثات الكبرى (Maintenance Mode)</span>
+                        <p className="text-[11px] text-slate-400">إظهار رسالة عامة للعملاء لمنع استقبال طلبات جديدة مؤقتاً أثناء الصيانة.</p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={devSettings.maintenanceMode}
+                        onChange={(e) => setDevSettings({ ...devSettings, maintenanceMode: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                    </label>
+                  </div>
+
+                  {devSettings.maintenanceMode && (
+                    <div className="space-y-1.5 pt-2">
+                      <label className="block text-[11px] font-bold text-amber-200">الرسالة العامة المعروضة للعملاء أثناء الصيانة:</label>
+                      <textarea
+                        rows={3}
+                        value={devSettings.maintenanceMessage || ''}
+                        onChange={(e) => setDevSettings({ ...devSettings, maintenanceMessage: e.target.value })}
+                        placeholder="أدخل رسالة الصيانة للعملاء..."
+                        className="w-full bg-slate-900 border border-amber-500/40 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  )}
+                </div>
+
                 {/* Security PIN Change */}
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
@@ -1785,6 +1949,259 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
       )}
 
       {/* Store Created Successfully & Protected Merchant Account Opened Modal */}
+        {/* TAB: VILLAGES & STORES INDEPENDENT MANAGEMENT */}
+        {activeTab === 'VILLAGES_STORES' && (
+          <div className="space-y-6">
+            {/* 1. Approved Villages Management Card */}
+            <div className="bg-slate-900/90 border border-purple-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="font-black text-base text-white flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-rose-400" />
+                    <span>إدارة القرى المعتمدة في المنصة (القائمة الحصرية)</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    التحكم الكامل بالقرى المعتمدة التي تظهر للعملاء والتجار (إضافة، تعديل، أو حذف أي قرية فوراً).
+                  </p>
+                </div>
+              </div>
+
+              {/* Add Village Form */}
+              <form onSubmit={handleAddVillageSubmit} className="flex gap-2 flex-wrap sm:flex-nowrap">
+                <div className="relative flex-1">
+                  <MapPin className="w-4 h-4 text-slate-500 absolute top-3 right-3" />
+                  <input
+                    type="text"
+                    required
+                    value={newVillageInput}
+                    onChange={(e) => setNewVillageInput(e.target.value)}
+                    placeholder="أدخل اسم القرية المعتمدة الجديدة (مثال: قرية الجديدة)..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2.5 text-xs text-white focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="bg-rose-600 hover:bg-rose-500 text-white font-black px-5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-rose-950 cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>إضافة قرية معتمدة</span>
+                </button>
+              </form>
+
+              {/* Villages Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
+                {approvedVillages.map((vil, index) => (
+                  <div
+                    key={vil}
+                    className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3.5 flex items-center justify-between gap-2 shadow-sm hover:border-purple-500/40 transition-all"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-6 h-6 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 font-mono text-xs flex items-center justify-center font-bold shrink-0">
+                        {index + 1}
+                      </span>
+                      <span className="text-xs font-bold text-white truncate">{vil}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteVillageItem(vil)}
+                      className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer shrink-0"
+                      title="حذف القرية"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Stores Data Management & Direct Editing Card */}
+            <div className="bg-slate-900/90 border border-purple-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="font-black text-base text-white flex items-center gap-2">
+                    <Store className="w-5 h-5 text-emerald-400" />
+                    <span>إدارة وتعديل بيانات المتاجر بشكل مستقل (لوحة المطور)</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    تعديل اسم المتجر، اسم المالك، رقم الجوال، القرية التابعة، أو حالة الحساب مباشرة وبشكل مستقل عن باقي الأطراف.
+                  </p>
+                </div>
+              </div>
+
+              {/* Stores List with Edit Capabilities */}
+              <div className="space-y-3">
+                {stores.map((store) => (
+                  <div
+                    key={store.id}
+                    className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4 transition-all shadow-md space-y-3"
+                  >
+                    {editingStoreId === store.id ? (
+                      /* Inline Edit Form */
+                      <div className="space-y-3 p-3 bg-purple-950/20 border border-purple-500/30 rounded-xl">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-300 mb-1">اسم المتجر</label>
+                            <input
+                              type="text"
+                              value={editStoreName}
+                              onChange={(e) => setEditStoreName(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-300 mb-1">اسم المالك</label>
+                            <input
+                              type="text"
+                              value={editOwnerName}
+                              onChange={(e) => setEditOwnerName(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-300 mb-1">رقم الجوال</label>
+                            <input
+                              type="text"
+                              value={editPhone}
+                              onChange={(e) => setEditPhone(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-300 mb-1">القرية التابعة</label>
+                            <select
+                              value={editVillage}
+                              onChange={(e) => setEditVillage(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                            >
+                              {approvedVillages.map((v) => (
+                                <option key={v} value={v}>{v}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-300 mb-1">حالة الحساب</label>
+                            <select
+                              value={editStatus}
+                              onChange={(e) => setEditStatus(e.target.value as 'ACTIVE' | 'SUSPENDED')}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                            >
+                              <option value="ACTIVE">نشط (يعمل طبيعي)</option>
+                              <option value="SUSPENDED">موقوف (مجمد)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveStoreEdit(store.id)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-4 py-1.5 rounded-lg text-xs flex items-center gap-1 cursor-pointer shadow"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>حفظ التعديلات</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingStoreId(null)}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-1.5 rounded-lg text-xs cursor-pointer"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Display Row */
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shrink-0">
+                            <Store className="w-5 h-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-black text-white text-sm truncate">{store.name}</h3>
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                store.isPro ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-slate-800 text-slate-400'
+                              }`}>
+                                {store.planName || 'الباقة المجانية'}
+                              </span>
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                store.status === 'SUSPENDED'
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse'
+                                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              }`}>
+                                {store.status === 'SUSPENDED' ? '⛔ موقوف / محظور' : '✅ نشط'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-3 flex-wrap">
+                              <span>👤 {store.ownerName}</span>
+                              <span>📱 {store.phone}</span>
+                              <span className="text-rose-400 font-bold">📍 {store.cityOrVillage}</span>
+                            </p>
+                            {store.status === 'SUSPENDED' && store.suspendReason && (
+                              <p className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-500/30 px-2.5 py-1 rounded-lg mt-1.5">
+                                <strong>سبب الحظر:</strong> {store.suspendReason}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditStore(store)}
+                            className="px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 font-bold text-xs rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>تعديل</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStorePro(store.id)}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-colors cursor-pointer ${
+                              store.isPro
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
+                                : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            {store.isPro ? 'إلغاء PRO' : 'ترقية PRO'}
+                          </button>
+
+                          {store.status === 'SUSPENDED' ? (
+                            <button
+                              type="button"
+                              onClick={() => handleUnsuspendStore(store.id)}
+                              className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                            >
+                              إلغاء الحظر
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSuspendModal(store)}
+                              className="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                            >
+                              حظر / تجميد
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteStorePermanent(store.id, store.name)}
+                            className="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 text-rose-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                            title="حذف نهائي من المنصة"
+                          >
+                            حذف نهائي
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
       {createdStoreModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
           <div className="bg-slate-900 border border-purple-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-5 relative overflow-hidden">
@@ -1899,6 +2316,54 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                   إغلاق
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {suspendModalStore && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-slate-900 border border-rose-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-black text-white text-sm sm:text-base">
+                  حظر وتجميد متجر: {suspendModalStore.name}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  حدد سبب الحظر أو التجميد ليتم عرضه للتاجر في لوحة التحكم الخاصة به وإخفاء المتجر من تطبيق العملاء.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">سبب الحظر / التجميد (إلزامي أو توضيحي)</label>
+              <textarea
+                rows={3}
+                value={suspendReasonInput}
+                onChange={(e) => setSuspendReasonInput(e.target.value)}
+                placeholder="مثال: عدم الالتزام بالأسعار المعتمدة، وجود شكاوى متكررة من العملاء، أو انتهاء فترة الترخيص..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-rose-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={handleConfirmSuspend}
+                className="bg-rose-600 hover:bg-rose-500 text-white font-black px-4 py-2 rounded-xl text-xs cursor-pointer shadow-lg shadow-rose-950"
+              >
+                تأكيد حظر المتجر
+              </button>
+              <button
+                type="button"
+                onClick={() => setSuspendModalStore(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
+              >
+                إلغاء
+              </button>
             </div>
           </div>
         </div>

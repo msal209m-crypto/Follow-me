@@ -363,6 +363,7 @@ export interface StoreDirectoryRecord {
   isPro: boolean;
   planName: string;
   status: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
+  suspendReason?: string;
   joinedAt: string;
   merchantPin?: string;
 }

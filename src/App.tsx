@@ -24,7 +24,7 @@ import { OrderGoodsModal } from './components/OrderGoodsModal';
 import { AuthModal } from './components/AuthModal';
 import { RBACAuthModal } from './components/RBACAuthModal';
 import { SessionInactivityGuard } from './components/SessionInactivityGuard';
-import { clearAllSystemSessions } from './services/rbacAuthService';
+import { clearAllSystemSessions, getActiveSessionRole } from './services/rbacAuthService';
 import { ShareModal } from './components/ShareModal';
 import { ToastNotification } from './components/ToastNotification';
 import { VillageStoreView } from './components/VillageStoreView';
@@ -545,10 +545,21 @@ const PortalRouter: React.FC = () => {
       const search = window.location.search;
       const params = new URLSearchParams(search);
       const portalParam = params.get('portal');
+      const activeRole = getActiveSessionRole();
+
+      if (portalParam === 'admin' || window.location.hash === '#admin') {
+        if (activeRole === 'DEVELOPER') return 'admin';
+        return 'landing';
+      }
+      if (portalParam === 'driver' || window.location.hash === '#driver') {
+        if (activeRole === 'DRIVER') return 'driver';
+        return 'landing';
+      }
+      if (portalParam === 'merchant' || window.location.hash === '#merchant') {
+        if (activeRole === 'MERCHANT') return 'merchant';
+        return 'landing';
+      }
       if (portalParam === 'store' || window.location.hash === '#store') return 'store';
-      if (portalParam === 'merchant' || window.location.hash === '#merchant') return 'merchant';
-      if (portalParam === 'driver' || window.location.hash === '#driver') return 'driver';
-      if (portalParam === 'admin' || window.location.hash === '#admin') return 'admin';
     } catch {}
     return 'landing';
   });
@@ -556,6 +567,24 @@ const PortalRouter: React.FC = () => {
   const [showGlobalAuthModal, setShowGlobalAuthModal] = useState(false);
   const [showRBACAuthModal, setShowRBACAuthModal] = useState(false);
   const [rbacInitialRole, setRbacInitialRole] = useState<'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER'>('MERCHANT');
+
+  // Security Guard: Check if trying to access protected portals without active session role
+  useEffect(() => {
+    const activeRole = getActiveSessionRole();
+    if (portalMode === 'admin' && activeRole !== 'DEVELOPER') {
+      setPortalMode('landing');
+      setRbacInitialRole('DEVELOPER');
+      setShowRBACAuthModal(true);
+    } else if (portalMode === 'driver' && activeRole !== 'DRIVER') {
+      setPortalMode('landing');
+      setRbacInitialRole('DRIVER');
+      setShowRBACAuthModal(true);
+    } else if (portalMode === 'merchant' && activeRole !== 'MERCHANT') {
+      setPortalMode('landing');
+      setRbacInitialRole('MERCHANT');
+      setShowRBACAuthModal(true);
+    }
+  }, [portalMode]);
 
   const handleOpenRBACAuth = (role?: 'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER') => {
     if (role) {

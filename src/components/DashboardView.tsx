@@ -53,6 +53,7 @@ import { useSubscription } from '../context/SubscriptionContext';
 import { NavigationTab, Transaction, Item } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
 import { DashboardLowStockAlert } from './DashboardLowStockAlert';
+import { getStoresDirectory } from '../services/deliveryService';
 
 interface DashboardViewProps {
   onOpenAddItem: () => void;
@@ -133,6 +134,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // 1. Current Date & Today's Transactions
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
+  const merchantStoreRecord = useMemo(() => {
+    const phone = settings.phone;
+    if (!phone) return null;
+    const stores = getStoresDirectory();
+    return stores.find((s) => s.phone === phone);
+  }, [settings.phone]);
 
   const todayTransactions = useMemo(() => {
     return transactions.filter(
@@ -302,6 +310,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-3 max-w-7xl mx-auto pb-4">
+      {merchantStoreRecord?.status === 'SUSPENDED' && (
+        <div className="bg-rose-950/90 border-2 border-rose-600 rounded-2xl p-4 text-white shadow-xl space-y-2 animate-bounce">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-6 h-6 text-rose-400 shrink-0" />
+            <h2 className="font-black text-sm sm:text-base text-rose-200">
+              ⚠️ تنبيه إداري عاجل: تم حظر وتجميد متجرك من الظهور في تطبيق العملاء!
+            </h2>
+          </div>
+          <p className="text-xs text-rose-100 bg-rose-950/60 p-3 rounded-xl border border-rose-500/30">
+            <strong className="text-rose-300">سبب الحظر / التجميد:</strong> {merchantStoreRecord.suspendReason || 'تم حظر وتجميد المتجر من قِبل إدارة المنصة لمخالفة الشروط والأحكام.'}
+          </p>
+          <p className="text-[11px] text-slate-300">
+            يرجى التواصل مع إدارة منصة قريتي لدراسة الأسباب وتعديل المخالفة ليتم إعادة تفعيل متجرك فوراً.
+          </p>
+        </div>
+      )}
+
       {/* 1. TOP SLEEK APP CONSOLE HEADER (VERY COMPACT) */}
       <div className="bg-slate-900/95 border border-slate-800 rounded-2xl px-3.5 py-2.5 shadow-sm flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2.5">

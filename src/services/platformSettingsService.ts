@@ -49,6 +49,7 @@ export interface PlatformDeveloperSettings {
   allowPublicStore: boolean;
   allowDriverRegistration: boolean;
   maintenanceMode: boolean;
+  maintenanceMessage?: string;
   receiptFooterNote: string;
   developerAnnouncement?: string;
   heroImageUrl?: string;
@@ -61,6 +62,57 @@ export interface PlatformDeveloperSettings {
 const ADS_STORAGE_KEY = 'qaryati_platform_ads_v1';
 const BARCODE_CONFIG_KEY = 'qaryati_platform_barcode_config_v1';
 const DEVELOPER_SETTINGS_KEY = 'qaryati_developer_settings_v1';
+const APPROVED_VILLAGES_KEY = 'qaryati_approved_villages_v1';
+
+const DEFAULT_APPROVED_VILLAGES = [
+  'قرية الفصور',
+  'قرية الحقالي',
+  'قرية الباركة',
+  'قرية الانهوم',
+  'قرية مشيجبه',
+  'سوق حول جباري',
+  'قرية المداد',
+  'قرية الجامع',
+  'قرية المسيلة',
+  'قرية المكيل',
+];
+
+export function getApprovedVillages(): string[] {
+  try {
+    const raw = localStorage.getItem(APPROVED_VILLAGES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return DEFAULT_APPROVED_VILLAGES;
+}
+
+export function saveApprovedVillages(villages: string[]): void {
+  try {
+    localStorage.setItem(APPROVED_VILLAGES_KEY, JSON.stringify(villages));
+    window.dispatchEvent(new CustomEvent('qaryati:villages-updated', { detail: villages }));
+  } catch {}
+}
+
+export function addApprovedVillage(name: string): string[] {
+  const clean = name.trim();
+  if (!clean) return getApprovedVillages();
+  const current = getApprovedVillages();
+  if (!current.includes(clean)) {
+    const updated = [...current, clean];
+    saveApprovedVillages(updated);
+    return updated;
+  }
+  return current;
+}
+
+export function deleteApprovedVillage(name: string): string[] {
+  const current = getApprovedVillages();
+  const updated = current.filter((v) => v !== name);
+  saveApprovedVillages(updated);
+  return updated;
+}
 
 // Initial default promotional ads for the village store
 const DEFAULT_ADS: PlatformAd[] = [
@@ -117,6 +169,7 @@ const DEFAULT_DEVELOPER_SETTINGS: PlatformDeveloperSettings = {
   allowPublicStore: true,
   allowDriverRegistration: true,
   maintenanceMode: false,
+  maintenanceMessage: 'عذراً، المنصة في وضع الصيانة والتحديثات الكبرى حالياً. لا يمكن استقبال طلبات جديدة مؤقتاً، وسنعود للخدمة قريباً جداً!',
   receiptFooterNote: 'شكراً لتعاملكم معنا - نتشرف دائماً بخدمتكم في قريتنا الحبيبة',
   developerAnnouncement: '',
   heroImageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1200',

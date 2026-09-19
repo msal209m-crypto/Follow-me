@@ -746,12 +746,20 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <button
                 type="button"
                 id="top-auth-login-btn"
-                onClick={onOpenAuthModal}
+                onClick={async () => {
+                  clearAllSystemSessions();
+                  await logout();
+                  if (onOpenLanding) {
+                    onOpenLanding();
+                  } else {
+                    onOpenAuthModal();
+                  }
+                }}
                 className="h-8 sm:h-9 px-2.5 sm:px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0 active:scale-95 border border-emerald-400/40"
-                title={language === 'ar' ? 'تسجيل الدخول' : 'Sign In'}
+                title={language === 'ar' ? 'نظام الدخول وصلاحيات الأمان والعودة للبوابات' : 'Security Portal & Exit'}
               >
                 <LogIn className="w-3.5 h-3.5 text-white" />
-                <span className="hidden xs:inline">{language === 'ar' ? 'تسجيل الدخول' : 'Sign In'}</span>
+                <span className="hidden xs:inline">{language === 'ar' ? 'نظام الدخول والأمان' : 'Security Portal'}</span>
               </button>
             )}
 
