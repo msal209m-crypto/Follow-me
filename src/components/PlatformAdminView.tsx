@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { copyToClipboard } from '../utils/clipboardUtils';
 import {
   ShieldCheck,
   Store,
@@ -158,8 +159,8 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
     }
   };
 
-  const handleCopyKey = (key: string) => {
-    navigator.clipboard.writeText(key);
+  const handleCopyKey = async (key: string) => {
+    await copyToClipboard(key);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
     showToast('تم نسخ مفتاح الترخيص إلى الحافظة');
@@ -2297,9 +2298,9 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     const credentialsText = `🏪 منصة قريتي - بيانات حساب التاجر الجديد\n📍 القرية: ${createdStoreModal.cityOrVillage}\n🏬 اسم المتجر: ${createdStoreModal.name}\n👤 اسم التاجر: ${createdStoreModal.ownerName}\n📱 الهاتف: ${createdStoreModal.phone}\n🔐 رمز الدخول المحمي (PIN): ${createdStoreModal.merchantPin || '1234'}\n👑 الترخيص: ${createdStoreModal.planName}\n\nرابط إدارة المتجر وإضافة الأصناف:\n${window.location.origin}/?portal=merchant`;
-                    navigator.clipboard.writeText(credentialsText);
+                    await copyToClipboard(credentialsText);
                     showToast('تم نسخ بيانات المتجر ورابط الدخول إلى الحافظة');
                   }}
                   className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"

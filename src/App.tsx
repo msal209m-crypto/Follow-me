@@ -69,7 +69,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
     items,
     isCashierMode,
   } = useApp();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const activeMerchantId = currentUser?.uid;
   const { isPro, setShowSubscriptionModal, canAddItemWithCount } = useSubscription();
 
@@ -138,7 +138,9 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
     startMerchantOnboardingTour({
       language,
       activeMerchantId,
-      storeName: settings.appName || settings.storeName,
+      ownerName: userProfile?.displayName || settings.ownerName || (language === 'ar' ? 'التاجر المسؤول' : 'Merchant'),
+      storeName: settings.storeName || userProfile?.storeName || 'متجري الذكي',
+      villageName: userProfile?.village || settings.address || '',
       onNavigateToTab: (tab) => setActiveTab(tab as any),
       onOpenAddItem: () => handleOpenAddItem(),
       onOpenSettings: () => {

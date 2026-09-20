@@ -6,6 +6,8 @@ export interface TourOptions {
   language: string;
   activeMerchantId?: string | null;
   storeName?: string;
+  ownerName?: string;
+  villageName?: string;
   onNavigateToTab?: (tab: string) => void;
   onOpenAddItem?: () => void;
   onOpenSettings?: () => void;
@@ -139,7 +141,7 @@ const setupMobileSwipeToDismiss = (introInstance: any, onDismiss: () => void): v
 };
 
 export const startMerchantOnboardingTour = (options: TourOptions): void => {
-  const { language, activeMerchantId, storeName } = options;
+  const { language, activeMerchantId, storeName, ownerName, villageName } = options;
   const isAr = language === 'ar';
 
   const intro = introJs();
@@ -147,10 +149,10 @@ export const startMerchantOnboardingTour = (options: TourOptions): void => {
   // Define steps with fallback to visible elements
   const steps: any[] = [
     {
-      title: isAr ? 'مرحباً بك في لوحة تحكم متجرك! 🎉' : 'Welcome to Your Store Dashboard! 🎉',
+      title: isAr ? `مرحباً بك يا ${ownerName || 'التاجر'}! 🏪✨` : `Welcome, ${ownerName || 'Merchant'}! 🏪✨`,
       intro: isAr
-        ? `أهلاً بك في متجر <strong>${storeName || 'متجرك الجديد'}</strong>! سنأخذك في جولة سريعة وموجزة لنتعرف معاً على كيفية ضبط إعدادات متجرك، وإضافة أول صنف، واستقبال مبيعاتك وطلبات التوصيل بسهولة.`
-        : `Welcome to <strong>${storeName || 'Your Store'}</strong>! We will take you on a quick walkthrough to show how to configure your store, add your first product, and manage sales & deliveries.`,
+        ? `أهلاً بك في متجر <strong>${storeName || 'متجرك'}</strong> ${villageName ? `(${villageName})` : ''}!<br/><br/>يسعدنا انضمامك. سنأخذك في جولة سريعة وموجزة لنتعرف معاً على كيفية ضبط إعدادات متجرك، وإضافة أول صنف، واستقبال مبيعاتك وطلبات التوصيل بكل سهولة.`
+        : `Welcome to your store <strong>${storeName || 'Store'}</strong> ${villageName ? `(${villageName})` : ''}!<br/><br/>We will take you on a quick walkthrough to show how to configure your store, add your first product, and manage sales & deliveries.`,
     },
     {
       element: '#top-btn-settings',

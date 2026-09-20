@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { copyToClipboard } from '../utils/clipboardUtils';
 import {
   Search,
   ShoppingCart,
@@ -575,7 +576,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
         // Fallback to clipboard
       }
     }
-    navigator.clipboard.writeText(url);
+    await copyToClipboard(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
   };
@@ -933,7 +934,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                                 <span>{st.name}</span>
                                 {st.isPro && <span className="text-xs" title="تاجر معتمد">👑</span>}
                               </h5>
-                              <p className="text-[11px] text-slate-400 mt-0.5">المالك: {st.ownerName}</p>
+                              <p className="text-[11px] text-emerald-400 font-semibold mt-0.5">{st.cityOrVillage}</p>
                             </div>
                           </div>
                           {isSelected && (

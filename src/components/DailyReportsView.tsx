@@ -30,6 +30,7 @@ import {
   DailyReportSummaryData,
 } from '../utils/exportReportUtils';
 import { UserActivityLogPanel } from './UserActivityLogPanel';
+import { InventoryAuditReportView } from './InventoryAuditReportView';
 
 export const DailyReportsView: React.FC = () => {
   const { transactions, cashiers, settings, language, t, showNotification } = useApp();
@@ -44,7 +45,7 @@ export const DailyReportsView: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
   const [selectedCashier, setSelectedCashier] = useState<string>('ALL');
-  const [reportMode, setReportMode] = useState<'ALL_SALES' | 'PER_PERSON' | 'AUDIT_LOG'>('ALL_SALES');
+  const [reportMode, setReportMode] = useState<'ALL_SALES' | 'PER_PERSON' | 'AUDIT_LOG' | 'INVENTORY_AUDIT'>('ALL_SALES');
 
   // Filter transactions by date / month and cashier
   const periodTransactions = useMemo(() => {
@@ -387,11 +388,23 @@ export const DailyReportsView: React.FC = () => {
               <Activity className="w-3.5 h-3.5 text-amber-300" />
               <span>{language === 'ar' ? '🛡️ سجل العمليات (Audit Log)' : '🛡️ Audit Log'}</span>
             </button>
+            <button
+              id="btn-report-inventory-audit"
+              onClick={() => setReportMode('INVENTORY_AUDIT')}
+              className={`flex-1 lg:flex-none px-3.5 py-2 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 ${
+                reportMode === 'INVENTORY_AUDIT'
+                  ? 'bg-emerald-600 text-white shadow-sm border border-emerald-500/50'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Package className="w-3.5 h-3.5 text-emerald-300" />
+              <span>{language === 'ar' ? '📦 تقرير جرد المخزون' : '📦 Inventory Audit'}</span>
+            </button>
           </div>
         </div>
 
         {/* Date / Month & Cashier Filters (Only for Sales Reports) */}
-        {reportMode !== 'AUDIT_LOG' && (
+        {reportMode !== 'AUDIT_LOG' && reportMode !== 'INVENTORY_AUDIT' && (
           <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
             <div className="flex flex-wrap items-center gap-3">
               {periodType === 'DAY' ? (
@@ -470,9 +483,11 @@ export const DailyReportsView: React.FC = () => {
         )}
       </div>
 
-      {/* Main Content Area: Either Audit Log or Printable Report Card */}
+      {/* Main Content Area: Audit Log vs Inventory Audit vs Printable Report Card */}
       {reportMode === 'AUDIT_LOG' ? (
         <UserActivityLogPanel />
+      ) : reportMode === 'INVENTORY_AUDIT' ? (
+        <InventoryAuditReportView />
       ) : (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-sm space-y-6">
         {/* Printable Header */}

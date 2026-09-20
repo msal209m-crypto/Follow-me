@@ -28,6 +28,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { LicenseKeyRecord } from '../types';
+import { copyToClipboard } from '../utils/clipboardUtils';
 import { OWNER_CONTACT } from '../config/ownerContact';
 import {
   createLicenseKey,
@@ -164,16 +165,7 @@ export const AdminLicensePanelModal: React.FC<AdminLicensePanelModalProps> = ({
   // Copy key helper
   const handleCopy = async (code: string) => {
     try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(code);
-      } else {
-        const el = document.createElement('input');
-        el.value = code;
-        document.body.appendChild(el);
-        el.select();
-        document.execCommand('copy');
-        document.body.removeChild(el);
-      }
+      await copyToClipboard(code);
       setCopiedKey(code);
       setTimeout(() => setCopiedKey(null), 2000);
     } catch (e) {
@@ -835,8 +827,8 @@ WITH CHECK (
                   <button
                     type="button"
                     onClick={async () => {
-                      if (navigator?.clipboard?.writeText) {
-                        await navigator.clipboard.writeText(SUPABASE_SQL_SCRIPT);
+                      const success = await copyToClipboard(SUPABASE_SQL_SCRIPT);
+                      if (success) {
                         setCopiedSql(true);
                         setTimeout(() => setCopiedSql(false), 2500);
                       }

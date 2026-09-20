@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { Transaction, StoreSettings } from '../types';
+import { copyToClipboard } from './clipboardUtils';
 
 export interface DailyReportSummaryData {
   periodType: 'DAY' | 'MONTH' | 'CUSTOM';
@@ -334,14 +335,14 @@ ${data.cashiersList.map((c) => `• ${c.cashierName}: ${fmtNum(c.totalSales)} ${
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         // Fallback to clipboard
-        await navigator.clipboard.writeText(shareText);
+        await copyToClipboard(shareText);
         return { success: true, method: 'clipboard' };
       }
       return { success: false, method: 'cancelled' };
     }
   } else {
     // Copy to clipboard
-    await navigator.clipboard.writeText(shareText);
+    await copyToClipboard(shareText);
     return { success: true, method: 'clipboard' };
   }
 };
