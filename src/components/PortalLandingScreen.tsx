@@ -20,10 +20,12 @@ import {
   Sliders,
   Crown,
   Sun,
-  Moon
+  Moon,
+  Megaphone
 } from 'lucide-react';
 import { StoreSettings } from '../types';
 import { verifyDeveloperPin, getPlatformDeveloperSettings, getPlatformAds } from '../services/platformSettingsService';
+import { VillageBulletinView } from './VillageBulletinView';
 
 interface PortalLandingScreenProps {
   settings: StoreSettings;
@@ -56,6 +58,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isDeveloper, setIsDeveloper] = useState(() => localStorage.getItem('qaryati_is_developer') === 'true');
+  const [showBulletinModal, setShowBulletinModal] = useState(false);
 
   // Developer / Owner PIN modal state
   const [showAdminPinModal, setShowAdminPinModal] = useState(false);
@@ -394,8 +397,71 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
             </div>
           ) : null}
 
+          {/* Card 5: إعلانات وأخبار القرية (Emerald / Amber Vibrant) */}
+          <div
+            onClick={() => setShowBulletinModal(true)}
+            className={`group cursor-pointer rounded-3xl p-5 flex flex-col justify-between shadow-lg hover:shadow-2xl transition-all duration-300 border relative overflow-hidden ${
+              isDarkMode 
+                ? 'bg-gradient-to-br from-emerald-950/70 via-slate-900 to-slate-900 border-emerald-500/40 hover:border-emerald-400' 
+                : 'bg-gradient-to-br from-emerald-50 via-white to-amber-50 border-emerald-200 hover:border-emerald-400 shadow-emerald-100'
+            }`}
+          >
+            <div className="absolute top-0 right-0 w-28 h-28 bg-emerald-500/15 rounded-full blur-2xl pointer-events-none group-hover:bg-emerald-500/30 transition-all" />
+            
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-amber-400 flex items-center justify-center text-white shadow-md shadow-emerald-500/30">
+                  <Megaphone className="w-6 h-6" />
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
+                  لأهالي القرية والمتاجر
+                </span>
+              </div>
+
+              <h3 className={`text-base sm:text-lg font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} group-hover:text-emerald-500 transition-colors`}>
+                لوحة إعلانات القرية
+              </h3>
+              <p className={`text-[11px] sm:text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'} mt-1.5 leading-relaxed`}>
+                تصفح أخبار القرية، المناسبات، التنبيهات، ونشر الإعلانات مباشرة.
+              </p>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-emerald-500/20 flex items-center justify-between">
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">تصفح لوحة القرية</span>
+              <div className="w-7 h-7 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all">
+                {isRTL ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
+              </div>
+            </div>
+          </div>
+
         </div>
       </main>
+
+      {/* Village Bulletin Modal from Main Gateway */}
+      {showBulletinModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl max-h-[90vh] rounded-3xl p-4 sm:p-6 shadow-2xl overflow-y-auto relative animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <Megaphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-white">لوحة إعلانات وأخبار القرية التفاعلية</h3>
+                  <p className="text-xs text-slate-400">أخبار أهالي القرية، المناسبات، والخدمات العامة مباشرة</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBulletinModal(false)}
+                className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <VillageBulletinView />
+          </div>
+        </div>
+      )}
 
       {/* Developer / Owner PIN Verification Modal */}
       {showAdminPinModal && (

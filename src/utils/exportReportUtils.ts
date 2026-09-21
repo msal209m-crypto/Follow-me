@@ -346,3 +346,240 @@ ${data.cashiersList.map((c) => `• ${c.cashierName}: ${fmtNum(c.totalSales)} ${
     return { success: true, method: 'clipboard' };
   }
 };
+
+export interface InventoryAuditSummaryData {
+  storeName: string;
+  ownerName: string;
+  phone?: string;
+  taxNumber?: string;
+  currency: string;
+  periodLabel: string;
+  generatedDate: string;
+  totalItemTypes: number;
+  totalUnitsCount: number;
+  totalCostValuation: number;
+  totalSaleValuation: number;
+  expectedProfit: number;
+  profitMargin: number;
+  items: {
+    index: number;
+    barcode: string;
+    name: string;
+    category: string;
+    quantity: number;
+    unit: string;
+    costPrice: number;
+    salePrice: number;
+    totalCost: number;
+    totalSale: number;
+    status: string;
+  }[];
+}
+
+/**
+ * Generate and trigger download of an official PDF inventory audit report
+ */
+export const exportInventoryAuditToPDF = (
+  data: InventoryAuditSummaryData,
+  filenamePrefix = 'inventory_audit_report'
+) => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const currencySymbol = data.currency || 'SAR';
+
+  // 1. Dark Top Banner
+  doc.setFillColor(15, 23, 42); // slate-900
+  doc.rect(0, 0, 210, 42, 'F');
+
+  // Store Name
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.text(data.storeName || 'Store Management', 14, 14);
+
+  // Owner Name & Store Details
+  doc.setFontSize(9.5);
+  doc.setTextColor(203, 213, 225); // slate-300
+  doc.text(`Store Owner: ${data.ownerName || 'Merchant'} | Phone: ${data.phone || '-'}`, 14, 21);
+
+  if (data.taxNumber && data.taxNumber !== '-') {
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Tax Number: ${data.taxNumber}`, 14, 27);
+  }
+
+  // Subtitle / Report Type & Date
+  doc.setFontSize(10);
+  doc.setTextColor(52, 211, 153); // emerald-400
+  doc.text(`INVENTORY AUDIT REPORT - ${data.periodLabel}`, 14, 34);
+
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184); // slate-400
+  doc.text(`Generated: ${data.generatedDate} | Unique Items: ${data.totalItemTypes}`, 14, 39);
+
+  // 2. Summary KPI Cards
+  let y = 48;
+
+  // Box 1: Total Item Types
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(14, y, 42, 22, 2, 2, 'FD');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL ITEMS', 18, y + 6);
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${data.totalItemTypes} Items`, 18, y + 14);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`${data.totalUnitsCount.toLocaleString()} Units in Stock`, 18, y + 19);
+
+  // Box 2: Total Cost Valuation
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(61, y, 42, 22, 2, 2, 'FD');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL COST VALUE', 65, y + 6);
+  doc.setFontSize(11);
+  doc.setTextColor(217, 119, 6); // amber-600
+  doc.text(`${fmtNum(data.totalCostValuation)}`, 65, y + 14);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(currencySymbol, 65, y + 19);
+
+  // Box 3: Total Sales Valuation
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(108, y, 42, 22, 2, 2, 'FD');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL SALES VALUE', 112, y + 6);
+  doc.setFontSize(11);
+  doc.setTextColor(13, 148, 136); // teal-600
+  doc.text(`${fmtNum(data.totalSaleValuation)}`, 112, y + 14);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(currencySymbol, 112, y + 19);
+
+  // Box 4: Expected Profit & Margin
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(155, y, 42, 22, 2, 2, 'FD');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('EXPECTED PROFIT', 159, y + 6);
+  doc.setFontSize(11);
+  doc.setTextColor(16, 185, 129); // emerald-500
+  doc.text(`+${fmtNum(data.expectedProfit)}`, 159, y + 14);
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Margin: ~${data.profitMargin.toFixed(1)}%`, 159, y + 19);
+
+  y += 28;
+
+  // 3. Items Detailed Inventory Table
+  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Detailed Inventory Items & Valuation Log', 14, y);
+  y += 3;
+
+  const tableBody = data.items.map((it) => [
+    it.index.toString(),
+    it.barcode || '-',
+    it.name,
+    it.category || 'General',
+    `${it.quantity} ${it.unit}`,
+    fmtNum(it.costPrice),
+    fmtNum(it.salePrice),
+    fmtNum(it.totalCost),
+    fmtNum(it.totalSale),
+    it.status,
+  ]);
+
+  (doc as any).autoTable({
+    startY: y,
+    head: [['#', 'Barcode', 'Item Name', 'Category', 'Stock Qty', 'Cost', 'Sale', 'Total Cost', 'Total Sale', 'Status']],
+    body: tableBody.length > 0 ? tableBody : [['No items found', '-', '-', '-', '-', '-', '-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+    bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    margin: { left: 14, right: 14 },
+  });
+
+  const finalY = (doc as any).lastAutoTable?.finalY || y + 30;
+
+  // Signatures / Approvals Block (check if we need new page or fits on page)
+  let signY = finalY + 14;
+  if (signY > 260) {
+    doc.addPage();
+    signY = 30;
+  }
+
+  doc.setDrawColor(203, 213, 225);
+  doc.line(14, signY, 90, signY);
+  doc.line(120, signY, 196, signY);
+
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Warehouse / Inventory Auditor Signature', 14, signY + 5);
+  doc.text(`Store Owner: ${data.ownerName} (Official Approval & Stamp)`, 120, signY + 5);
+
+  // Page numbers
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text(
+      `${data.storeName} - Inventory Audit | Page ${i} of ${pageCount} | Generated for ${data.ownerName}`,
+      14,
+      290
+    );
+  }
+
+  // Trigger Save
+  const cleanStore = (data.storeName || 'store').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fullFilename = `${filenamePrefix}_${cleanStore}_${new Date().toISOString().split('T')[0]}.pdf`;
+  doc.save(fullFilename);
+};
+
+/**
+ * Share Inventory Audit Summary via Web Share API or Clipboard
+ */
+export const shareInventoryAuditSummary = async (data: InventoryAuditSummaryData) => {
+  const shareText = `📦 *تقرير جرد المخزون الشامل*
+🏪 *المتجر:* ${data.storeName}
+👤 *صاحب المتجر:* ${data.ownerName}
+🗓️ *الفترة:* ${data.periodLabel}
+⏱️ *تاريخ الجرد:* ${data.generatedDate}
+
+📋 *الملخص التنفيذي للمخزون:*
+• إجمالي أنواع الأصناف: ${data.totalItemTypes} صنف
+• إجمالي عدد القطع بالمخزن: ${data.totalUnitsCount.toLocaleString()} قطعة
+• إجمالي قيمة التكلفة: ${fmtNum(data.totalCostValuation)} ${data.currency}
+• إجمالي القيمة البيعية المتوقعة: ${fmtNum(data.totalSaleValuation)} ${data.currency}
+• صافي الأرباح المتوقعة: +${fmtNum(data.expectedProfit)} ${data.currency} (هامش ${data.profitMargin.toFixed(1)}%)
+
+📌 تم استخراج التقرير واعتماده رسمياً عبر المنصة.`;
+
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: `${data.storeName} - تقرير جرد المخزون`,
+        text: shareText,
+      });
+      return { success: true, method: 'native' };
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        await copyToClipboard(shareText);
+        return { success: true, method: 'clipboard' };
+      }
+      return { success: false, method: 'cancelled' };
+    }
+  } else {
+    await copyToClipboard(shareText);
+    return { success: true, method: 'clipboard' };
+  }
+};

@@ -400,12 +400,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     setShowLanguageDropdown(false);
   };
 
-  const displayAppName =
-    !settings.storeName ||
-    settings.storeName === 'تطبيق فلو اب التجاري' ||
-    settings.storeName === 'فلو اب (FlowApp)'
-      ? (language === 'ar' ? 'فلو اب' : 'FlowUp')
-      : settings.storeName;
+  const displayAppName = 'قريتي';
 
   return (
     <header className="no-print bg-slate-900/98 backdrop-blur-md border-b border-slate-700/80 sticky top-0 z-30 shadow-md w-full flex flex-col">

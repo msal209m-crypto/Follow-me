@@ -17,11 +17,17 @@ import {
   Coins,
   Layers,
   ArrowUpDown,
+  Share2,
+  Lock,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { Item } from '../types';
 import * as XLSX from 'xlsx';
+import {
+  exportInventoryAuditToPDF,
+  shareInventoryAuditSummary,
+} from '../utils/exportReportUtils';
 
 export type InventoryPeriodFilter =
   | 'CURRENT_MONTH'
@@ -32,8 +38,8 @@ export type InventoryPeriodFilter =
   | 'CUSTOM';
 
 export const InventoryAuditReportView: React.FC = () => {
-  const { items, settings, language, t, showNotification } = useApp();
-  const { userProfile } = useAuth();
+  const { items, settings, language, t, showNotification, activeMerchantId } = useApp();
+  const { userProfile, currentUser } = useAuth();
 
   // Period filter state
   const [periodFilter, setPeriodFilter] = useState<InventoryPeriodFilter>('CURRENT_MONTH');
@@ -47,16 +53,23 @@ export const InventoryAuditReportView: React.FC = () => {
   const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'costPrice' | 'salePrice' | 'totalCost'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  // Strict tenant security isolation: filter items matching active merchant / store
+  // Strict tenant security isolation: filter items matching active merchant / store only
   const merchantItems = useMemo(() => {
+    const currentMerchantUid = currentUser?.uid || userProfile?.id || activeMerchantId;
+    const currentStoreId = userProfile?.storeId;
+
     return items.filter((item) => {
-      // If storeId or merchantId is available, filter securely
-      if (userProfile?.storeId && item.storeId && item.storeId !== userProfile.storeId) {
+      // 1. If item has a specific merchantId, verify it matches the current merchant
+      if (item.merchantId && currentMerchantUid && item.merchantId !== currentMerchantUid) {
+        return false;
+      }
+      // 2. If item has a specific storeId, verify it matches the current storeId
+      if (item.storeId && currentStoreId && item.storeId !== currentStoreId) {
         return false;
       }
       return true;
     });
-  }, [items, userProfile]);
+  }, [items, userProfile, currentUser, activeMerchantId]);
 
   // Categories list
   const categoriesList = useMemo(() => {
@@ -90,15 +103,14 @@ export const InventoryAuditReportView: React.FC = () => {
     }
 
     return merchantItems.filter((item) => {
-      // Time period filter (based on createdAt or updatedAt if periodFilter is not ALL)
+      // Time period filter: filter items created or updated within the target interval
       if (periodFilter !== 'ALL') {
-        const itemDateStr = item.updatedAt || item.createdAt || new Date().toISOString();
-        const itemTime = new Date(itemDateStr).getTime();
-        if (itemTime < startTimestamp || itemTime > endTimestamp) {
-          // If item was created before period, should we include items with stock?
-          // Usually audit report checks items registered/updated in period OR all inventory items.
-          // Let's allow items if they were active or if filter is ALL, but respect period if specified.
-          // To be most comprehensive for inventory audits, period filter can filter items added/updated or we can show all inventory current snapshot with a note. Let's filter by creation/update OR include all if user chose 'ALL'.
+        const itemDateStr = item.updatedAt || item.createdAt;
+        if (itemDateStr) {
+          const itemTime = new Date(itemDateStr).getTime();
+          if (itemTime < startTimestamp || itemTime > endTimestamp) {
+            return false;
+          }
         }
       }
 
@@ -183,9 +195,112 @@ export const InventoryAuditReportView: React.FC = () => {
   const storePhone = settings.phone || userProfile?.phone || '-';
   const taxNumber = settings.taxNumber || '-';
 
+  const periodLabelText = useMemo(() => {
+    switch (periodFilter) {
+      case 'CURRENT_MONTH':
+        return language === 'ar' ? 'من بداية الشهر الحالي' : 'Current Month';
+      case 'LAST_3_MONTHS':
+        return language === 'ar' ? 'خلال آخر 3 أشهر' : 'Last 3 Months';
+      case 'LAST_6_MONTHS':
+        return language === 'ar' ? 'خلال آخر 6 أشهر' : 'Last 6 Months';
+      case 'CURRENT_YEAR':
+        return language === 'ar' ? 'من بداية العام الحالي' : 'Year to Date';
+      case 'CUSTOM':
+        return language === 'ar'
+          ? `فترة مخصصة (من ${startDate || 'البداية'} إلى ${endDate})`
+          : `Custom (${startDate || 'Start'} to ${endDate})`;
+      case 'ALL':
+      default:
+        return language === 'ar' ? 'كافة أصناف المخزون المسجلة (الرصيد الفعلي)' : 'All Inventory Items';
+    }
+  }, [periodFilter, startDate, endDate, language]);
+
   // Handlers for export
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportPDF = () => {
+    try {
+      const pdfItems = filteredItems.map((item, idx) => {
+        const qty = Number(item.quantity || 0);
+        const cost = Number(item.costPrice || 0);
+        const sale = Number(item.salePrice || item.price || 0);
+        const totalCost = qty * cost;
+        const totalSale = qty * sale;
+        const status = qty <= 0 ? 'نفد المخزون' : qty <= (item.minStockAlert || 5) ? 'منخفض' : 'متوفر';
+        return {
+          index: idx + 1,
+          barcode: item.barcode || '-',
+          name: item.name,
+          category: item.category || 'عام',
+          quantity: qty,
+          unit: item.unit || 'حبة',
+          costPrice: cost,
+          salePrice: sale,
+          totalCost: totalCost,
+          totalSale: totalSale,
+          status,
+        };
+      });
+
+      exportInventoryAuditToPDF({
+        storeName,
+        ownerName,
+        phone: storePhone,
+        taxNumber,
+        currency: currencySymbol,
+        periodLabel: periodLabelText,
+        generatedDate: new Date().toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US'),
+        totalItemTypes: auditSummary.totalItemTypes,
+        totalUnitsCount: auditSummary.totalUnitsCount,
+        totalCostValuation: auditSummary.totalCostValuation,
+        totalSaleValuation: auditSummary.totalSaleValuation,
+        expectedProfit: auditSummary.expectedProfit,
+        profitMargin: auditSummary.profitMargin,
+        items: pdfItems,
+      });
+
+      showNotification(
+        language === 'ar'
+          ? `تم تصدير ملف PDF بنجاح لمتجر "${storeName}" باسم المالك "${ownerName}"`
+          : 'Inventory audit PDF exported successfully',
+        'success'
+      );
+    } catch (err) {
+      console.error('PDF Export Error:', err);
+      showNotification(language === 'ar' ? 'حدث خطأ أثناء تصدير ملف PDF' : 'Failed to generate PDF', 'error');
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      const res = await shareInventoryAuditSummary({
+        storeName,
+        ownerName,
+        currency: currencySymbol,
+        periodLabel: periodLabelText,
+        generatedDate: new Date().toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US'),
+        totalItemTypes: auditSummary.totalItemTypes,
+        totalUnitsCount: auditSummary.totalUnitsCount,
+        totalCostValuation: auditSummary.totalCostValuation,
+        totalSaleValuation: auditSummary.totalSaleValuation,
+        expectedProfit: auditSummary.expectedProfit,
+        profitMargin: auditSummary.profitMargin,
+        items: [],
+      });
+
+      if (res.success) {
+        showNotification(
+          res.method === 'clipboard'
+            ? (language === 'ar' ? 'تم نسخ ملخص تقرير الجرد للحافظة بنجاح' : 'Copied report summary to clipboard')
+            : (language === 'ar' ? 'تمت مشاركة تقرير الجرد بنجاح' : 'Shared successfully'),
+          'success'
+        );
+      }
+    } catch (e) {
+      console.error('Share error:', e);
+    }
   };
 
   const handleExportExcel = () => {
@@ -209,14 +324,14 @@ export const InventoryAuditReportView: React.FC = () => {
           'إجمالي التكلفة': totalCost,
           'إجمالي قيمة البيع': totalSale,
           'الربح المتوقع': profit,
-          'حالة المخزون': qty <= 0 ? 'نفد المخزون' : qty <= item.minStockAlert ? 'منخفض' : 'متوفر',
+          'حالة المخزون': qty <= 0 ? 'نفد المخزون' : qty <= (item.minStockAlert || 5) ? 'منخفض' : 'متوفر',
         };
       });
 
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'تقرير جرد المخزون');
-      XLSX.writeFile(wb, `inventory_audit_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+      XLSX.writeFile(wb, `inventory_audit_${new Date().toISOString().split('T')[0]}.xlsx`);
       showNotification(language === 'ar' ? 'تم تصدير تقرير جرد المخزون إلى Excel بنجاح' : 'Inventory Excel exported successfully', 'success');
     } catch (err) {
       console.error('Excel Export Error:', err);
@@ -239,16 +354,34 @@ export const InventoryAuditReportView: React.FC = () => {
           </div>
           <p className="text-xs text-slate-400 mt-1">
             {language === 'ar'
-              ? 'جرد وتدقيق دقيق لكافة الأصناف، الكميات، التكاليف، وتقييمات المخزون مع إمكانية الطباعة والاعتماد الرسمي'
+              ? 'جرد وتدقيق دقيق لكافة الأصناف، الكميات، التكاليف، وتقييمات المخزون مع إمكانية التصدير والاعتماد الرسمي'
               : 'Detailed inventory audit and valuation report with official print and export capabilities'}
           </p>
         </div>
 
-        {/* Action Buttons: Print, Excel, PDF */}
+        {/* Action Buttons: Export PDF, Print, Excel, Share */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
+            onClick={handleExportPDF}
+            className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer text-xs shadow-md shadow-rose-900/30 hover:scale-[1.02] active:scale-95"
+            title="تصدير ملف PDF احترافي معتمد"
+          >
+            <Download className="w-4 h-4" />
+            <span>{language === 'ar' ? 'تصدير PDF احترافي' : 'Export PDF'}</span>
+          </button>
+
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer text-xs shadow-sm hover:scale-[1.02] active:scale-95"
+            title="طباعة التقرير أو حفظه كـ PDF عبر المتصفح"
+          >
+            <Printer className="w-4 h-4 text-emerald-400" />
+            <span>{language === 'ar' ? 'طباعة / حفظ A4' : 'Print / A4'}</span>
+          </button>
+
+          <button
             onClick={handleExportExcel}
-            className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-600/50 font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer text-xs shadow-sm"
+            className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-600/50 font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer text-xs shadow-sm hover:scale-[1.02] active:scale-95"
             title="تصدير إكسل"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
@@ -256,14 +389,29 @@ export const InventoryAuditReportView: React.FC = () => {
           </button>
 
           <button
-            onClick={handlePrint}
-            className="flex items-center gap-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-600/50 font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer text-xs shadow-sm"
-            title="طباعة أو حفظ PDF"
+            onClick={handleShare}
+            className="flex items-center gap-1.5 bg-teal-950/80 hover:bg-teal-900 text-teal-300 border border-teal-600/50 font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer text-xs shadow-sm hover:scale-[1.02] active:scale-95"
+            title="مشاركة ملخص الجرد عبر واتساب أو الحافظة"
           >
-            <Printer className="w-4 h-4 text-rose-400" />
-            <span>{language === 'ar' ? 'تصدير أو طباعة PDF' : 'Print / PDF'}</span>
+            <Share2 className="w-4 h-4 text-teal-400" />
+            <span>{language === 'ar' ? 'مشاركة' : 'Share'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Strict Tenant Isolation Banner (Verified Security) */}
+      <div className="no-print bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3 text-xs flex-wrap">
+        <div className="flex items-center gap-2 text-emerald-300">
+          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>
+            {language === 'ar'
+              ? `عزل أمني تام: يتم جرد وعرض بيانات المتجر "${storeName}" الخاصة بالمالك "${ownerName}" حصراً.`
+              : `Strict Tenant Isolation: Scoped exclusively to store "${storeName}" owned by "${ownerName}".`}
+          </span>
+        </div>
+        <span className="font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/30 text-[11px] shrink-0 font-bold">
+          {merchantItems.length} {language === 'ar' ? 'صنف مسجل بالمتجر' : 'total items'}
+        </span>
       </div>
 
       {/* Filter Toolbar (Hidden during print) */}
@@ -272,45 +420,21 @@ export const InventoryAuditReportView: React.FC = () => {
           {/* Period Filter */}
           <div>
             <label className="block text-xs font-bold text-slate-400 mb-1">
-              {language === 'ar' ? 'فترة التقرير / الجرد' : 'Audit Period'}
+              {language === 'ar' ? 'فترة التقرير / الجرد الزمني' : 'Audit Period'}
             </label>
             <select
               value={periodFilter}
               onChange={(e) => setPeriodFilter(e.target.value as InventoryPeriodFilter)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
             >
+              <option value="ALL">{language === 'ar' ? 'كافة أصناف المخزون (بدون تقييد زمني)' : 'All Inventory Items'}</option>
               <option value="CURRENT_MONTH">{language === 'ar' ? 'من بداية الشهر الحالي' : 'Current Month'}</option>
               <option value="LAST_3_MONTHS">{language === 'ar' ? 'خلال آخر 3 أشهر' : 'Last 3 Months'}</option>
               <option value="LAST_6_MONTHS">{language === 'ar' ? 'خلال آخر 6 أشهر' : 'Last 6 Months'}</option>
               <option value="CURRENT_YEAR">{language === 'ar' ? 'من بداية العام الحالي' : 'Year to Date'}</option>
-              <option value="ALL">{language === 'ar' ? 'كافة أصناف المخزون (بدون تقييد زمني)' : 'All Inventory Items'}</option>
-              <option value="CUSTOM">{language === 'ar' ? 'فترة مخصصة' : 'Custom Range'}</option>
+              <option value="CUSTOM">{language === 'ar' ? 'فترة مخصصة (تحديد من تاريخ - إلى تاريخ)' : 'Custom Date Range'}</option>
             </select>
           </div>
-
-          {/* Custom Date Range if CUSTOM */}
-          {periodFilter === 'CUSTOM' && (
-            <div className="flex items-center gap-2">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1">من تاريخ</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1">إلى تاريخ</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
-                />
-              </div>
-            </div>
-          )}
 
           {/* Stock Status Filter */}
           <div>
@@ -365,6 +489,33 @@ export const InventoryAuditReportView: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Custom Date Range Picker Row if CUSTOM */}
+        {periodFilter === 'CUSTOM' && (
+          <div className="pt-3 border-t border-slate-800 flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-400">من تاريخ:</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-400">إلى تاريخ:</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+            <span className="text-[11px] text-slate-400">
+              يتم تصفية الأصناف المسجلة أو المعدلة ضمن هذا النطاق الزمني المحدد
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ==========================================================================
@@ -403,7 +554,7 @@ export const InventoryAuditReportView: React.FC = () => {
               {language === 'ar' ? 'تاريخ الإصدار:' : 'Issued Date:'} {new Date().toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US')}
             </div>
             <div className="text-[11px] text-slate-400 print:text-slate-500 mt-0.5">
-              {language === 'ar' ? 'الفترة المشمولة:' : 'Period:'} {periodFilter === 'CURRENT_MONTH' ? 'الشهر الحالي' : periodFilter === 'LAST_3_MONTHS' ? 'آخر 3 أشهر' : periodFilter === 'LAST_6_MONTHS' ? 'آخر 6 أشهر' : periodFilter === 'CURRENT_YEAR' ? 'العام الحالي' : 'كافة الأصناف'}
+              {language === 'ar' ? 'الفترة المشمولة:' : 'Period:'} {periodLabelText}
             </div>
           </div>
         </div>
@@ -549,7 +700,9 @@ export const InventoryAuditReportView: React.FC = () => {
             <div>التوقيع والتاريخ</div>
           </div>
           <div className="space-y-6">
-            <div className="font-bold">{language === 'ar' ? 'اعتماد صاحب المتجر / المدير' : 'Store Owner Approval'}</div>
+            <div className="font-bold">
+              {language === 'ar' ? `اعتماد صاحب المتجر (${ownerName})` : `Store Owner Approval (${ownerName})`}
+            </div>
             <div className="border-b border-dashed border-slate-700 print:border-slate-400 w-48 mx-auto pb-4"></div>
             <div>الختم الرسمي والتوقيع</div>
           </div>
@@ -559,3 +712,4 @@ export const InventoryAuditReportView: React.FC = () => {
     </div>
   );
 };
+

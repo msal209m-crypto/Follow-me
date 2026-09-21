@@ -24,6 +24,7 @@ import {
   Crown,
   Store,
   MapPin,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useSubscription, FREE_ITEM_LIMIT } from '../context/SubscriptionContext';
@@ -60,6 +61,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
     settings,
     inventoryStats,
     getPendingOrderQtyForItem,
+    setActiveTab,
     t,
     isRTL,
     language,
@@ -285,6 +287,18 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Inventory Audit Report Shortcut */}
+          <button
+            id="btn-goto-inventory-audit"
+            type="button"
+            onClick={() => setActiveTab('daily_reports')}
+            className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold px-3.5 sm:px-4 py-2.5 rounded-xl border border-teal-500/30 hover:border-teal-500/60 transition-all cursor-pointer text-xs sm:text-sm active:scale-95 shadow-sm"
+            title={language === 'ar' ? 'عرض وتصدير تقرير جرد الأصناف والمخزون' : 'Inventory Audit Report & PDF'}
+          >
+            <FileSpreadsheet className="w-4 h-4 sm:w-5 sm:h-5 text-teal-400" />
+            <span className="font-bold">{language === 'ar' ? 'تقرير الجرد والـ PDF' : 'Stock Audit'}</span>
+          </button>
+
           {/* Camera Barcode Scanner Button */}
           <button
             id="btn-scan-barcode-camera-items"

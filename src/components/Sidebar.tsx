@@ -33,6 +33,7 @@ import {
   Check,
   X,
   Compass,
+  Megaphone,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -160,6 +161,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: t.navDailyReports,
           icon: FileSpreadsheet,
         },
+        {
+          id: 'village_bulletin',
+          label: language === 'ar' ? '📢 إعلانات وأخبار القرية' : 'Village Bulletin',
+          icon: Megaphone,
+        },
       ];
 
   const handleSelectTab = (tab: NavigationTab) => {
@@ -182,12 +188,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [mobileOpen, setMobileOpen]);
 
-  const displayAppName =
-    !settings.storeName ||
-    settings.storeName === 'تطبيق فلو اب التجاري' ||
-    settings.storeName === 'فلو اب (FlowApp)'
-      ? (language === 'ar' ? 'فلو اب' : 'FlowUp')
-      : settings.storeName;
+  const displayAppName = 'قريتي';
 
   return (
     <>
@@ -220,7 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title={t.navDashboard}
           >
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 group-hover:from-emerald-500 group-hover:to-teal-300 flex items-center justify-center shadow-md shadow-emerald-950 text-white font-black text-lg sm:text-xl shrink-0 transition-transform group-hover:scale-105 border border-emerald-400/40">
-              {language === 'ar' ? 'فلو' : 'FL'}
+              {language === 'ar' ? 'قر' : 'Q'}
             </div>
             {!isCollapsed && (
               <div className="min-w-0">

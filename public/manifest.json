@@ -1,14 +1,14 @@
 {
   "id": "/",
-  "name": "قريتي",
+  "name": "قريتي - تطبيق التجارة المحلية المتكامل",
   "short_name": "قريتي",
-  "description": "تطبيق فلو اب الشامل لإدارة المخزون والمبيعات والحسابات",
+  "description": "تطبيق قريتي الشامل لتجارة القرى والمتاجر المحلية مع بوابة الدخول المستقلة وعزل بيانات التجار",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#020617",
   "theme_color": "#020617",
-  "orientation": "any",
   "categories": ["business", "finance", "productivity"],
   "icons": [
     {

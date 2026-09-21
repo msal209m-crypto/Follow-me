@@ -6,7 +6,8 @@ export type NavigationTab =
   | 'order_goods'
   | 'accounts'
   | 'debts'
-  | 'daily_reports';
+  | 'daily_reports'
+  | 'village_bulletin';
 
 export interface Item {
   id: string;

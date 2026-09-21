@@ -820,36 +820,40 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {/* Standalone Circular Icons and Buttons (No boxes or card containers) */}
+            <div className="flex flex-wrap items-start justify-center gap-7 sm:gap-10 py-6 max-w-4xl mx-auto">
               {villageList.map((village) => {
                 const villageStores = allStores.filter((s) => s.cityOrVillage === village);
                 return (
                   <button
                     key={village}
+                    type="button"
                     onClick={() => {
                       setSelectedVillage(village);
                       setSelectedStoreId('default');
                     }}
-                    className="bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-6 text-right transition-all cursor-pointer group shadow-lg shadow-black/30 hover:scale-[1.02] flex flex-col justify-between"
+                    className="flex flex-col items-center group cursor-pointer transition-all duration-200 focus:outline-none select-none text-center"
                   >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors">
-                        <MapPin className="w-6 h-6" />
-                      </div>
-                      <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-slate-800 text-emerald-400 border border-slate-700">
-                        {villageStores.length} متجر
-                      </span>
+                    {/* Standalone Circular Icon Button */}
+                    <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-slate-900 border-2 border-slate-700/80 group-hover:border-emerald-400 group-hover:bg-emerald-950/40 text-emerald-400 group-hover:text-emerald-300 flex items-center justify-center shadow-lg shadow-black/40 group-hover:shadow-emerald-500/25 group-hover:scale-105 active:scale-95 transition-all duration-200">
+                      <MapPin className="w-8 h-8 sm:w-10 sm:h-10 transition-transform duration-200 group-hover:-translate-y-1" />
+                      {villageStores.length > 0 && (
+                        <span
+                          className="absolute -top-1 -right-1 bg-emerald-500 text-slate-950 font-black text-[11px] font-mono px-2 py-0.5 rounded-full shadow-md border-2 border-slate-900"
+                          title={`${villageStores.length} متجر`}
+                        >
+                          {villageStores.length}
+                        </span>
+                      )}
                     </div>
-                    <div>
-                      <h3 className="font-extrabold text-white text-base sm:text-lg group-hover:text-emerald-300 transition-colors">
-                        {village}
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-1">
-                        {villageStores.length > 0
-                          ? `المتاجر: ${villageStores.map((s) => s.name).join('، ')}`
-                          : 'لا توجد متاجر مسجلة حالياً'}
-                      </p>
-                    </div>
+
+                    {/* Village Name Directly Underneath */}
+                    <span className="mt-3 text-sm sm:text-base font-extrabold text-slate-200 group-hover:text-emerald-400 transition-colors tracking-tight max-w-[120px] line-clamp-1">
+                      {village}
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                      {villageStores.length > 0 ? `${villageStores.length} متجر` : 'لا توجد متاجر'}
+                    </span>
                   </button>
                 );
               })}
@@ -879,6 +883,47 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                 {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
                 <span>تغيير القرية / عرض كل القرى</span>
               </button>
+            </div>
+
+            {/* Quick Village Switcher (Horizontal Circular/Pill buttons) */}
+            <div className="flex items-center gap-2.5 overflow-x-auto pb-2 pt-1 no-scrollbar">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedVillage('ALL');
+                  setSelectedStoreId('default');
+                }}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500"
+              >
+                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                <span>كل القرى</span>
+              </button>
+
+              {villageList.map((vil) => {
+                const isSelected = selectedVillage === vil;
+                const storeCount = allStores.filter((s) => s.cityOrVillage === vil).length;
+                return (
+                  <button
+                    key={vil}
+                    type="button"
+                    onClick={() => {
+                      setSelectedVillage(vil);
+                      setSelectedStoreId('default');
+                    }}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer border ${
+                      isSelected
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-sm shadow-emerald-500/20'
+                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span>{vil}</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+                      {storeCount}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* List of Stores Registered in this Village */}

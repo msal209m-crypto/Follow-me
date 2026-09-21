@@ -239,10 +239,14 @@ export const DailyReportsView: React.FC = () => {
             <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${
               reportMode === 'AUDIT_LOG'
                 ? 'bg-amber-500/20 text-amber-400'
+                : reportMode === 'INVENTORY_AUDIT'
+                ? 'bg-emerald-500/20 text-emerald-400'
                 : 'bg-emerald-500/20 text-emerald-400'
             }`}>
               {reportMode === 'AUDIT_LOG' ? (
                 <Activity className="w-4 h-4" />
+              ) : reportMode === 'INVENTORY_AUDIT' ? (
+                <Package className="w-4 h-4" />
               ) : (
                 <FileSpreadsheet className="w-4 h-4" />
               )}
@@ -251,6 +255,8 @@ export const DailyReportsView: React.FC = () => {
               <h2 className="text-xl sm:text-2xl font-black text-white">
                 {reportMode === 'AUDIT_LOG'
                   ? (language === 'ar' ? 'سجل عمليات المستخدم (Audit Log)' : 'User Activity & Audit Log')
+                  : reportMode === 'INVENTORY_AUDIT'
+                  ? (language === 'ar' ? 'تقرير جرد الأصناف والمخزون' : 'Inventory Audit Report')
                   : t.dailyReportsTitle}
               </h2>
               <p className="text-xs text-slate-400">
@@ -258,6 +264,10 @@ export const DailyReportsView: React.FC = () => {
                   ? (language === 'ar'
                       ? 'تتبع فوري ومفصل لعمليات البيع، تعديل وحذف الأصناف، وحركات الديون بالتاريخ والوقت والمستخدم المسؤول'
                       : 'Audit log of sales, inventory updates, and cashier activity with user, date, and timestamp')
+                  : reportMode === 'INVENTORY_AUDIT'
+                  ? (language === 'ar'
+                      ? 'جرد شامل لكافة أصناف ومخزون المتجر مع تقييم التكلفة والبيع وتصدير PDF معتمد'
+                      : 'Comprehensive inventory valuation, quantities audit, and certified PDF export')
                   : t.dailyReportsSubtitle}
               </p>
             </div>
@@ -265,7 +275,7 @@ export const DailyReportsView: React.FC = () => {
         </div>
 
         {/* Action Buttons: Export to Excel, PDF, Share, Print (For Sales Reports) */}
-        {reportMode !== 'AUDIT_LOG' && (
+        {reportMode !== 'AUDIT_LOG' && reportMode !== 'INVENTORY_AUDIT' && (
           <div className="flex items-center gap-2 flex-wrap">
             {/* Export to Excel */}
             <button
@@ -320,7 +330,17 @@ export const DailyReportsView: React.FC = () => {
         {/* Top Switcher: Daily vs Monthly & All vs Per Person vs Audit Log */}
         <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
           {/* Period Selector (Daily vs Monthly) */}
-          {reportMode !== 'AUDIT_LOG' ? (
+          {reportMode === 'INVENTORY_AUDIT' ? (
+            <div className="flex items-center gap-2 text-xs text-emerald-300 font-bold bg-emerald-950/40 border border-emerald-500/30 px-3.5 py-2 rounded-xl w-full lg:w-auto">
+              <Package className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{language === 'ar' ? 'جرد وتدقيق المخزون السلعي' : 'Inventory Stock Audit'}</span>
+            </div>
+          ) : reportMode === 'AUDIT_LOG' ? (
+            <div className="flex items-center gap-2 text-xs text-amber-300 font-bold bg-amber-950/40 border border-amber-500/30 px-3.5 py-2 rounded-xl w-full lg:w-auto">
+              <Activity className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>{language === 'ar' ? 'سجل العمليات والرقابة التفصيلية' : 'Audit Trail & Operations Feed'}</span>
+            </div>
+          ) : (
             <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs w-full lg:w-auto">
               <button
                 onClick={() => setPeriodType('DAY')}
@@ -344,11 +364,6 @@ export const DailyReportsView: React.FC = () => {
                 <CalendarDays className="w-3.5 h-3.5" />
                 <span>{t.monthlyReportTab}</span>
               </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-xs text-amber-300 font-bold bg-amber-950/40 border border-amber-500/30 px-3.5 py-2 rounded-xl w-full lg:w-auto">
-              <Activity className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>{language === 'ar' ? 'سجل العمليات والرقابة التفصيلية' : 'Audit Trail & Operations Feed'}</span>
             </div>
           )}
 
