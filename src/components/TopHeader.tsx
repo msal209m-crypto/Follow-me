@@ -403,9 +403,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const displayAppName = 'قريتي';
 
   return (
-    <header className="no-print bg-slate-900/98 backdrop-blur-md border-b border-slate-700/80 sticky top-0 z-30 shadow-md w-full flex flex-col">
+    <header className="no-print bg-slate-950/98 backdrop-blur-xl border-b border-slate-700/60 sticky top-0 z-30 shadow-xl w-full flex flex-col transition-all">
       {/* TIER 1: SYSTEM CONTROLS, NAVIGATION & USER ACCOUNT */}
-      <div className="relative z-20 flex items-center justify-between gap-1.5 sm:gap-3 px-2 xs:px-3 sm:px-6 py-2 border-b border-slate-800/80 bg-slate-900/98 w-full min-w-0">
+      <div className="relative z-20 flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-6 py-2.5 border-b border-slate-800/80 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 w-full min-w-0">
         {/* Left / Start: Mobile Menu & Live Indicators */}
         <div className="flex items-center gap-1.5 xs:gap-2 shrink-0">
           <button

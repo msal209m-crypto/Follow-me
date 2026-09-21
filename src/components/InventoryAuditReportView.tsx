@@ -38,7 +38,7 @@ export type InventoryPeriodFilter =
   | 'CUSTOM';
 
 export const InventoryAuditReportView: React.FC = () => {
-  const { items, settings, language, t, showNotification, activeMerchantId } = useApp();
+  const { items, settings, language, t, showNotification, activeMerchantId, updateItem } = useApp();
   const { userProfile, currentUser } = useAuth();
 
   // Period filter state
@@ -70,6 +70,31 @@ export const InventoryAuditReportView: React.FC = () => {
       return true;
     });
   }, [items, userProfile, currentUser, activeMerchantId]);
+
+  // Automated daily inventory audit flagged items (quantity reaching reorder threshold)
+  const lowStockAuditItems = useMemo(() => {
+    return merchantItems.filter((item) => {
+      const qty = Number(item.quantity || 0);
+      const minAlert = Number(item.minStockAlert || 5);
+      return qty <= minAlert;
+    });
+  }, [merchantItems]);
+
+  const handleQuickRestock = (itemId: string, itemName: string) => {
+    const item = merchantItems.find((i) => i.id === itemId);
+    const currentQty = Number(item?.quantity || 0);
+    const newQty = currentQty + 10; // Quick restock batch +10 units
+    updateItem(itemId, {
+      quantity: newQty,
+      updatedAt: new Date().toISOString(),
+    });
+    showNotification(
+      language === 'ar'
+        ? `تم إعادة توريد الصنف (${itemName}) بنجاح وإضافة 10 وحدات جديدة ✓`
+        : `Quick restocked ${itemName} (+10 units) successfully`,
+      'success'
+    );
+  };
 
   // Categories list
   const categoriesList = useMemo(() => {
@@ -412,6 +437,66 @@ export const InventoryAuditReportView: React.FC = () => {
         <span className="font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/30 text-[11px] shrink-0 font-bold">
           {merchantItems.length} {language === 'ar' ? 'صنف مسجل بالمتجر' : 'total items'}
         </span>
+      </div>
+
+      {/* Automated Daily Inventory Audit & Reorder Review Panel */}
+      <div className="no-print bg-slate-900 border border-amber-500/40 rounded-2xl p-5 shadow-lg space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="p-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl">
+              <AlertTriangle className="w-5 h-5" />
+            </span>
+            <div>
+              <h3 className="font-black text-white text-sm flex items-center gap-2">
+                <span>تقرير التدقيق المخزني اليومي التلقائي (Daily Automated Inventory Audit)</span>
+                <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full text-[10px] font-mono">
+                  {lowStockAuditItems.length} أصناف وصلت حد إعادة الطلب
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                فحص دوري تلقائي لبيانات التاجر النشط لرصد الأصناف التي بلغت أو انخفضت عن حد إعادة الطلب (Reorder Threshold).
+              </p>
+            </div>
+          </div>
+          <div className="text-xs text-slate-400 font-mono">
+            {new Date().toLocaleDateString('ar-SA')} 🕒
+          </div>
+        </div>
+
+        {lowStockAuditItems.length === 0 ? (
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 text-center text-xs text-emerald-400 flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>ممتاز! جميع أصناف متجرك فوق حد إعادة الطلب ولا توجد نواقص تستدعي التدخل اليوم.</span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {lowStockAuditItems.map((item) => {
+              const qty = Number(item.quantity || 0);
+              const threshold = Number(item.minStockAlert || 5);
+              return (
+                <div
+                  key={item.id}
+                  className="bg-slate-950/90 border border-amber-500/30 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-sm hover:border-amber-400/60 transition-all"
+                >
+                  <div className="space-y-1 min-w-0">
+                    <div className="font-black text-white text-xs truncate">{item.name}</div>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+                      <span>الكمية: <strong className={qty === 0 ? 'text-rose-400 font-bold' : 'text-amber-400 font-bold'}>{qty}</strong></span>
+                      <span>الحد: {threshold}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickRestock(item.id, item.name)}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 shrink-0"
+                  >
+                    <span>إعادة توريد سريع ⚡</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Filter Toolbar (Hidden during print) */}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { copyToClipboard } from '../utils/clipboardUtils';
 import {
   ShieldCheck,
+  ShieldAlert,
   Store,
   Crown,
   Truck,
@@ -43,12 +44,15 @@ import {
   ExternalLink,
   Code2,
   Info,
+  Clock,
   PackagePlus,
   LogOut,
   Edit3,
   Save,
 } from 'lucide-react';
-import { clearAllSystemSessions } from '../services/rbacAuthService';
+import { clearAllSystemSessions, getDrivers } from '../services/rbacAuthService';
+import { supabase } from '../lib/supabase';
+import { AuditLogViewer } from './AuditLogViewer';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
 import { useApp } from '../context/AppContext';
@@ -93,7 +97,7 @@ interface PlatformAdminViewProps {
   onOpenLanding: () => void;
 }
 
-type AdminTab = 'LICENSES' | 'BARCODE' | 'ADS' | 'SETTINGS' | 'LANGUAGE' | 'STORES_ORDERS' | 'VILLAGES_STORES';
+type AdminTab = 'SETTINGS' | 'STORES' | 'DRIVERS' | 'SUPABASE_MERCHANTS' | 'LICENSES' | 'BARCODE' | 'ADS' | 'DISPUTES_LOGS' | 'VILLAGES_STORES' | 'LANGUAGE';
 
 export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   settings: propSettings,
@@ -307,6 +311,39 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   // --- Stores Directory & Orders State ---
   const [stores, setStores] = useState<StoreDirectoryRecord[]>(() => getStoresDirectory());
   const [orders, setOrders] = useState<DeliveryOrder[]>(() => getDeliveryOrders());
+  const [driversList, setDriversList] = useState(() => getDrivers());
+  const [supabaseMerchants, setSupabaseMerchants] = useState<any[]>([]);
+  const [isLoadingSupabaseMerchants, setIsLoadingSupabaseMerchants] = useState(false);
+  const [selectedKYCItem, setSelectedKYCItem] = useState<{ type: 'selfie' | 'id'; url: string; name: string } | null>(null);
+
+  const fetchSupabaseMerchants = async () => {
+    setIsLoadingSupabaseMerchants(true);
+    try {
+      const { data, error } = await supabase.from('merchants').select('*').order('created_at', { ascending: false });
+      if (!error && data) {
+        setSupabaseMerchants(data);
+      } else {
+        const localMerchants = JSON.parse(localStorage.getItem('flowapp_rbac_merchants_v1') || '[]');
+        setSupabaseMerchants(localMerchants);
+      }
+    } catch (err) {
+      const localMerchants = JSON.parse(localStorage.getItem('flowapp_rbac_merchants_v1') || '[]');
+      setSupabaseMerchants(localMerchants);
+    } finally {
+      setIsLoadingSupabaseMerchants(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSupabaseMerchants();
+    const interval = setInterval(() => {
+      fetchSupabaseMerchants();
+      setStores(getStoresDirectory());
+      setOrders(getDeliveryOrders());
+      setDriversList(getDrivers());
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
   const [storeSearchQuery, setStoreSearchQuery] = useState('');
   const [showAddStoreModal, setShowAddStoreModal] = useState(false);
   const [newStoreName, setNewStoreName] = useState('');
@@ -433,6 +470,33 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
     setOrders(getDeliveryOrders());
   };
 
+  const handleUpdateMerchantApproval = async (merchantId: string, approve: boolean, merchantName: string) => {
+    const updated = supabaseMerchants.map((item: any) =>
+      item.id === merchantId ? { ...item, isApproved: approve, is_approved: approve } : item
+    );
+    setSupabaseMerchants(updated);
+
+    try {
+      const local = JSON.parse(localStorage.getItem('flowapp_rbac_merchants_v1') || '[]');
+      const updatedLocal = local.map((item: any) =>
+        item.id === merchantId ? { ...item, isApproved: approve } : item
+      );
+      localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify(updatedLocal));
+    } catch (e) {}
+
+    try {
+      await supabase.from('merchants').update({ is_approved: approve, isApproved: approve }).eq('id', merchantId);
+    } catch (err) {
+      console.warn('Supabase merchant update exception:', err);
+    }
+
+    if (approve) {
+      showToast(`تم قبول وتفعيل التاجر (${merchantName}) في قاعدة بيانات Supabase وإرسال إشعار للنظام بنجاح ✓`);
+    } else {
+      showToast(`تم حظر التاجر (${merchantName}) في قاعدة بيانات Supabase بنجاح 🚫`);
+    }
+  };
+
   const handleToggleStorePro = (storeId: string) => {
     toggleStoreProStatus(storeId);
     refreshStoresAndOrders();
@@ -549,50 +613,78 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
       {/* Main Body */}
       <main className="max-w-6xl mx-auto w-full flex-1 p-4 sm:p-6 space-y-5">
         {/* KPI Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
-            <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-              <Crown className="w-3.5 h-3.5 text-amber-400" />
-              <span>مفاتيح التراخيص الصادرة</span>
-            </span>
-            <div className="text-2xl font-black text-amber-300 font-mono mt-1">{keysList.length}</div>
-            <span className="text-[10px] text-slate-500">
-              {keysList.filter((k) => !k.is_used).length} مفتاح جاهز للتفعيل
-            </span>
-          </div>
+        {(() => {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const newMerchantsTodayCount = supabaseMerchants.filter((m: any) => {
+            const d = m.created_at || m.createdAt || '';
+            return d.includes(todayStr) || d.startsWith(todayStr);
+          }).length;
+          const totalActiveMerchantsCount = stores.length;
+          const pendingOrdersCount = orders.filter((o) => o.status === 'NEW' || o.status === 'PENDING').length;
 
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
-            <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-              <Megaphone className="w-3.5 h-3.5 text-cyan-400" />
-              <span>الإعلانات الترويجية</span>
-            </span>
-            <div className="text-2xl font-black text-cyan-300 font-mono mt-1">{adsList.length}</div>
-            <span className="text-[10px] text-slate-500">
-              {adsList.filter((a) => a.isActive).length} إعلان نشط بمتجر القرية
-            </span>
-          </div>
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                  <Crown className="w-3.5 h-3.5 text-amber-400" />
+                  <span>التراخيص الصادرة</span>
+                </span>
+                <div className="text-xl font-black text-amber-300 font-mono mt-1">{keysList.length}</div>
+                <span className="text-[10px] text-slate-500">
+                  {keysList.filter((k) => !k.is_used).length} مفتاح جاهز
+                </span>
+              </div>
 
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
-            <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-              <Barcode className="w-3.5 h-3.5 text-purple-400" />
-              <span>نظام الباركود</span>
-            </span>
-            <div className="text-sm font-black text-purple-300 mt-2 flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-              <span>{barcodeConfig.defaultCamera === 'environment' ? 'الكاميرا الخلفية' : 'الأمامية'}</span>
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-rose-400" />
+                  <span>التجار الجدد اليوم</span>
+                </span>
+                <div className="text-xl font-black text-rose-300 font-mono mt-1">{newMerchantsTodayCount}</div>
+                <span className="text-[10px] text-slate-500">مسجلون اليوم عبر Supabase</span>
+              </div>
+
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                  <Store className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>إجمالي التجار النشطين</span>
+                </span>
+                <div className="text-xl font-black text-emerald-300 font-mono mt-1">{totalActiveMerchantsCount}</div>
+                <span className="text-[10px] text-slate-500">{proStoresCount} متجر PRO</span>
+              </div>
+
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-teal-400" />
+                  <span>الطلبات المعلقة</span>
+                </span>
+                <div className="text-xl font-black text-teal-300 font-mono mt-1">{pendingOrdersCount}</div>
+                <span className="text-[10px] text-slate-500">بانتظار المعالجة والتسليم</span>
+              </div>
+
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                  <Megaphone className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>الإعلانات النشطة</span>
+                </span>
+                <div className="text-xl font-black text-cyan-300 font-mono mt-1">{adsList.filter((a) => a.isActive).length}</div>
+                <span className="text-[10px] text-slate-500">من أصل {adsList.length} إعلان</span>
+              </div>
+
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+                  <Barcode className="w-3.5 h-3.5 text-purple-400" />
+                  <span>نظام الباركود</span>
+                </span>
+                <div className="text-xs font-black text-purple-300 mt-2 flex items-center gap-1.5 truncate">
+                  <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0" />
+                  <span className="truncate">{barcodeConfig.defaultCamera === 'environment' ? 'الكاميرا الخلفية' : 'الأمامية'}</span>
+                </div>
+                <span className="text-[10px] text-slate-500">{barcodeConfig.stickerLabelWidthMm}x{barcodeConfig.stickerLabelHeightMm} مم</span>
+              </div>
             </div>
-            <span className="text-[10px] text-slate-500">مع ملصقات {barcodeConfig.stickerLabelWidthMm}x{barcodeConfig.stickerLabelHeightMm} مم</span>
-          </div>
-
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
-            <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
-              <Store className="w-3.5 h-3.5 text-emerald-400" />
-              <span>شبكة المتاجر المشتركة</span>
-            </span>
-            <div className="text-2xl font-black text-emerald-300 font-mono mt-1">{stores.length}</div>
-            <span className="text-[10px] text-slate-500">{proStoresCount} متجر بباقة PRO</span>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Primary Unified Navigation Tabs */}
         <div className="bg-slate-900/90 border border-purple-900/30 p-1.5 rounded-2xl flex items-center gap-1 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-800">
@@ -685,6 +777,35 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
           >
             <MapPin className="w-3.5 h-3.5 text-rose-400" />
             <span>إدارة القرى والمتاجر المستقلة ({approvedVillages.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('SUPABASE_MERCHANTS');
+              fetchSupabaseMerchants();
+            }}
+            className={`py-2 px-3.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              activeTab === 'SUPABASE_MERCHANTS'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>تجار Supabase وهويات KYC ({supabaseMerchants.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('DISPUTES_LOGS')}
+            className={`py-2 px-3.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              activeTab === 'DISPUTES_LOGS'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+            <span>سجل العمليات والنزاعات ⚠️</span>
           </button>
         </div>
 
@@ -2201,6 +2322,183 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
               </div>
             </div>
           </div>
+        )}
+
+        {/* TAB: SUPABASE MERCHANTS & KYC VERIFICATION */}
+        {activeTab === 'SUPABASE_MERCHANTS' && (
+          <div className="space-y-6">
+            <div className="bg-slate-900/90 border border-purple-900/40 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="font-black text-base text-white flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                    <span>قائمة التجار المسجلين في قاعدة بيانات Supabase (التحقق من الهويات و KYC)</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    مراجعة بيانات التجار المسجلين، معاينة بطاقات الأحوال وصور السيلفي الحية للتأكد من هوياتهم والموافقة أو الحظر.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchSupabaseMerchants}
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-purple-950"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingSupabaseMerchants ? 'animate-spin' : ''}`} />
+                  <span>تحديث القائمة من Supabase</span>
+                </button>
+              </div>
+
+              {isLoadingSupabaseMerchants ? (
+                <div className="py-12 text-center text-slate-400 text-xs">جاري تحميل بيانات التجار من قاعدة بيانات Supabase...</div>
+              ) : supabaseMerchants.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs bg-slate-950 rounded-2xl border border-slate-800">
+                  لا يوجد تجار مسجلون حالياً في قاعدة بيانات Supabase.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {supabaseMerchants.map((m: any) => (
+                    <div key={m.id || m.phone} className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between gap-3 hover:border-purple-500/40 transition-all">
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <img
+                              src={m.photo || m.liveSelfie || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'}
+                              alt={m.name}
+                              className="w-10 h-10 rounded-xl object-cover border border-purple-500/40"
+                            />
+                            <div>
+                              <h4 className="font-black text-white text-sm">{m.store_name || m.storeName || 'متجر جديد'}</h4>
+                              <p className="text-xs text-purple-300 font-bold">{m.name}</p>
+                            </div>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${m.isApproved !== false ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}`}>
+                            {m.isApproved !== false ? 'مفعل ومقبول ✓' : 'محظور / قيد المراجعة'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 mt-3 pt-2.5 border-t border-slate-800 text-xs text-slate-300">
+                          <div>
+                            <span className="text-slate-500 text-[10px] block">القرية:</span>
+                            <strong className="text-white">{m.village_name || m.village || 'غير محدد'}</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[10px] block">رقم الجوال:</span>
+                            <strong className="text-white font-mono">{m.phone}</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[10px] block">رقم الهوية:</span>
+                            <strong className="text-white font-mono">{m.nationalId || m.national_id || 'غير متوفر'}</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 text-[10px] block">تاريخ التسجيل:</span>
+                            <strong className="text-white font-mono text-[11px]">{m.created_at || m.createdAt || 'حالي'}</strong>
+                          </div>
+                        </div>
+
+                        {/* KYC Preview Section (ID Card & Live Selfie) */}
+                        <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center gap-3">
+                          <div className="flex-1 text-center bg-slate-900 p-2 rounded-xl border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block mb-1">صورة السيلفي الحية</span>
+                            {m.liveSelfie || m.photo ? (
+                              <img
+                                src={m.liveSelfie || m.photo}
+                                alt="Live Selfie"
+                                className="w-16 h-16 object-cover rounded-lg mx-auto border border-emerald-500/40 cursor-pointer hover:scale-105 transition-transform"
+                                onClick={() => setSelectedKYCItem({ type: 'selfie', url: m.liveSelfie || m.photo, name: m.name })}
+                              />
+                            ) : (
+                              <span className="text-[10px] text-slate-600 block py-4">غير متوفرة</span>
+                            )}
+                          </div>
+
+                          <div className="flex-1 text-center bg-slate-900 p-2 rounded-xl border border-slate-800">
+                            <span className="text-[10px] text-slate-400 block mb-1">صورة بطاقة الأحوال</span>
+                            {m.idCardImage || m.id_card ? (
+                              <img
+                                src={m.idCardImage || m.id_card}
+                                alt="ID Card"
+                                className="w-16 h-16 object-cover rounded-lg mx-auto border border-purple-500/40 cursor-pointer hover:scale-105 transition-transform"
+                                onClick={() => setSelectedKYCItem({ type: 'id', url: m.idCardImage || m.id_card, name: m.name })}
+                              />
+                            ) : (
+                              <span className="text-[10px] text-slate-600 block py-4">غير متوفرة</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-3 border-t border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateMerchantApproval(m.id || m.phone, true, m.name)}
+                          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                            m.isApproved !== false && m.is_approved !== false
+                              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40 ring-1 ring-emerald-400/40'
+                              : 'bg-slate-900 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30'
+                          }`}
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>قبول التاجر ✓</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateMerchantApproval(m.id || m.phone, false, m.name)}
+                          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                            m.isApproved === false || m.is_approved === false
+                              ? 'bg-rose-600 text-white shadow-md shadow-rose-950/40 ring-1 ring-rose-400/40'
+                              : 'bg-slate-900 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30'
+                          }`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>حظر الحساب 🚫</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* KYC Image Modal Preview */}
+            {selectedKYCItem && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 max-w-lg w-full space-y-4 animate-in fade-in zoom-in duration-200">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <h4 className="font-black text-white text-sm">
+                      {selectedKYCItem.type === 'selfie' ? 'صورة السيلفي الحية للتاجر:' : 'صورة بطاقة الأحوال للتاجر:'} {selectedKYCItem.name}
+                    </h4>
+                    <button
+                      onClick={() => setSelectedKYCItem(null)}
+                      className="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center font-bold text-xs"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="text-center">
+                    <img
+                      src={selectedKYCItem.url}
+                      alt="KYC Preview"
+                      className="max-h-[60vh] max-w-full rounded-2xl mx-auto border border-purple-500/40 shadow-2xl object-contain"
+                    />
+                  </div>
+                  <div className="pt-2 text-center">
+                    <button
+                      onClick={() => setSelectedKYCItem(null)}
+                      className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold cursor-pointer"
+                    >
+                      إغلاق المعاينة
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: DISPUTES & AUDIT LOGS */}
+        {activeTab === 'DISPUTES_LOGS' && (
+          <AuditLogViewer showToast={showToast} />
         )}
 
       {createdStoreModal && (

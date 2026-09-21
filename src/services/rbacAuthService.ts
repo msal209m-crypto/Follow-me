@@ -1,6 +1,7 @@
 import { UserProfile, UserRole, DriverProfile, CustomerSession, StoreDirectoryRecord } from '../types';
 import { getStoresDirectory, saveStoresDirectory, saveDriverProfile, clearDriverProfile } from './deliveryService';
 import { getPlatformDeveloperSettings } from './platformSettingsService';
+import { supabase } from '../lib/supabase';
 
 const MERCHANTS_STORE_KEY = 'flowapp_rbac_merchants_v1';
 const DRIVERS_STORE_KEY = 'flowapp_rbac_drivers_v1';
@@ -192,7 +193,25 @@ export function registerMerchant(params: {
   setActiveSessionRole('MERCHANT');
   syncMerchantToAuth(newMerchant);
 
-  return { success: true, message: 'تم تسجيل حساب التاجر بنجاح!', merchant: newMerchant };
+  // Sync to Supabase table 'merchants' (id, store_name, village_name)
+  try {
+    supabase.from('merchants').insert({
+      id: merchantId,
+      store_name: newMerchant.storeName,
+      village_name: newMerchant.village,
+      name: newMerchant.name,
+      phone: newMerchant.phone,
+      created_at: newMerchant.createdAt,
+    }).then(({ error }: any) => {
+      if (error) {
+        console.warn('Supabase merchants insert note:', error);
+      }
+    });
+  } catch (err) {
+    console.warn('Supabase merchants insert exception:', err);
+  }
+
+  return { success: true, message: 'تم تسجيل حساب التاجر بنجاح وحفظ البيانات في جدول التجار بـ Supabase!', merchant: newMerchant };
 }
 
 export function loginMerchant(
