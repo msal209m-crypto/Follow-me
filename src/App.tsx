@@ -33,6 +33,8 @@ import { PortalLandingScreen } from './components/PortalLandingScreen';
 import { WelcomeSplashScreen } from './components/WelcomeSplashScreen';
 import { DriverPortalView } from './components/DriverPortalView';
 import { PlatformAdminView } from './components/PlatformAdminView';
+import { DeveloperControlPanel } from './components/DeveloperControlPanel';
+import { MerchantManagementScreen } from './components/MerchantManagementScreen';
 import { MerchantOrdersModal } from './components/MerchantOrdersModal';
 import { MerchantOrderAlertPopup } from './components/MerchantOrderAlertPopup';
 import { useAuth } from './context/AuthContext';
@@ -214,6 +216,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
           onOpenMerchantOrders={() => setShowMerchantOrdersModal(true)}
           onNavigateToItems={isCashierMode ? () => {} : () => setActiveTab('items')}
           onNavigateToDashboard={isCashierMode ? () => {} : () => setActiveTab('dashboard')}
+          onNavigateToAdmin={() => handleSwitchToAdmin()}
           onStartTour={isCashierMode ? undefined : handleStartTour}
         />
 
@@ -683,10 +686,15 @@ const PortalRouter: React.FC = () => {
   const [showGlobalAuthModal, setShowGlobalAuthModal] = useState(false);
   const [showRBACAuthModal, setShowRBACAuthModal] = useState(false);
   const [rbacInitialRole, setRbacInitialRole] = useState<'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER'>('MERCHANT');
+  const [activeAdminTab, setActiveAdminTab] = useState<'dashboard' | 'manage-merchants'>('dashboard');
 
   // Security Guard: Check if trying to access protected portals without active session role
   useEffect(() => {
     const activeRole = getActiveSessionRole();
+    
+    // Skip if already authenticated as developer
+    if (activeRole === 'DEVELOPER') return;
+
     if (portalMode === 'admin' && activeRole !== 'DEVELOPER') {
       setPortalMode('landing');
       setRbacInitialRole('DEVELOPER');
@@ -725,8 +733,8 @@ const PortalRouter: React.FC = () => {
       handleSwitchToAdmin();
     } else if (role === 'MERCHANT') {
       handleSwitchToMerchant({
-        name: user.storeName || settings.storeName,
-        village: user.village || settings.address,
+        name: user?.storeName || settings.storeName,
+        village: user?.village || settings.address,
       });
     } else if (role === 'DRIVER') {
       handleSwitchToDriver();
@@ -947,8 +955,29 @@ const PortalRouter: React.FC = () => {
   }
 
   if (portalMode === 'admin') {
+    const role = getActiveSessionRole();
+    
     return (
       <>
+        {role === 'DEVELOPER' && (
+          <DeveloperControlPanel
+            onNavigate={(mode) => {
+              if (mode === 'store') handleSwitchToStore();
+              else if (mode === 'merchant') handleSwitchToMerchant();
+              else if (mode === 'driver') handleSwitchToDriver();
+              else if (mode === 'admin') {
+                setActiveAdminTab('dashboard');
+                handleSwitchToAdmin();
+              }
+              else if (mode === 'manage-merchants') {
+                setActiveAdminTab('manage-merchants');
+                handleSwitchToAdmin();
+              }
+            }}
+            onClose={() => {}}
+            isDarkMode={true}
+          />
+        )}
         <SessionInactivityGuard
           isActiveSession={true}
           onAutoLogout={() => {
@@ -957,13 +986,19 @@ const PortalRouter: React.FC = () => {
           }}
           isRTL={isRTL}
         />
-        <PlatformAdminView
-          settings={settings}
-          isRTL={isRTL}
-          onReturnToStore={handleSwitchToStore}
-          onOpenMerchant={handleSwitchToMerchant}
-          onOpenLanding={handleSwitchToLanding}
-        />
+        
+        {activeAdminTab === 'manage-merchants' ? (
+          <MerchantManagementScreen onClose={() => setActiveAdminTab('dashboard')} />
+        ) : (
+          <PlatformAdminView
+            settings={settings}
+            isRTL={isRTL}
+            onReturnToStore={handleSwitchToStore}
+            onOpenMerchant={handleSwitchToMerchant}
+            onOpenDriver={handleSwitchToDriver}
+            onOpenLanding={handleSwitchToLanding}
+          />
+        )}
         {showRBACAuthModal && (
           <RBACAuthModal
             isOpen={showRBACAuthModal}

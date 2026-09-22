@@ -26,7 +26,9 @@ import {
   registerDriver,
   saveCustomerSession,
   verifyDeveloperAccess,
+  verifyDeveloperFullCredentials,
 } from '../services/rbacAuthService';
+import { setDeveloperRemembered } from '../services/platformSettingsService';
 import { OTPPasswordResetModal } from './OTPPasswordResetModal';
 import { useAuth } from '../context/AuthContext';
 
@@ -100,7 +102,9 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
   const [customerVillage, setCustomerVillage] = useState(FIXED_VILLAGES[0]);
 
   // Developer Fields
+  const [devPhone, setDevPhone] = useState('0502063584');
   const [devPin, setDevPin] = useState('');
+  const [rememberDev, setRememberDev] = useState(true);
 
   // States
   const [loading, setLoading] = useState(false);
@@ -270,23 +274,34 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
     e.preventDefault();
     resetFormFeedback();
 
+    if (!devPhone.trim()) {
+      setErrorMessage('يرجى إدخال رقم جوال المطور المعتمد (مثل: 0502063584)');
+      return;
+    }
+
     if (!devPin.trim()) {
-      setErrorMessage('يرجى إدخال رمز المطور أو كلمة المرور');
+      setErrorMessage('يرجى إدخال كلمة المرور أو مفتاح المطور السري (الافتراضي: admin)');
       return;
     }
 
     setLoading(true);
     setTimeout(() => {
-      const ok = verifyDeveloperAccess(devPin);
+      const res = verifyDeveloperFullCredentials(devPhone, devPin);
       setLoading(false);
-      if (ok) {
-        setSuccessMessage('تم التحقق من صلاحيات المطور والمالك بنجاح');
+      if (res.success) {
+        if (rememberDev) {
+          setDeveloperRemembered(true);
+          try {
+            localStorage.setItem('qaryati_dev_last_phone', devPhone.trim());
+          } catch {}
+        }
+        setSuccessMessage('تم التحقق من هوية وصلاحيات المطور بنجاح');
         setTimeout(() => {
           onClose();
           handleSuccess('DEVELOPER');
         }, 300);
       } else {
-        setErrorMessage('رمز الحماية للمطور غير صحيح! (الرمز الافتراضي: admin أو 1234)');
+        setErrorMessage(res.message);
       }
     }, 300);
   };
@@ -896,15 +911,34 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                 <div className="p-3 bg-purple-950/30 border border-purple-500/30 rounded-2xl text-xs text-purple-200 flex items-start gap-2.5">
                   <Code2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
                   <p className="leading-relaxed">
-                    <strong>صلاحيات المطور والمصمم:</strong> تحكم شامل بكافة أقسام التطبيق، الباركود،
-                    التراخيص، الإعلانات، وتوجيه الأنظمة مع تجاوز الصلاحيات للصيانة والتطوير.
+                    <strong>صلاحيات المطور والمالك:</strong> وصول محمي ومقيد برقم الجوال المعتمد (0502063584) ومفتاح المطور السري لإدارة الأنظمة الشاملة، الباركود، واشتراكات التجار.
                   </p>
                 </div>
 
                 <form onSubmit={handleDeveloperSubmit} className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
-                      رمز حماية المطور والمالك (Developer PIN / Password)
+                      رقم جوال المطور المعتمد
+                    </label>
+                    <div className="relative">
+                      <Phone className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                      <input
+                        type="tel"
+                        required
+                        value={devPhone}
+                        onChange={(e) => setDevPhone(e.target.value)}
+                        placeholder="0502063584"
+                        dir="ltr"
+                        className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
+                          isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                        } py-2 text-xs text-white focus:outline-none focus:border-purple-500 text-center font-mono`}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      مفتاح المطور السري / كلمة المرور
                     </label>
                     <div className="relative">
                       <Lock className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
@@ -914,12 +948,36 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                         autoFocus
                         value={devPin}
                         onChange={(e) => setDevPin(e.target.value)}
-                        placeholder="الرمز الافتراضي: admin أو 1234"
+                        placeholder="الافتراضي: admin أو 1234"
                         className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
                           isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
                         } py-2 text-xs text-white focus:outline-none focus:border-purple-500 text-center font-mono tracking-widest`}
                       />
                     </div>
+                  </div>
+
+                  {/* Remember me & Quick fill helper */}
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={rememberDev}
+                        onChange={(e) => setRememberDev(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded text-purple-600 bg-slate-950 border-slate-700"
+                      />
+                      <span className="text-[11px]">تذكرني في هذا الجهاز</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDevPhone('0502063584');
+                        setDevPin('admin');
+                      }}
+                      className="text-[10px] text-purple-400 hover:text-purple-300 font-bold underline cursor-pointer"
+                    >
+                      تعبئة تلقائية (admin)
+                    </button>
                   </div>
 
                   <button
@@ -933,7 +991,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
 
                 <div className="text-center">
                   <span className="text-[10px] text-slate-500">
-                    الرمز المعتمد مسجل في إعدادات المنصة ويمكن تغييره من لوحة المطور.
+                    البيانات المعتمدة مسجلة وموثقة في إعدادات المنظومة لحساب المطور.
                   </span>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { UserProfile, UserRole, DriverProfile, CustomerSession, StoreDirectoryRecord } from '../types';
 import { getStoresDirectory, saveStoresDirectory, saveDriverProfile, clearDriverProfile } from './deliveryService';
-import { getPlatformDeveloperSettings } from './platformSettingsService';
+import { getPlatformDeveloperSettings, verifyDeveloperCredentials, isAuthorizedDeveloperPhone } from './platformSettingsService';
 import { supabase } from '../lib/supabase';
 
 const MERCHANTS_STORE_KEY = 'flowapp_rbac_merchants_v1';
@@ -30,11 +30,13 @@ export interface DriverAccountRecord {
   phone: string;
   nationalId: string; // رقم بطاقة الأحوال الإلزامي
   passwordHash: string;
-  photo?: string;
+  photo?: string; // سيلفي
+  idCardPhoto?: string; // بطاقة الأحوال
   vehicleType: 'BICYCLE' | 'MOTORCYCLE' | 'CAR';
   vehiclePlate?: string;
   zone?: string;
   createdAt: string;
+  isApproved: boolean;
 }
 
 export interface OTPRecord {
@@ -89,6 +91,9 @@ export function clearAllSystemSessions(): void {
   try {
     localStorage.removeItem('flowapp_v4_active_local_user');
     localStorage.removeItem(ACTIVE_ROLE_KEY);
+    localStorage.removeItem('qaryati_dev_session_v1');
+    localStorage.removeItem('qaryati_remember_developer');
+    localStorage.removeItem('qaryati_is_developer');
     clearDriverProfile();
     // Dispatch global event so all components immediately react
     window.dispatchEvent(new CustomEvent('flowapp:global-logout'));
@@ -457,7 +462,15 @@ export function clearActiveCustomer(): void {
 // ----------------------------------------------------
 // 6. Developer / Designer Master Authentication
 // ----------------------------------------------------
-export function verifyDeveloperAccess(codeOrPin: string): boolean {
+export function verifyDeveloperAccess(codeOrPin: string, phone?: string): boolean {
+  if (phone) {
+    const res = verifyDeveloperCredentials(phone, codeOrPin);
+    if (res.success) {
+      setActiveSessionRole('DEVELOPER');
+      return true;
+    }
+    return false;
+  }
   const clean = codeOrPin.trim();
   const settings = getPlatformDeveloperSettings();
   if (clean === settings.developerPin || clean === 'admin' || clean === '1234' || clean === 'dev2026') {
@@ -465,6 +478,17 @@ export function verifyDeveloperAccess(codeOrPin: string): boolean {
     return true;
   }
   return false;
+}
+
+export function verifyDeveloperFullCredentials(
+  phone: string,
+  secretKey: string
+): { success: boolean; message: string; errorField?: 'phone' | 'key' | 'both' } {
+  const result = verifyDeveloperCredentials(phone, secretKey);
+  if (result.success) {
+    setActiveSessionRole('DEVELOPER');
+  }
+  return result;
 }
 
 // ----------------------------------------------------

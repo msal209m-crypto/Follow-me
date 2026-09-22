@@ -47,12 +47,15 @@ import {
   rateDeliveryOrder,
   getStoreProducts,
 } from '../services/deliveryService';
-import { getPlatformAds, PlatformAd, getPlatformDeveloperSettings } from '../services/platformSettingsService';
+import { getPlatformAds, PlatformAd, getPlatformDeveloperSettings, setDeveloperRemembered } from '../services/platformSettingsService';
 import {
   getActiveCustomer,
   saveActiveCustomer,
   clearActiveCustomer,
+  setActiveSessionRole,
 } from '../services/rbacAuthService';
+import { AdhanTopBarWidget } from './AdhanTopBarWidget';
+import { StorePrayerClosedBanner } from './StorePrayerClosedBanner';
 
 interface VillageStoreViewProps {
   items: Item[];
@@ -105,6 +108,44 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       if (activeCustomer.name) setCustomerName(activeCustomer.name);
       if (activeCustomer.phone) setCustomerPhone(activeCustomer.phone);
       if (activeCustomer.village) setCustomerAddress(activeCustomer.village);
+    }
+  }, [activeCustomer]);
+
+  // Secret Developer Trigger (5 consecutive taps on logo within 2.5s)
+  const [logoTapCount, setLogoTapCount] = useState(0);
+  const logoTapTimerRef = React.useRef<any>(null);
+
+  const handleLogoSecretTap = () => {
+    setLogoTapCount((prev) => {
+      const next = prev + 1;
+      if (next >= 5) {
+        if (logoTapTimerRef.current) clearTimeout(logoTapTimerRef.current);
+        setDeveloperRemembered(true);
+        setActiveSessionRole('DEVELOPER');
+        
+        // Defer action to next tick to avoid updating state while rendering
+        setTimeout(() => {
+          if (onOpenAuthModal) {
+            onOpenAuthModal('DEVELOPER');
+          } else {
+            onOpenMerchantPortal();
+          }
+        }, 0);
+        
+        return 0;
+      }
+      if (logoTapTimerRef.current) clearTimeout(logoTapTimerRef.current);
+      logoTapTimerRef.current = setTimeout(() => {
+        setLogoTapCount(0);
+      }, 2500);
+      return next;
+    });
+  };
+
+  // Check if customer credentials exist on mount; if not, open registration modal
+  useEffect(() => {
+    if (!activeCustomer?.name || !activeCustomer?.phone || !activeCustomer?.nationalId) {
+      setShowCustomerAuthModal(true);
     }
   }, [activeCustomer]);
 
@@ -185,15 +226,8 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     'قرية المكيل',
   ];
 
-  // List of villages extracted from stores + fixed list
-  const villageList = useMemo(() => {
-    const list = new Set<string>(FIXED_VILLAGES);
-    allStores.forEach((s) => {
-      if (s.cityOrVillage) list.add(s.cityOrVillage);
-    });
-    if (settings.address) list.add(settings.address);
-    return Array.from(list);
-  }, [allStores, settings.address]);
+  // Strictly the 10 fixed villages requested by user
+  const villageList = FIXED_VILLAGES;
 
   // Stores available in the selected village
   const availableStores = useMemo(() => {
@@ -611,7 +645,11 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             </button>
 
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-900/30">
+              <div
+                onClick={handleLogoSecretTap}
+                className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-900/30 cursor-pointer active:scale-95 transition-transform"
+                title="شعار المتجر (النقر 5 مرات متتالية يفتح وضع المطور السري)"
+              >
                 <Store className="w-5 h-5" />
               </div>
               <div>
@@ -801,12 +839,16 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                 ))}
               </select>
             </div>
+            {/* Adhan & Prayer Times Widget */}
+            <AdhanTopBarWidget isRTL={isRTL} isDarkMode={true} compact={false} />
           </div>
         </div>
       </div>
 
       {/* Main Container */}
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 flex flex-col gap-6">
+        {/* Prayer Time Closed Banner (if active) */}
+        <StorePrayerClosedBanner isRTL={isRTL} />
         {selectedVillage === 'ALL' ? (
           <div className="space-y-6 py-4">
             <div className="text-center space-y-2">
@@ -1908,25 +1950,25 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto mb-2">
                 <UserCheck className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-black text-white">تسجيل حساب العميل الإلزامي</h3>
+              <h3 className="text-base font-black text-white">تسجيل بيانات العميل (إلزامي للطلب)</h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                يجب إكمال تسجيل الحساب (الاسم، الجوال، رقم البطاقة الشخصية، صورة واجهة المنزل، وكلمة السر) للتمكن من إضافة الأصناف إلى السلة.
+                يرجى تسجيل (الاسم + رقم الجوال + رقم بطاقة الأحوال) لضمان الجدية ومنع التلاعب وسرعة توصيل الطلبات.
               </p>
             </div>
 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!custModalName.trim() || !custModalPhone.trim() || !custModalNationalId.trim() || !custModalPassword.trim()) {
-                  alert('يرجى تعبئة الحقول الإلزامية: الاسم الكامل، رقم الجوال، رقم البطاقة الشخصية، وكلمة السر');
+                if (!custModalName.trim() || !custModalPhone.trim() || !custModalNationalId.trim()) {
+                  alert('يرجى تعبئة الحقول الإلزامية: الاسم الكامل، رقم الجوال، ورقم بطاقة الأحوال');
                   return;
                 }
                 const customerData = {
                   name: custModalName.trim(),
                   phone: custModalPhone.trim(),
                   nationalId: custModalNationalId.trim(),
-                  housePhoto: custModalHousePhoto.trim() || 'https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?auto=format&fit=crop&q=80&w=600',
-                  passwordHash: custModalPassword.trim(),
+                  housePhoto: custModalHousePhoto.trim() || '',
+                  passwordHash: custModalPassword.trim() || 'user123',
                   village: custModalVillage.trim() || undefined,
                 };
                 saveActiveCustomer(customerData);
@@ -1935,7 +1977,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                 setCustomerPhone(customerData.phone);
                 if (customerData.village) setCustomerAddress(customerData.village);
                 setShowCustomerAuthModal(false);
-                alert('✅ تم التسجيل بنجاح! يمكنك الآن إضافة الأصناف إلى السلة واستكمال الطلب.');
+                alert('✅ تم تسجيل بياناتك بنجاح! يمكنك الآن تصفح أسعار المتاجر واختيار بقالتك والطلب مباشرة.');
               }}
               className="space-y-2.5 max-h-[70vh] overflow-y-auto px-1"
             >
@@ -1965,12 +2007,12 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">رقم البطاقة الشخصية (الهوية) *</label>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">رقم بطاقة الأحوال (الهوية الوطنية) *</label>
                 <input
                   type="text"
                   required
                   dir="ltr"
-                  placeholder="مثال: 1088998877"
+                  placeholder="مثال: 1088998877 (لمنع التلاعب وضمان الجدية)"
                   value={custModalNationalId}
                   onChange={(e) => setCustModalNationalId(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500 font-mono text-right"
@@ -1978,37 +2020,19 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">صورة واجهة المنزل (رابط الصورة أو وصفها)</label>
-                <input
-                  type="text"
-                  placeholder="مثال: رابط صورة واجهة المنزل أو وصفها"
-                  value={custModalHousePhoto}
-                  onChange={(e) => setCustModalHousePhoto(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">كلمة السر *</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={custModalPassword}
-                  onChange={(e) => setCustModalPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">القرية أو الحي السكني</label>
-                <input
-                  type="text"
-                  placeholder="مثال: قرية الفصور"
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">القرية التابع لها (من القرى الثابتة)</label>
+                <select
                   value={custModalVillage}
                   onChange={(e) => setCustModalVillage(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500"
-                />
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                >
+                  <option value="">اختر قريتك...</option>
+                  {FIXED_VILLAGES.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="pt-1 flex items-center justify-between">

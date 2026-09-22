@@ -94,6 +94,7 @@ interface PlatformAdminViewProps {
   isRTL: boolean;
   onReturnToStore: () => void;
   onOpenMerchant: (storeInfo?: { name: string; village: string; isPro?: boolean; merchantPin?: string }) => void;
+  onOpenDriver?: () => void;
   onOpenLanding: () => void;
 }
 
@@ -104,6 +105,7 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   isRTL: propIsRTL,
   onReturnToStore,
   onOpenMerchant,
+  onOpenDriver,
   onOpenLanding,
 }) => {
   const {
@@ -566,45 +568,70 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Role Preview & Navigation Bar */}
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            <div className="hidden lg:flex items-center gap-1 bg-slate-950/70 border border-purple-900/40 px-2 py-1 rounded-xl text-[11px] font-bold text-slate-400">
+              <span className="text-purple-400">معاينة الأدوار:</span>
+            </div>
+
+            {/* Role 1: Customer Store */}
             <button
               type="button"
               onClick={onReturnToStore}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="معاينة واجهة العميل ومتجر القرية"
             >
-              <Home className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">متجر القرية</span>
+              <Home className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">واجهة العميل</span>
             </button>
 
+            {/* Role 2: Merchant Portal */}
             <button
               type="button"
               onClick={onOpenMerchant}
-              className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="معاينة لوحة تحكم التاجر والمخزون"
             >
-              <Store className="w-3.5 h-3.5" />
+              <Store className="w-3.5 h-3.5 text-emerald-400" />
               <span className="hidden sm:inline">لوحة التاجر</span>
             </button>
 
+            {/* Role 3: Driver Portal */}
+            {onOpenDriver && (
+              <button
+                type="button"
+                onClick={onOpenDriver}
+                className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="معاينة بوابة المناديب والسائقين"
+              >
+                <Truck className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">بوابة السائق</span>
+              </button>
+            )}
+
+            {/* Role 4: Landing Screen */}
+            <button
+              type="button"
+              onClick={onOpenLanding}
+              className="px-2.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="العودة لشاشة البوابات الرئيسية"
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">البوابات</span>
+            </button>
+
+            {/* Logout button */}
             <button
               type="button"
               onClick={() => {
                 clearAllSystemSessions();
                 onOpenLanding();
               }}
-              className="px-3 py-1.5 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 text-rose-200 hover:text-white border border-rose-600/50 hover:border-rose-500 text-xs font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer active:scale-95"
+              className="px-2.5 py-1.5 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 text-rose-200 hover:text-white border border-rose-600/50 hover:border-rose-500 text-xs font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer active:scale-95"
               title="تسجيل الخروج الفوري ومسح الجلسة"
             >
               <LogOut className="w-3.5 h-3.5 text-rose-400" />
-              <span className="hidden sm:inline">تسجيل خروج</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onOpenLanding}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
-              title="العودة للشاشة الرئيسية"
-            >
-              {isRTL ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+              <span className="hidden sm:inline">خروج</span>
             </button>
           </div>
         </div>

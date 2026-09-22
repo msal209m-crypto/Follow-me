@@ -103,6 +103,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [activationFeedback, setActivationFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
 
+  // Smooth height transition animation for dashboard cards (hover / click expand)
+  const [hoveredCardKey, setHoveredCardKey] = useState<string | null>(null);
+  const [expandedCardKey, setExpandedCardKey] = useState<string | null>(null);
+
   const handleActivateLicense = async () => {
     if (!licenseInput.trim()) return;
     setActivatingKey(true);
@@ -478,16 +482,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           )}
 
-          {/* 2-COLUMN BALANCED METRICS GRID (As requested: Grid بنظام عمودين متجاورين يمنع التمرير) */}
+          {/* 2-COLUMN BALANCED METRICS GRID (Smooth height transition animation on hover or click) */}
           <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
             {/* CARD 1: TODAY SALES */}
             <button
               type="button"
+              onMouseEnter={() => setHoveredCardKey('today_sales')}
+              onMouseLeave={() => setHoveredCardKey(null)}
               onClick={() => {
                 setModalSearch('');
                 setActiveModal('today_sales');
               }}
-              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-emerald-500/60 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
+              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-emerald-500/60 transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
             >
               <div className="flex items-center justify-between w-full">
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
@@ -507,17 +513,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="text-[10px] text-emerald-400/90 font-mono font-medium truncate mt-0.5">
                   +{todayProfit.toLocaleString('en-US', { minimumFractionDigits: 0 })} {settings.currency} {language === 'ar' ? 'ربح' : 'profit'} • {todaySalesTransactions.length} {language === 'ar' ? 'فواتير' : 'tx'}
                 </div>
+
+                {/* Smooth Expandable Summary Details Drawer */}
+                <div
+                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
+                    hoveredCardKey === 'today_sales' || expandedCardKey === 'today_sales'
+                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
+                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60">
+                    <div>
+                      <span className="text-slate-500 block text-[9px]">متوسط الفاتورة:</span>
+                      <span className="font-bold text-emerald-400 font-mono">
+                        {todaySalesTransactions.length > 0 ? (todaySalesTotal / todaySalesTransactions.length).toFixed(1) : 0} {settings.currency}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[9px]">نسبة الهامش:</span>
+                      <span className="font-bold text-white font-mono">
+                        {todaySalesTotal > 0 ? ((todayProfit / todaySalesTotal) * 100).toFixed(0) : 0}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </button>
 
             {/* CARD 2: CASH & LIQUIDITY */}
             <button
               type="button"
+              onMouseEnter={() => setHoveredCardKey('cash_liquidity')}
+              onMouseLeave={() => setHoveredCardKey(null)}
               onClick={() => {
                 setModalSearch('');
                 setActiveModal('cash_liquidity');
               }}
-              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/60 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
+              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/60 transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
             >
               <div className="flex items-center justify-between w-full">
                 <div className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
@@ -537,17 +569,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="text-[10px] text-slate-400 truncate mt-0.5">
                   بنك: {(financialSummary?.bankTransferBalance ?? 0).toFixed(0)} • شبكة: {(financialSummary?.cardBalance ?? 0).toFixed(0)}
                 </div>
+
+                {/* Smooth Expandable Summary Details Drawer */}
+                <div
+                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
+                    hoveredCardKey === 'cash_liquidity' || expandedCardKey === 'cash_liquidity'
+                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
+                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60">
+                    <div>
+                      <span className="text-slate-500 block text-[9px]">نقداً بالدرج:</span>
+                      <span className="font-bold text-cyan-300 font-mono">
+                        {(financialSummary?.cashBalance ?? 0).toFixed(0)} {settings.currency}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[9px]">إلكتروني وبنك:</span>
+                      <span className="font-bold text-teal-300 font-mono">
+                        {((financialSummary?.bankTransferBalance ?? 0) + (financialSummary?.cardBalance ?? 0)).toFixed(0)} {settings.currency}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </button>
 
             {/* CARD 3: LOW STOCK SHORTAGES */}
             <button
               type="button"
+              onMouseEnter={() => setHoveredCardKey('low_stock')}
+              onMouseLeave={() => setHoveredCardKey(null)}
               onClick={() => {
                 setModalSearch('');
                 setActiveModal('low_stock');
               }}
-              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl border hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px] ${
+              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl border transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px] ${
                 inventoryStats.lowStockCount > 0
                   ? 'bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-900 border-amber-500/50 hover:border-amber-400'
                   : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
@@ -586,17 +644,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     ? language === 'ar' ? 'اضغط للتوريد والطلب المباشر' : 'Click to reorder'
                     : language === 'ar' ? 'كافة الأصناف فوق حد الأمان' : 'No shortages'}
                 </div>
+
+                {/* Smooth Expandable Summary Details Drawer */}
+                <div
+                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
+                    hoveredCardKey === 'low_stock' || expandedCardKey === 'low_stock'
+                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
+                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60 space-y-0.5">
+                    <div className="flex items-center justify-between text-[9px]">
+                      <span className="text-slate-400">حالة حد الأمان:</span>
+                      <span className={inventoryStats.lowStockCount > 0 ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+                        {inventoryStats.lowStockCount > 0 ? `${inventoryStats.lowStockCount} صنف بحاجة فورية` : 'المخزون آمن تماماً'}
+                      </span>
+                    </div>
+                    <div className="text-[9px] text-slate-400 truncate">
+                      تدقيق آلي متكرر يومياً • انقر لطلب التوريد السريع
+                    </div>
+                  </div>
+                </div>
               </div>
             </button>
 
             {/* CARD 4: INVENTORY CAPITAL */}
             <button
               type="button"
+              onMouseEnter={() => setHoveredCardKey('inventory_capital')}
+              onMouseLeave={() => setHoveredCardKey(null)}
               onClick={() => {
                 setModalSearch('');
                 setActiveModal('inventory_capital');
               }}
-              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/60 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
+              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/60 transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
             >
               <div className="flex items-center justify-between w-full">
                 <div className="w-8 h-8 rounded-xl bg-teal-500/15 text-teal-400 border border-teal-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
@@ -616,17 +697,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="text-[10px] text-slate-400 truncate mt-0.5">
                   {inventoryStats.totalItemsCount} {language === 'ar' ? 'صنف' : 'items'} • {inventoryStats.totalStockUnits} {language === 'ar' ? 'قطعة' : 'units'}
                 </div>
+
+                {/* Smooth Expandable Summary Details Drawer */}
+                <div
+                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
+                    hoveredCardKey === 'inventory_capital' || expandedCardKey === 'inventory_capital'
+                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
+                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60">
+                    <div>
+                      <span className="text-slate-500 block text-[9px]">القيمة البيعية التقديرية:</span>
+                      <span className="font-bold text-teal-300 font-mono">
+                        {(inventoryStats.totalCostValue * 1.25).toFixed(0)} {settings.currency}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[9px]">الوحدات المتوفرة:</span>
+                      <span className="font-bold text-white font-mono">
+                        {inventoryStats.totalStockUnits} وحدة
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </button>
 
             {/* CARD 5: DEBTS RECORD */}
             <button
               type="button"
+              onMouseEnter={() => setHoveredCardKey('debts_summary')}
+              onMouseLeave={() => setHoveredCardKey(null)}
               onClick={() => {
                 setModalSearch('');
                 setActiveModal('debts_summary');
               }}
-              className="group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-rose-500/60 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 text-right cursor-pointer shadow-sm min-h-[110px]"
+              className="group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-rose-500/60 transition-all duration-300 ease-out text-right cursor-pointer shadow-sm min-h-[110px]"
             >
               <div className="flex items-center justify-between w-full">
                 <div className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
@@ -646,17 +753,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div className="text-[10px] text-slate-400 truncate mt-0.5">
                   لنا: <span className="text-emerald-400 font-bold">{(debtsSummary?.customerDebt ?? 0).toFixed(0)}</span> • علينا: <span className="text-rose-400 font-bold">{(debtsSummary?.supplierDebt ?? 0).toFixed(0)}</span>
                 </div>
+
+                {/* Smooth Expandable Summary Details Drawer */}
+                <div
+                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
+                    hoveredCardKey === 'debts_summary' || expandedCardKey === 'debts_summary'
+                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
+                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60">
+                    <div>
+                      <span className="text-slate-500 block text-[9px]">ديون الزبائن (لنا):</span>
+                      <span className="font-bold text-emerald-400 font-mono">
+                        {(debtsSummary?.customerDebt ?? 0).toFixed(0)} {settings.currency}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[9px]">ديون الموردين (علينا):</span>
+                      <span className="font-bold text-rose-400 font-mono">
+                        {(debtsSummary?.supplierDebt ?? 0).toFixed(0)} {settings.currency}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </button>
 
             {/* CARD 6: TODAY'S INVOICES & SHIFT */}
             <button
               type="button"
+              onMouseEnter={() => setHoveredCardKey('today_invoices')}
+              onMouseLeave={() => setHoveredCardKey(null)}
               onClick={() => {
                 setModalSearch('');
                 setActiveModal('today_invoices');
               }}
-              className="group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-indigo-500/60 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150 text-right cursor-pointer shadow-sm min-h-[110px]"
+              className="group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-indigo-500/60 transition-all duration-300 ease-out text-right cursor-pointer shadow-sm min-h-[110px]"
             >
               <div className="flex items-center justify-between w-full">
                 <div className="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
@@ -677,6 +810,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
                 <div className="text-[10px] text-slate-400 truncate mt-0.5">
                   {language === 'ar' ? 'كشف تفصيلي وطباعة تقرير Z' : 'Z-Report & drawer audit'}
+                </div>
+
+                {/* Smooth Expandable Summary Details Drawer */}
+                <div
+                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
+                    hoveredCardKey === 'today_invoices' || expandedCardKey === 'today_invoices'
+                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
+                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60">
+                    <div>
+                      <span className="text-slate-500 block text-[9px]">عمليات مسجلة:</span>
+                      <span className="font-bold text-indigo-300 font-mono">
+                        {todaySalesTransactions.length} عملية
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[9px]">حالة الوردية:</span>
+                      <span className="font-bold text-emerald-400">نشطة وقابلة للإقفال</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </button>

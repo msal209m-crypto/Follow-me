@@ -24,8 +24,11 @@ import {
   Megaphone
 } from 'lucide-react';
 import { StoreSettings } from '../types';
-import { verifyDeveloperPin, getPlatformDeveloperSettings, getPlatformAds } from '../services/platformSettingsService';
+import { verifyDeveloperPin, getPlatformDeveloperSettings, getPlatformAds, isDeveloperRemembered, setDeveloperRemembered } from '../services/platformSettingsService';
+import { setActiveSessionRole } from '../services/rbacAuthService';
 import { VillageBulletinView } from './VillageBulletinView';
+import { DeveloperAuthModal } from './DeveloperAuthModal';
+import { AdhanTopBarWidget } from './AdhanTopBarWidget';
 
 interface PortalLandingScreenProps {
   settings: StoreSettings;
@@ -57,14 +60,43 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   const [pinError, setPinError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [isDeveloper, setIsDeveloper] = useState(() => localStorage.getItem('qaryati_is_developer') === 'true');
+  const [isDeveloper, setIsDeveloper] = useState(() => isDeveloperRemembered() || localStorage.getItem('qaryati_is_developer') === 'true');
   const [showBulletinModal, setShowBulletinModal] = useState(false);
 
-  // Developer / Owner PIN modal state
+  // Developer / Owner Authentication Modal state
   const [showAdminPinModal, setShowAdminPinModal] = useState(false);
-  const [adminPinInput, setAdminPinInput] = useState('');
-  const [adminPinError, setAdminPinError] = useState('');
-  const [showAdminPassword, setShowAdminPassword] = useState(false);
+
+  // Secret 5-tap on logo trigger
+  const [secretTapCount, setSecretTapCount] = useState(0);
+  const [secretTapTimer, setSecretTapTimer] = useState<any>(null);
+
+  const handleLogoSecretTap = () => {
+    setSecretTapCount((prev) => {
+      const next = prev + 1;
+      if (next >= 5) {
+        setDeveloperRemembered(true);
+        setActiveSessionRole('DEVELOPER');
+        setIsDeveloper(true);
+        onEnterAdmin?.();
+        return 0;
+      }
+      return next;
+    });
+
+    if (secretTapTimer) clearTimeout(secretTapTimer);
+    const timer = setTimeout(() => setSecretTapCount(0), 2000);
+    setSecretTapTimer(timer);
+  };
+
+  const handleDeveloperPortalClick = () => {
+    if (isDeveloperRemembered()) {
+      setActiveSessionRole('DEVELOPER');
+      setIsDeveloper(true);
+      onEnterAdmin?.();
+    } else {
+      setShowAdminPinModal(true);
+    }
+  };
 
   // Retrieve or initialize merchant PIN
   const getStoredPin = () => {
@@ -97,18 +129,6 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
     }
   };
 
-  const handleVerifyAdminPin = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (verifyDeveloperPin(adminPinInput)) {
-      localStorage.setItem('qaryati_is_developer', 'true');
-      setIsDeveloper(true);
-      setShowAdminPinModal(false);
-      onEnterAdmin?.();
-    } else {
-      setAdminPinError('رمز مطور ومالك المنصة غير صحيح (الرمز الافتراضي: admin أو 1234)');
-    }
-  };
-
   return (
     <div
       dir={isRTL ? 'rtl' : 'ltr'}
@@ -121,7 +141,11 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
       {/* Top Simple Bar */}
       <header className={`p-4 sm:p-6 flex items-center justify-between max-w-6xl mx-auto w-full border-b ${isDarkMode ? 'border-slate-800/80 bg-slate-950/80' : 'border-slate-200 bg-white/80'} backdrop-blur-md sticky top-0 z-20`}>
         <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-950/30">
+          <div
+            onClick={handleLogoSecretTap}
+            title="شعار المنصة (5 نقرات سريعة لفتح لوحة المطور فوراً)"
+            className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-950/30 cursor-pointer active:scale-90 transition-transform"
+          >
             <Store className="w-5 h-5" />
           </div>
           <div>
@@ -129,13 +153,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
               {settings.storeName || 'تطبيق قريتي'}
             </h1>
             <p
-              onClick={() => {
-                if (!isDeveloper) {
-                  setAdminPinInput('');
-                  setAdminPinError('');
-                  setShowAdminPinModal(true);
-                }
-              }}
+              onClick={handleDeveloperPortalClick}
               className="text-xs text-emerald-500 font-medium cursor-pointer hover:underline"
               title="انقر لتسجيل دخول المطور"
             >
@@ -145,6 +163,9 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Adhan & Prayer Times Widget in Header */}
+          <AdhanTopBarWidget isDarkMode={isDarkMode} isRTL={isRTL} compact={true} />
+
           {/* Dark / Light Mode Toggle Button */}
           <button
             type="button"
@@ -218,6 +239,9 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
               </div>
             </div>
           )}
+
+          {/* Adhan & Prayer Times Village Bar */}
+          <AdhanTopBarWidget isDarkMode={isDarkMode} isRTL={isRTL} compact={false} className="w-full py-2.5 px-4" />
         </div>
 
         <div className="text-center max-w-2xl mb-8">
@@ -355,13 +379,9 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
           )}
 
           {/* Card 4: حساب مطور ومالك المنصة (Purple / Pink Vibrant) */}
-          {isDeveloper && onEnterAdmin ? (
+          {onEnterAdmin ? (
             <div
-              onClick={() => {
-                setAdminPinInput('');
-                setAdminPinError('');
-                setShowAdminPinModal(true);
-              }}
+              onClick={handleDeveloperPortalClick}
               className={`group cursor-pointer rounded-3xl p-5 flex flex-col justify-between shadow-lg hover:shadow-2xl transition-all duration-300 border relative overflow-hidden ${
                 isDarkMode 
                   ? 'bg-gradient-to-br from-purple-950/70 via-slate-900 to-slate-900 border-purple-500/40 hover:border-purple-400' 
@@ -463,71 +483,19 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         </div>
       )}
 
-      {/* Developer / Owner PIN Verification Modal */}
-      {showAdminPinModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div
-            className={`rounded-3xl w-full max-w-sm p-6 shadow-2xl relative border ${isDarkMode ? 'bg-slate-900 border-purple-500/30 text-white' : 'bg-white border-purple-200 text-slate-900'}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="text-center mb-5">
-              <div className="w-12 h-12 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-500 dark:text-purple-400 flex items-center justify-center mx-auto mb-3 shadow-inner">
-                <Code2 className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold">دخول مطور ومالك المنصة</h3>
-              <p className={`text-xs mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                التحكم بالباركود، الاشتراكات، الإعلانات، إعدادات التطبيق واللغة (الرمز الافتراضي: admin)
-              </p>
-            </div>
-
-            <form onSubmit={handleVerifyAdminPin} className="space-y-4">
-              <div className="relative">
-                <input
-                  type={showAdminPassword ? 'text' : 'password'}
-                  value={adminPinInput}
-                  onChange={(e) => {
-                    setAdminPinInput(e.target.value);
-                    setAdminPinError('');
-                  }}
-                  placeholder="أدخل رمز المطور (admin)..."
-                  autoFocus
-                  className={`w-full border rounded-xl px-4 py-3 text-center text-lg tracking-wider font-mono focus:outline-none focus:ring-1 focus:ring-purple-500 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-600 focus:border-purple-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:border-purple-500'}`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowAdminPassword(!showAdminPassword)}
-                  className="absolute top-1/2 -translate-y-1/2 left-3 text-slate-500 hover:text-slate-300"
-                >
-                  {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-
-              {adminPinError && (
-                <div className="flex items-center gap-1.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{adminPinError}</span>
-                </div>
-              )}
-
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAdminPinModal(false)}
-                  className={`flex-1 py-2.5 rounded-xl border text-xs font-semibold transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'}`}
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-purple-950/40 transition-all"
-                >
-                  تأكيد ودخول
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Developer Authentication Modal (Phone + Secret Key Protection) */}
+      <DeveloperAuthModal
+        isOpen={showAdminPinModal}
+        onClose={() => setShowAdminPinModal(false)}
+        onSuccess={() => {
+          setIsDeveloper(true);
+          setActiveSessionRole('DEVELOPER');
+          onEnterAdmin?.();
+        }}
+        isDarkMode={isDarkMode}
+        isRTL={isRTL}
+        defaultPhone="0502063584"
+      />
 
       {/* Merchant PIN Verification Modal */}
       {showPinModal && (

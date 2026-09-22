@@ -561,7 +561,7 @@ export const MerchantOrdersModal: React.FC<MerchantOrdersModalProps> = ({
                           className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-blue-950/50 transition-all hover:scale-[1.02] active:scale-[0.98]"
                         >
                           <Truck className="w-4 h-4" />
-                          <span>اكتمل التجهيز - إرسال لسائق التوصيل 🛵📦</span>
+                          <span>تم - إرسال الطلب للسائق 🛵📦</span>
                         </button>
                       )}
 

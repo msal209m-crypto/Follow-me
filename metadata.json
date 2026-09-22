@@ -1,8 +1,9 @@
 {
   "name": "قريتي - تطبيق التجارة المحلية المتكامل",
-  "description": "تطبيق قريتي الشامل لتجارة القرى والمتاجر المحلية مع بوابة الدخول المستقلة وعزل بيانات التجار",
+  "description": "تطبيق قريتي الشامل لتجارة القرى والمتاجر المحلية مع بوابة الدخول المستقلة وعزل بيانات التجار ومواقيت الأذان",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "geolocation"
   ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

@@ -645,7 +645,7 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
                       className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                     >
                       <Truck className="w-3.5 h-3.5" />
-                      <span>قبول واستلام الطلب 🛵</span>
+                      <span>أنا في الطريق إليك 🛵 (استلام وتوصيل)</span>
                     </button>
                   </div>
                 </div>

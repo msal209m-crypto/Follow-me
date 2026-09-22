@@ -36,6 +36,7 @@ import {
   Truck,
   MapPin,
   Compass,
+  Code2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -43,8 +44,9 @@ import { usePWA } from '../context/PWAContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { POPULAR_CURRENCIES, getDefaultRatesForBase } from '../data/currencies';
 import { ReorderAlertsDropdown } from './ReorderAlertsDropdown';
+import { AdhanTopBarWidget } from './AdhanTopBarWidget';
 import { Item } from '../types';
-import { clearAllSystemSessions } from '../services/rbacAuthService';
+import { clearAllSystemSessions, getActiveSessionRole } from '../services/rbacAuthService';
 import { OWNER_CONTACT } from '../config/ownerContact';
 import { getDismissedAlertIds } from '../utils/alertUtils';
 import { getDeliveryOrders } from '../services/deliveryService';
@@ -58,6 +60,7 @@ interface TopHeaderProps {
   onOpenAuthModal: () => void;
   onNavigateToItems?: (item?: Item) => void;
   onNavigateToDashboard?: () => void;
+  onNavigateToAdmin?: () => void;
   onOpenShareModal?: () => void;
   onSwitchToStore?: () => void;
   onOpenLanding?: () => void;
@@ -77,6 +80,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onSwitchToStore,
   onOpenLanding,
   onOpenMerchantOrders,
+  onNavigateToAdmin,
   onStartTour,
 }) => {
   const {
@@ -662,6 +666,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </div>
 
+          {/* Adhan & Prayer Times Widget */}
+          <AdhanTopBarWidget isDarkMode={true} isRTL={language === 'ar'} compact={true} />
+
           {/* 3. Stock Reorder Notifications Bell */}
           <div className="relative" ref={alertsMenuRef}>
             <button
@@ -1054,6 +1061,20 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
               <span>حساب التاجر المحمي</span>
             </span>
+            {/* Developer Tools Wrapper */}
+            {getActiveSessionRole() === 'DEVELOPER' && (
+              <div className="relative group">
+                <button
+                  type="button"
+                  onClick={onNavigateToAdmin}
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-[10px] font-bold text-rose-300 hover:bg-rose-500/20 transition-all"
+                  title="لوحة تحكم المطور"
+                >
+                  <Code2 className="w-3 h-3" />
+                  <span className="hidden sm:inline">مطور</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <p className="text-[11px] text-slate-400 truncate mt-0.5 flex items-center gap-1.5">

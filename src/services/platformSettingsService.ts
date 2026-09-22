@@ -160,8 +160,8 @@ const DEFAULT_BARCODE_CONFIG: BarcodePlatformConfig = {
 const DEFAULT_DEVELOPER_SETTINGS: PlatformDeveloperSettings = {
   platformName: 'منصة قريتي الموحدة',
   developerOwnerName: 'مطور ومالك المنصة',
-  supportPhone: '0500000000',
-  supportEmail: 'developer@qaryati.com',
+  supportPhone: '0502063584',
+  supportEmail: 'Msal209m@gmail.com',
   developerPin: 'admin',
   defaultCurrency: 'ر.س',
   taxRatePercent: 15,
@@ -253,7 +253,15 @@ export function getPlatformDeveloperSettings(): PlatformDeveloperSettings {
   try {
     const raw = localStorage.getItem(DEVELOPER_SETTINGS_KEY);
     if (raw) {
-      return { ...DEFAULT_DEVELOPER_SETTINGS, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      // Ensure fixed developer email and phone are always up to date
+      if (!parsed.supportEmail || parsed.supportEmail === 'developer@qaryati.com') {
+        parsed.supportEmail = 'Msal209m@gmail.com';
+      }
+      if (!parsed.supportPhone || parsed.supportPhone === '0500000000') {
+        parsed.supportPhone = '0502063584';
+      }
+      return { ...DEFAULT_DEVELOPER_SETTINGS, ...parsed };
     }
   } catch (e) {
     console.warn('Error reading developer settings:', e);
@@ -275,13 +283,107 @@ export function savePlatformDeveloperSettings(
   return merged;
 }
 
-export function verifyDeveloperPin(pin: string): boolean {
+export function convertArabicToEnglishDigits(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776));
+}
+
+export function normalizePhoneNumber(phone: string): string {
+  if (!phone) return '';
+  let cleaned = convertArabicToEnglishDigits(phone).replace(/[\s\-\(\)\+]/g, '');
+  if (cleaned.startsWith('00966')) cleaned = '0' + cleaned.slice(5);
+  else if (cleaned.startsWith('966')) cleaned = '0' + cleaned.slice(3);
+  else if (cleaned.startsWith('5') && cleaned.length === 9) cleaned = '0' + cleaned;
+  return cleaned;
+}
+
+export function isAuthorizedDeveloperPhone(phone: string): boolean {
+  if (!phone) return false;
   const config = getPlatformDeveloperSettings();
-  const trimmed = pin.trim();
+  const normalizedInput = normalizePhoneNumber(phone);
+  const normalizedConfigPhone = normalizePhoneNumber(config.supportPhone);
+
+  const authorizedList = [
+    normalizedConfigPhone,
+    '0502063584',
+    '502063584',
+    '0500000000',
+  ].filter(Boolean);
+
+  return authorizedList.includes(normalizedInput);
+}
+
+export function verifyDeveloperCredentials(
+  phone: string,
+  secretKey: string
+): { success: boolean; errorField?: 'phone' | 'key' | 'both'; message: string } {
+  const isPhoneOk = isAuthorizedDeveloperPhone(phone);
+  const isKeyOk = verifyDeveloperPin(secretKey);
+
+  if (!isPhoneOk && !isKeyOk) {
+    return {
+      success: false,
+      errorField: 'both',
+      message: 'رقم الجوال ومفتاح المطور غير صحيحين! يرجى إدخال البيانات المعتمدة لمطور المنصة.',
+    };
+  }
+
+  if (!isPhoneOk) {
+    return {
+      success: false,
+      errorField: 'phone',
+      message: 'رقم الجوال غير مصرح به للدخول لحساب المطور (الرقم المعتمد: 0502063584).',
+    };
+  }
+
+  if (!isKeyOk) {
+    return {
+      success: false,
+      errorField: 'key',
+      message: 'كلمة المرور أو مفتاح المطور السري غير صحيح! (المفتاح الافتراضي: admin أو 1234).',
+    };
+  }
+
+  return {
+    success: true,
+    message: 'تم التحقق من هوية وصلاحيات المطور بنجاح.',
+  };
+}
+
+export function verifyDeveloperPin(pin: string): boolean {
+  if (!pin) return false;
+  const config = getPlatformDeveloperSettings();
+  const trimmed = convertArabicToEnglishDigits(pin.trim()).toLowerCase();
+  const targetPin = convertArabicToEnglishDigits(config.developerPin.trim()).toLowerCase();
   return (
-    trimmed === config.developerPin ||
+    trimmed === targetPin ||
     trimmed === 'admin' ||
     trimmed === '1234' ||
     trimmed === '0000'
   );
+}
+
+export function isDeveloperRemembered(): boolean {
+  try {
+    return (
+      localStorage.getItem('qaryati_developer_remembered') === 'true' ||
+      localStorage.getItem('qaryati_remember_developer') === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function setDeveloperRemembered(remember: boolean): void {
+  try {
+    if (remember) {
+      localStorage.setItem('qaryati_developer_remembered', 'true');
+      localStorage.setItem('qaryati_is_developer', 'true');
+    } else {
+      localStorage.removeItem('qaryati_developer_remembered');
+      localStorage.removeItem('qaryati_remember_developer');
+    }
+  } catch {}
 }

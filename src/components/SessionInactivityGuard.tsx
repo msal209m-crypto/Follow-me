@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { ShieldAlert, Clock, RefreshCw, LogOut, CheckCircle2 } from 'lucide-react';
-import { getInactivityTimeoutMinutes, clearAllSystemSessions } from '../services/rbacAuthService';
+import { getInactivityTimeoutMinutes, clearAllSystemSessions, getActiveSessionRole } from '../services/rbacAuthService';
 
 interface SessionInactivityGuardProps {
   isActiveSession: boolean;
@@ -30,6 +30,12 @@ export const SessionInactivityGuard: React.FC<SessionInactivityGuardProps> = ({
     if (!isActiveSession) {
       setWarningRemainingSeconds(null);
       return;
+    }
+
+    // Skip inactivity check for developers
+    const role = getActiveSessionRole();
+    if (role === 'DEVELOPER') {
+        return;
     }
 
     const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
