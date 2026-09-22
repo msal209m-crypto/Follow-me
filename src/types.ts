@@ -7,7 +7,8 @@ export type NavigationTab =
   | 'accounts'
   | 'debts'
   | 'daily_reports'
-  | 'village_bulletin';
+  | 'village_bulletin'
+  | 'merchant_ads';
 
 export interface Item {
   id: string;
@@ -384,3 +385,30 @@ export interface StoreDirectoryRecord {
   rating?: number;       // متوسط التقييم بالنجوم
   ratingCount?: number;  // عدد المقيمين
 }
+
+export interface AdPackage {
+  id: string;
+  name: string;
+  price: number;
+  durationDays: number;
+  description: string;
+}
+
+export interface AdRecord {
+  id: string;
+  merchantId?: string;
+  storeId?: string;
+  storeName?: string;
+  title: string;
+  description: string;
+  imageUrl?: string;
+  linkUrl?: string;
+  packageName: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+  village: string;
+  startDate?: string;
+  endDate?: string;
+  createdAt: string;
+  approvedBy?: string;
+}
+

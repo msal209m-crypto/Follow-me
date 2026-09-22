@@ -64,6 +64,11 @@ service cloud.firestore {
     match /stores/{storeId} {
       allow read: if true;
       allow write: if isAdmin() || (request.auth != null && (storeId == request.auth.uid || request.resource.data.ownerId == request.auth.uid));
+      
+      match /items/{itemId} {
+        allow read: if true;
+        allow write: if isAdmin() || (request.auth != null && (storeId == request.auth.uid || request.resource.data.ownerId == request.auth.uid));
+      }
     }
 
     // Orders collection: Customers and Merchants can access their respective orders

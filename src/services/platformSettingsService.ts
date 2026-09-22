@@ -7,6 +7,9 @@
  * 4. Language & Localization preferences
  */
 
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+
 export interface PlatformAd {
   id: string;
   title: string;
@@ -19,6 +22,12 @@ export interface PlatformAd {
   isActive: boolean;
   createdAt: string;
   expiresAt?: string;
+  merchantId?: string;
+  storeId?: string;
+  storeName?: string;
+  packageName?: string;
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+  village?: string;
 }
 
 export interface BarcodePlatformConfig {
@@ -194,6 +203,11 @@ export function savePlatformAds(ads: PlatformAd[]): void {
   try {
     localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(ads));
     window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: ads }));
+    // Sync to Firestore
+    ads.forEach((ad) => {
+      setDoc(doc(db, 'ads', ad.id), ad, { merge: true })
+        .catch((e) => console.warn('Firestore ad set error:', e));
+    });
   } catch (e) {
     console.warn('Error saving platform ads:', e);
   }
@@ -220,7 +234,14 @@ export function togglePlatformAdStatus(id: string): void {
 export function deletePlatformAd(id: string): void {
   const ads = getPlatformAds();
   const updated = ads.filter((ad) => ad.id !== id);
-  savePlatformAds(updated);
+  localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: updated }));
+  try {
+    deleteDoc(doc(db, 'ads', id))
+      .catch((e) => console.warn('Firestore ad delete error:', e));
+  } catch (e) {
+    console.warn('Error deleting ad in firestore:', e);
+  }
 }
 
 // --- Barcode Engine Config ---

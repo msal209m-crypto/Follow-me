@@ -49,8 +49,19 @@ import {
   LogOut,
   Edit3,
   Save,
+  Bell,
+  MessageSquare,
+  Send,
 } from 'lucide-react';
-import { clearAllSystemSessions, getDrivers } from '../services/rbacAuthService';
+import {
+  clearAllSystemSessions,
+  getDrivers,
+  getDeveloperNotifications,
+  markDeveloperNotificationRead,
+  replyDeveloperNotification,
+  DeveloperNotification
+} from '../services/rbacAuthService';
+import { compressImageFile } from '../utils/imageUtils';
 import { supabase } from '../lib/supabase';
 import { AuditLogViewer } from './AuditLogViewer';
 import JsBarcode from 'jsbarcode';
@@ -98,7 +109,7 @@ interface PlatformAdminViewProps {
   onOpenLanding: () => void;
 }
 
-type AdminTab = 'SETTINGS' | 'STORES' | 'DRIVERS' | 'SUPABASE_MERCHANTS' | 'LICENSES' | 'BARCODE' | 'ADS' | 'DISPUTES_LOGS' | 'VILLAGES_STORES' | 'LANGUAGE';
+type AdminTab = 'SETTINGS' | 'STORES' | 'DRIVERS' | 'SUPABASE_MERCHANTS' | 'LICENSES' | 'BARCODE' | 'ADS' | 'DISPUTES_LOGS' | 'VILLAGES_STORES' | 'LANGUAGE' | 'NOTIFICATIONS';
 
 export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   settings: propSettings,
@@ -120,9 +131,26 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   const [activeTab, setActiveTab] = useState<AdminTab>('LICENSES');
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
+  const [devNotifications, setDevNotifications] = useState<DeveloperNotification[]>(() => getDeveloperNotifications());
+  const [quickReplyText, setQuickReplyText] = useState<{ [id: string]: string }>({});
+
   const showToast = (msg: string) => {
     setSuccessToast(msg);
     setTimeout(() => setSuccessToast(null), 3500);
+  };
+
+  const handleMarkRead = (id: string) => {
+    markDeveloperNotificationRead(id);
+    setDevNotifications(getDeveloperNotifications());
+  };
+
+  const handleSendQuickReply = (id: string) => {
+    const text = quickReplyText[id];
+    if (!text || !text.trim()) return;
+    replyDeveloperNotification(id, text.trim());
+    setDevNotifications(getDeveloperNotifications());
+    setQuickReplyText({ ...quickReplyText, [id]: '' });
+    showToast('تم إرسال الرد السريع بنجاح إلى التاجر 🚀');
   };
 
   // --- Subscriptions & Licenses State ---
@@ -280,6 +308,49 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
       setAdsList(getPlatformAds());
       showToast('تم حذف الإعلان');
     }
+  };
+
+  const handleApproveAd = (id: string) => {
+    const ads = getPlatformAds();
+    const updated = ads.map((ad) => {
+      if (ad.id === id) {
+        let days = 30;
+        if (ad.packageName?.includes('البرونزية') || ad.packageName === 'Bronze') days = 7;
+        else if (ad.packageName?.includes('الفضية') || ad.packageName === 'Silver') days = 14;
+        else if (ad.packageName?.includes('الذهبية') || ad.packageName?.includes('VIP') || ad.packageName === 'Gold') days = 30;
+
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + days);
+
+        return {
+          ...ad,
+          status: 'APPROVED' as const,
+          isActive: true,
+          expiresAt: endDate.toISOString().split('T')[0],
+        };
+      }
+      return ad;
+    });
+    savePlatformAds(updated);
+    setAdsList(getPlatformAds());
+    showToast('تمت الموافقة على الحملة الإعلانية وتنشيطها في شريط الترويج بالقرية! ✅');
+  };
+
+  const handleRejectAd = (id: string) => {
+    const ads = getPlatformAds();
+    const updated = ads.map((ad) => {
+      if (ad.id === id) {
+        return {
+          ...ad,
+          status: 'REJECTED' as const,
+          isActive: false,
+        };
+      }
+      return ad;
+    });
+    savePlatformAds(updated);
+    setAdsList(getPlatformAds());
+    showToast('تم رفض طلب الحملة الإعلانية للتاجر.');
   };
 
   // --- Platform & App Global Developer Settings ---
@@ -834,9 +905,118 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
             <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
             <span>سجل العمليات والنزاعات ⚠️</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('NOTIFICATIONS')}
+            className={`py-2 px-3.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer relative ${
+              activeTab === 'NOTIFICATIONS'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Bell className="w-3.5 h-3.5 text-amber-400" />
+            <span>إشعارات ودعم التجار 🔔</span>
+            {devNotifications.filter((n) => !n.isRead).length > 0 && (
+              <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse">
+                {devNotifications.filter((n) => !n.isRead).length}
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* TAB 1: SUBSCRIPTIONS & LICENSES */}
+        {/* TAB: NOTIFICATIONS & TECH SUPPORT */}
+        {activeTab === 'NOTIFICATIONS' && (
+          <div className="space-y-4">
+            <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="font-black text-base text-white flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-amber-400" />
+                    <span>إشعارات المتاجر الجديدة وطلبات الدعم الفني للتاجر 🛎️</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    تلقي تنبيهات فورية عند تسجيل أي متجر جديد بالمنصة أو طلب مساعدة تقنية من التجار مع إمكانية الرد السريع.
+                  </p>
+                </div>
+                <div className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-xl">
+                  إجمالي الإشعارات: {devNotifications.length}
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                {devNotifications.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 text-xs">لا توجد إشعارات حالياً</div>
+                ) : (
+                  devNotifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      className={`p-4 rounded-2xl border transition-all space-y-3 ${
+                        notif.isRead
+                          ? 'bg-slate-950/60 border-slate-800/80 text-slate-300'
+                          : 'bg-purple-950/25 border-purple-500/40 text-white shadow-lg shadow-purple-950/20'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                              notif.type === 'NEW_MERCHANT' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                            }`}>
+                              {notif.type === 'NEW_MERCHANT' ? 'متجر جديد 🏪' : 'دعم فني 🛠️'}
+                            </span>
+                            <h3 className="font-black text-sm">{notif.title}</h3>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed">{notif.message}</p>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-400 pt-1 font-mono">
+                            <span>المرسل: <strong className="text-white">{notif.senderName}</strong> ({notif.senderPhone})</span>
+                            <span>•</span>
+                            <span>{new Date(notif.timestamp).toLocaleString('ar-SA')}</span>
+                          </div>
+                        </div>
+
+                        {!notif.isRead && (
+                          <button
+                            type="button"
+                            onClick={() => handleMarkRead(notif.id)}
+                            className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold transition-all shrink-0 cursor-pointer"
+                          >
+                            تحديد كمقروء ✓
+                          </button>
+                        )}
+                      </div>
+
+                      {notif.quickReply ? (
+                        <div className="p-3 rounded-xl bg-purple-900/30 border border-purple-500/30 text-xs text-purple-200 flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-purple-400 shrink-0" />
+                          <span><strong>رد المطور المرسل:</strong> {notif.quickReply}</span>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 pt-2 border-t border-slate-800/80">
+                          <input
+                            type="text"
+                            value={quickReplyText[notif.id] || ''}
+                            onChange={(e) => setQuickReplyText({ ...quickReplyText, [notif.id]: e.target.value })}
+                            placeholder="اكتب ردك السريع للتاجر هنا..."
+                            className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSendQuickReply(notif.id)}
+                            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 shrink-0 cursor-pointer"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>إرسال الرد 🚀</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {activeTab === 'LICENSES' && (
           <div className="space-y-5">
             {/* Generate Key Form */}
@@ -1322,10 +1502,10 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                 <div>
                   <h2 className="font-black text-base text-white flex items-center gap-2">
                     <Megaphone className="w-5 h-5 text-cyan-400" />
-                    <span>إدارة الإعلانات الترويجية وعروض متجر القرية</span>
+                    <span>إدارة الإعلانات وبوابات الترويج المدفوعة للقرى</span>
                   </h2>
                   <p className="text-xs text-slate-400 mt-1">
-                    تظهر هذه الإعلانات في شريط الترويج أعلى متجر القرية والعملاء وتطبيق الجوال لجذب الزبائن وزيادة المبيعات.
+                    اعتماد طلبات باقات التجار (برونزية، فضية، VIP ذهبية)، ونشر عروض المطور المباشرة لتظهر لجميع سكان قريتك.
                   </p>
                 </div>
                 <button
@@ -1350,9 +1530,17 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                       key={ad.id}
                       className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between space-y-3 relative overflow-hidden group"
                     >
+                      {/* Subscription Info if Merchant Ad */}
+                      {ad.merchantId && (
+                        <div className="flex items-center justify-between text-[11px] bg-slate-900/80 border border-slate-850 px-3 py-1.5 rounded-xl">
+                          <span className="text-cyan-400 font-bold">📢 إعلان تاجر: {ad.storeName}</span>
+                          <span className="text-slate-500 font-bold">باقة: {ad.packageName}</span>
+                        </div>
+                      )}
+
                       {/* Live Banner Preview Inside Ad Card */}
                       <div
-                        className={`bg-gradient-to-r ${ad.bgGradient} rounded-xl p-3.5 text-white shadow-md relative overflow-hidden`}
+                        className={`bg-gradient-to-r ${ad.bgGradient || 'from-emerald-950 to-slate-900'} rounded-xl p-3.5 text-white shadow-md relative overflow-hidden`}
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white/20 backdrop-blur-md">
@@ -1363,10 +1551,40 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                               كود: {ad.discountCode}
                             </span>
                           )}
+                          {ad.village && (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300">
+                              {ad.village}
+                            </span>
+                          )}
                         </div>
                         <h4 className="font-extrabold text-sm text-white">{ad.title}</h4>
-                        <p className="text-[11px] text-white/80 mt-0.5 line-clamp-2">{ad.subtitle}</p>
+                        <p className="text-[11px] text-white/80 mt-0.5 line-clamp-2">{ad.subtitle || ad.description}</p>
                       </div>
+
+                      {/* Merchant Ad Status Controls */}
+                      {ad.merchantId && ad.status === 'PENDING' && (
+                        <div className="bg-slate-900/50 p-2.5 rounded-xl border border-amber-500/10 flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1 animate-pulse">
+                            <span>⏳ طلب قيد المراجعة</span>
+                          </span>
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleApproveAd(ad.id)}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg transition-colors cursor-pointer"
+                            >
+                              اعتماد ونشر
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRejectAd(ad.id)}
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-rose-950/40 text-rose-400 text-[10px] font-black rounded-lg transition-colors cursor-pointer"
+                            >
+                              رفض الطلب
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800/80">
                         <div className="flex items-center gap-2">
@@ -1375,21 +1593,25 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                               ad.isActive
                                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : ad.status === 'REJECTED'
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                                 : 'bg-slate-800 text-slate-400'
                             }`}
                           >
-                            {ad.isActive ? 'نشط في المتجر' : 'متوقف'}
+                            {ad.isActive ? 'نشط في المتجر' : ad.status === 'REJECTED' ? 'مرفوض' : ad.status === 'PENDING' ? 'انتظار الموافقة' : 'متوقف'}
                           </span>
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleAd(ad.id)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
-                          >
-                            {ad.isActive ? 'إيقاف مؤقت' : 'تفعيل'}
-                          </button>
+                          {(!ad.merchantId || ad.status === 'APPROVED') && (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleAd(ad.id)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              {ad.isActive ? 'إيقاف مؤقت' : 'تفعيل'}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleDeleteAd(ad.id)}
@@ -1519,18 +1741,70 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    رابط صورة الواجهة الرئيسية والشاشة (Hero Image URL 🖼️)
+                    صورة الواجهة الرئيسية والشاشة (Hero Image 🖼️)
                   </label>
-                  <input
-                    type="url"
-                    value={devSettings.heroImageUrl || ''}
-                    onChange={(e) => setDevSettings({ ...devSettings, heroImageUrl: e.target.value })}
-                    placeholder="https://images.unsplash.com/... (رابط الصورة الخلفية أو البانر الرئيسي)"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-left focus:outline-none focus:border-purple-500"
-                  />
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="url"
+                      value={devSettings.heroImageUrl || ''}
+                      onChange={(e) => setDevSettings({ ...devSettings, heroImageUrl: e.target.value })}
+                      placeholder="https://images.unsplash.com/... (رابط الصورة الخلفية)"
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-left focus:outline-none focus:border-purple-500"
+                    />
+                    <label className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 shadow-md">
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>اختر صورة من جهازك 📂</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const base64 = await compressImageFile(file, 800, 0.8);
+                              setDevSettings({ ...devSettings, heroImageUrl: base64 });
+                            } catch (err) {
+                              console.error('Failed to upload image:', err);
+                            }
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                   <span className="text-[10px] text-slate-400 mt-1 block">
-                    تستطيع كمطور تغيير صورة الغلاف والبانر الرئيسي للشاشة الأولى للمنصة مباشرة عبر هذا الرابط.
+                    تستطيع كمطور تغيير صورة الغلاف والبانر الرئيسي للشاشة الأولى للمنصة عبر لصق الرابط أو رفعها من جهازك مباشرة.
                   </span>
+
+                  {/* 5 Curated Rural Trade Preset Images */}
+                  <div className="mt-3 pt-3 border-t border-slate-800/80">
+                    <span className="block text-[11px] font-bold text-amber-400 mb-2">أو اختر من صور التجارة الريفية الجاهزة (٥ صور مختارة بعناية 🌾):</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {[
+                        { label: 'السوق الطازج', url: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1200' },
+                        { label: 'الحقول والزراعة', url: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&q=80&w=1200' },
+                        { label: 'الحرف اليدوية', url: 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&q=80&w=1200' },
+                        { label: 'العسل البري', url: 'https://images.unsplash.com/photo-1587049352847-4a222e784d38?auto=format&fit=crop&q=80&w=1200' },
+                        { label: 'أكشاك السوق الشعبي', url: 'https://images.unsplash.com/photo-1533900298318-6b8da08a523e?auto=format&fit=crop&q=80&w=1200' },
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setDevSettings({ ...devSettings, heroImageUrl: preset.url })}
+                          className={`p-2 rounded-xl border text-right transition-all cursor-pointer flex flex-col gap-1 group ${
+                            devSettings.heroImageUrl === preset.url
+                              ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-md'
+                              : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <div className="w-full h-14 rounded-lg overflow-hidden bg-slate-950">
+                            <img src={preset.url} alt={preset.label} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          </div>
+                          <span className="text-[10px] font-bold text-center truncate w-full">{preset.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Welcome Splash Configuration */}

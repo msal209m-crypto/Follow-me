@@ -19,6 +19,13 @@ export const MerchantManagementScreen: React.FC<{ onClose: () => void; isDarkMod
 
   useEffect(() => {
     setMerchants(getMerchants());
+    const handleUpdate = () => {
+      setMerchants(getMerchants());
+    };
+    window.addEventListener('qaryati:merchants-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('qaryati:merchants-updated', handleUpdate);
+    };
   }, []);
 
   const updateMerchantStatus = (id: string, approved: boolean) => {

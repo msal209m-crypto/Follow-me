@@ -17,6 +17,13 @@ export const DriverManagementScreen: React.FC<{ onClose: () => void; isDarkMode?
 
   useEffect(() => {
     setDrivers(getDrivers());
+    const handleUpdate = () => {
+      setDrivers(getDrivers());
+    };
+    window.addEventListener('qaryati:drivers-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('qaryati:drivers-updated', handleUpdate);
+    };
   }, []);
 
   const updateDriverStatus = (id: string, approved: boolean) => {

@@ -17,6 +17,7 @@ import { AccountsView } from './components/AccountsView';
 import { DebtsView } from './components/DebtsView';
 import { DailyReportsView } from './components/DailyReportsView';
 import { VillageBulletinView } from './components/VillageBulletinView';
+import { MerchantAdsView } from './components/MerchantAdsView';
 import { OrderGoodsView } from './components/OrderGoodsView';
 import { PrintReceiptModal } from './components/PrintReceiptModal';
 import { QuickItemModal } from './components/QuickItemModal';
@@ -35,6 +36,7 @@ import { DriverPortalView } from './components/DriverPortalView';
 import { PlatformAdminView } from './components/PlatformAdminView';
 import { DeveloperControlPanel } from './components/DeveloperControlPanel';
 import { MerchantManagementScreen } from './components/MerchantManagementScreen';
+import { DriverManagementScreen } from './components/DriverManagementScreen';
 import { MerchantOrdersModal } from './components/MerchantOrdersModal';
 import { MerchantOrderAlertPopup } from './components/MerchantOrderAlertPopup';
 import { useAuth } from './context/AuthContext';
@@ -51,16 +53,19 @@ import {
   FileSpreadsheet,
   CreditCard,
   FileText,
+  Megaphone,
 } from 'lucide-react';
 
 interface MainAppContentProps {
   onSwitchToStore?: () => void;
   onOpenLanding?: () => void;
+  onNavigateToAdmin?: () => void;
 }
 
 const MainAppContent: React.FC<MainAppContentProps> = ({
   onSwitchToStore,
   onOpenLanding,
+  onNavigateToAdmin,
 }) => {
   const {
     activeTab,
@@ -216,7 +221,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
           onOpenMerchantOrders={() => setShowMerchantOrdersModal(true)}
           onNavigateToItems={isCashierMode ? () => {} : () => setActiveTab('items')}
           onNavigateToDashboard={isCashierMode ? () => {} : () => setActiveTab('dashboard')}
-          onNavigateToAdmin={() => handleSwitchToAdmin()}
+          onNavigateToAdmin={onNavigateToAdmin}
           onStartTour={isCashierMode ? undefined : handleStartTour}
         />
 
@@ -283,6 +288,21 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
                 >
                   <BarChart3 className="w-4 h-4 shrink-0" />
                   <span>{language === 'ar' ? 'التقارير والحسابات' : 'Reports & Accounts'}</span>
+                </button>
+
+                {/* 5. الترويج والإعلانات */}
+                <button
+                  type="button"
+                  id="tab-merchant-ads"
+                  onClick={() => setActiveTab('merchant_ads')}
+                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                    activeTab === 'merchant_ads'
+                      ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/90'
+                  }`}
+                >
+                  <Megaphone className="w-4 h-4 shrink-0" />
+                  <span>{language === 'ar' ? 'الترويج والإعلانات' : 'Promotions & Ads'}</span>
                 </button>
               </nav>
 
@@ -451,6 +471,11 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
                     onOpenOrderGoods={handleOpenOrderGoods}
                     onPrintReceipt={handlePrintTransactionReceipt}
                     onNavigate={(tab) => setActiveTab(tab)}
+                    onOpenSettings={(tab) => {
+                      setSettingsInitialTab(tab || 'GENERAL');
+                      setShowSettingsModal(true);
+                    }}
+                    onStartTour={handleStartTour}
                   />
                 )}
 
@@ -488,6 +513,8 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
                 {activeTab === 'daily_reports' && <DailyReportsView />}
 
                 {activeTab === 'village_bulletin' && <VillageBulletinView />}
+
+                {activeTab === 'merchant_ads' && <MerchantAdsView />}
               </>
             )}
           </div>
@@ -686,11 +713,11 @@ const PortalRouter: React.FC = () => {
   const [showGlobalAuthModal, setShowGlobalAuthModal] = useState(false);
   const [showRBACAuthModal, setShowRBACAuthModal] = useState(false);
   const [rbacInitialRole, setRbacInitialRole] = useState<'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER'>('MERCHANT');
-  const [activeAdminTab, setActiveAdminTab] = useState<'dashboard' | 'manage-merchants'>('dashboard');
+  const [activeAdminTab, setActiveAdminTab] = useState<'dashboard' | 'manage-merchants' | 'manage-drivers'>('dashboard');
 
   // Security Guard: Check if trying to access protected portals without active session role
   useEffect(() => {
-    const activeRole = getActiveSessionRole();
+    const activeRole = getActiveSessionRole() as any;
     
     // Skip if already authenticated as developer
     if (activeRole === 'DEVELOPER') return;
@@ -973,6 +1000,10 @@ const PortalRouter: React.FC = () => {
                 setActiveAdminTab('manage-merchants');
                 handleSwitchToAdmin();
               }
+              else if (mode === 'manage-drivers') {
+                setActiveAdminTab('manage-drivers');
+                handleSwitchToAdmin();
+              }
             }}
             onClose={() => {}}
             isDarkMode={true}
@@ -989,6 +1020,8 @@ const PortalRouter: React.FC = () => {
         
         {activeAdminTab === 'manage-merchants' ? (
           <MerchantManagementScreen onClose={() => setActiveAdminTab('dashboard')} />
+        ) : activeAdminTab === 'manage-drivers' ? (
+          <DriverManagementScreen onClose={() => setActiveAdminTab('dashboard')} />
         ) : (
           <PlatformAdminView
             settings={settings}
@@ -1033,6 +1066,7 @@ const PortalRouter: React.FC = () => {
         <MainAppContent
           onSwitchToStore={handleSwitchToStore}
           onOpenLanding={handleSwitchToLanding}
+          onNavigateToAdmin={handleSwitchToAdmin}
         />
       </div>
 

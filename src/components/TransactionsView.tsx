@@ -23,6 +23,8 @@ import {
   Calculator,
   AlertTriangle,
 } from 'lucide-react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { useApp } from '../context/AppContext';
 import {
   TransactionType,
@@ -58,6 +60,111 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     t,
     isRTL,
   } = useApp();
+
+  // Real-time synchronization for items of all stores in the same village and transactions
+  const [realTimeItems, setRealTimeItems] = useState<Item[]>(items);
+  const [realTimeTransactions, setRealTimeTransactions] = useState<Transaction[]>(transactions);
+
+  useEffect(() => {
+    setRealTimeItems(items);
+  }, [items]);
+
+  useEffect(() => {
+    setRealTimeTransactions(transactions);
+  }, [transactions]);
+
+  // Real-time items subscription for the village
+  useEffect(() => {
+    const currentVillage = settings.address || '';
+    if (!currentVillage) {
+      setRealTimeItems(items);
+      return;
+    }
+
+    const unsubStores = onSnapshot(collection(db, 'stores'), (storesSnapshot) => {
+      const storeIdsInVillage: string[] = [];
+      storesSnapshot.forEach((docSnap) => {
+        const storeData = docSnap.data();
+        if (
+          storeData.cityOrVillage === currentVillage ||
+          storeData.village === currentVillage ||
+          storeData.address === currentVillage
+        ) {
+          storeIdsInVillage.push(docSnap.id);
+        }
+      });
+
+      if (storeIdsInVillage.length === 0) {
+        setRealTimeItems(items);
+        return;
+      }
+
+      const unsubsItems: (() => void)[] = [];
+      const allStoresItemsMap = new Map<string, Item[]>();
+      allStoresItemsMap.set(settings.storeId || 'current', items);
+
+      storeIdsInVillage.forEach((storeId) => {
+        const itemsCol = collection(db, 'stores', storeId, 'items');
+        const unsub = onSnapshot(itemsCol, (itemsSnapshot) => {
+          const storeItems: Item[] = [];
+          itemsSnapshot.forEach((itemDoc) => {
+            storeItems.push({ id: itemDoc.id, ...itemDoc.data() } as Item);
+          });
+          allStoresItemsMap.set(storeId, storeItems);
+
+          const merged: Item[] = [];
+          allStoresItemsMap.forEach((itemList) => {
+            merged.push(...itemList);
+          });
+
+          const uniqueMerged: Item[] = [];
+          const seenIds = new Set<string>();
+          merged.forEach((item) => {
+            if (!seenIds.has(item.id)) {
+              seenIds.add(item.id);
+              uniqueMerged.push(item);
+            }
+          });
+
+          setRealTimeItems(uniqueMerged);
+        }, (err) => {
+          console.warn(`Error syncing items for store ${storeId} in TransactionsView:`, err);
+        });
+        unsubsItems.push(unsub);
+      });
+
+      return () => {
+        unsubsItems.forEach((unsub) => unsub());
+      };
+    }, (error) => {
+      console.warn('Error syncing stores for village in TransactionsView:', error);
+    });
+
+    return () => {
+      unsubStores();
+    };
+  }, [settings.address, items]);
+
+  // Real-time transactions subscription for the active user
+  useEffect(() => {
+    const activeUserId = settings.storeId || '';
+    if (!activeUserId) return;
+
+    const transCol = collection(db, 'users', activeUserId, 'transactions');
+    const unsub = onSnapshot(transCol, (snapshot) => {
+      const loadedTrans: Transaction[] = [];
+      snapshot.forEach((docSnap) => {
+        loadedTrans.push({ id: docSnap.id, ...docSnap.data() } as Transaction);
+      });
+      // Sort descending by timestamp
+      loadedTrans.sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+      setRealTimeTransactions(loadedTrans);
+    }, (error) => {
+      console.warn('Error syncing transactions in real-time in TransactionsView:', error);
+    });
+
+    return () => unsub();
+  }, [settings.storeId]);
 
   // Active operation mode (بيع كاش / بيع أجل)
   const [operationType, setOperationType] = useState<TransactionType>('SALE');
@@ -115,15 +222,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   // Catalog categories
   const categories = React.useMemo(() => {
     const set = new Set<string>();
-    items.forEach((item) => {
+    realTimeItems.forEach((item) => {
       if (item.category) set.add(item.category);
     });
     return Array.from(set);
-  }, [items]);
+  }, [realTimeItems]);
 
   // Filtered catalog items
   const filteredCatalogItems = React.useMemo(() => {
-    return items.filter((item) => {
+    return realTimeItems.filter((item) => {
       const q = catalogSearch.trim().toLowerCase();
       const matchesSearch =
         !q ||
@@ -137,7 +244,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         !catalogLowStockOnly || item.quantity <= (item.minStockAlert || 5);
       return matchesSearch && matchesCategory && matchesLowStock;
     });
-  }, [items, catalogSearch, catalogCategory, catalogLowStockOnly]);
+  }, [realTimeItems, catalogSearch, catalogCategory, catalogLowStockOnly]);
 
   // Cart Calculations
   const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
@@ -157,7 +264,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const hasOversoldItems =
     isSaleMode &&
     cart.some((c) => {
-      const s = items.find((i) => i.id === c.itemId);
+      const s = realTimeItems.find((i) => i.id === c.itemId);
       return !s || c.quantity > s.quantity || s.quantity <= 0;
     });
 
@@ -170,7 +277,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     const isSale = operationType === 'SALE' || operationType === 'CREDIT_SALE';
 
     // Get up-to-date item data from global state
-    const storeItem = items.find((i) => i.id === item.id) || item;
+    const storeItem = realTimeItems.find((i) => i.id === item.id) || item;
     const itemUnit = storeItem.unit || (language === 'ar' ? 'حبة' : 'pc');
 
     // Strict validation for sales: prevent selling more than shelf inventory
@@ -246,7 +353,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     e.preventDefault();
     if (!barcodeInput.trim()) return;
 
-    const found = findItemByBarcode(barcodeInput);
+    const found = realTimeItems.find(
+      (i) => String(i.barcode).trim().toLowerCase() === barcodeInput.trim().toLowerCase()
+    ) || findItemByBarcode(barcodeInput);
+
     if (found) {
       addItemToCart(found, 1);
       setBarcodeInput('');
@@ -392,7 +502,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   };
 
   // Filter recent transactions
-  const filteredTransactions = transactions.filter((tx) => {
+  const filteredTransactions = realTimeTransactions.filter((tx) => {
     const matchesType =
       historyFilterType === 'ALL' || tx.type === historyFilterType;
     const q = historySearch.trim().toLowerCase();
@@ -923,7 +1033,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                     {cart.map((cartItem, idx) => {
-                      const storeItem = items.find((i) => i.id === cartItem.itemId);
+                      const storeItem = realTimeItems.find((i) => i.id === cartItem.itemId);
                       const isSale = operationType === 'SALE' || operationType === 'CREDIT_SALE';
                       const availableStock = storeItem ? storeItem.quantity : 0;
                       const itemUnit = storeItem?.unit || (language === 'ar' ? 'حبة' : 'pc');

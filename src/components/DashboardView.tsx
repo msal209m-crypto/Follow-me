@@ -47,6 +47,11 @@ import {
   MessageCircle,
   Copy,
   Check,
+  Bell,
+  MessageSquare,
+  Send,
+  HelpCircle,
+  Compass,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useSubscription } from '../context/SubscriptionContext';
@@ -54,12 +59,15 @@ import { NavigationTab, Transaction, Item } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
 import { DashboardLowStockAlert } from './DashboardLowStockAlert';
 import { getStoresDirectory } from '../services/deliveryService';
+import { submitMerchantSupport, getDeveloperNotifications } from '../services/rbacAuthService';
 
 interface DashboardViewProps {
   onOpenAddItem: () => void;
   onOpenOrderGoods: (itemId?: string, type?: 'CASH' | 'CREDIT') => void;
   onPrintReceipt: (tx: Transaction) => void;
   onNavigate: (tab: NavigationTab) => void;
+  onOpenSettings?: (tab?: 'GENERAL' | 'CURRENCY' | 'BACKUPS') => void;
+  onStartTour?: () => void;
 }
 
 type TileDetailKey =
@@ -77,6 +85,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenOrderGoods,
   onPrintReceipt,
   onNavigate,
+  onOpenSettings,
+  onStartTour,
 }) => {
   const {
     items,
@@ -90,12 +100,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     cloudSyncStatus,
     syncToCloudNow,
     language,
+    setLanguage,
     t,
     isRTL,
   } = useApp();
 
   const { isPro, subscription, setShowSubscriptionModal, freeItemLimit, activateLicenseKey } = useSubscription();
-  const [merchantTab, setMerchantTab] = useState<'MAIN' | 'POS' | 'INVENTORY' | 'REPORTS' | 'SUBSCRIPTIONS'>('MAIN');
+  const [merchantTab, setMerchantTab] = useState<'MAIN' | 'POS' | 'INVENTORY' | 'REPORTS' | 'SUBSCRIPTIONS' | 'SUPPORT'>('MAIN');
+
+  // Support & Tech Ticket State
+  const [supportMessage, setSupportMessage] = useState('');
+  const [supportSubmittedSuccess, setSupportSubmittedSuccess] = useState(false);
+  const [developerReplies, setDeveloperReplies] = useState(() => getDeveloperNotifications());
+
+  const handleSendSupportRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supportMessage.trim()) return;
+    submitMerchantSupport({
+      merchantId: 'merchant-id',
+      merchantName: settings.storeName || 'التاجر',
+      storeName: settings.storeName || 'متجر القرية',
+      phone: settings.whatsappNumber || '0500000000',
+      message: supportMessage.trim(),
+    });
+    setSupportMessage('');
+    setSupportSubmittedSuccess(true);
+    setDeveloperReplies(getDeveloperNotifications());
+    setTimeout(() => setSupportSubmittedSuccess(false), 4000);
+  };
 
   // License Key Activation State in Subscriptions Tab
   const [licenseInput, setLicenseInput] = useState('');
@@ -391,6 +423,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           { id: 'INVENTORY', label: language === 'ar' ? 'المخزون' : 'Inventory', icon: Package },
           { id: 'REPORTS', label: language === 'ar' ? 'التقارير والحسابات' : 'Reports & Finance', icon: BarChart3 },
           { id: 'SUBSCRIPTIONS', label: language === 'ar' ? 'الاشتراكات والباقات' : 'Subscriptions', icon: Crown },
+          { id: 'SUPPORT', label: language === 'ar' ? 'الدعم الفني للمطور' : 'Dev Support', icon: HelpCircle },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = merchantTab === tab.id;
@@ -2272,6 +2305,142 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: SUPPORT & TECH TICKETS */}
+      {merchantTab === 'SUPPORT' && (
+        <div className="space-y-4">
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="font-black text-base text-white flex items-center gap-2">
+                  <HelpCircle className="w-5 h-5 text-purple-400" />
+                  <span>الدعم الفني المباشر وطلبات المساعدة للمطور 🛠️</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  أرسل أي استفسار أو طلب مساعدة تقنية للمطور وسوف يتلقى التنبيه فوراً مع إمكانية الرد عليك مباشرة هنا.
+                </p>
+              </div>
+            </div>
+
+            {/* Language Settings Card */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-emerald-400">لغة لوحة تحكم التاجر (Interface Language)</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLanguage('ar')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      language === 'ar' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    🇸🇦 العربية
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLanguage('en')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      language === 'en' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    🇬🇧 English
+                  </button>
+                </div>
+              </div>
+              <span className="text-[10px] text-slate-400 block">
+                تغيير لغة العرض الخاصة بجميع شاشات التاجر ولوحة التحكم الفورية.
+              </span>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center gap-2 flex-wrap">
+                {onOpenSettings && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenSettings('GENERAL')}
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>إعدادات النظام والعملات المتقدمة ⚙️</span>
+                  </button>
+                )}
+                {onStartTour && (
+                  <button
+                    type="button"
+                    onClick={onStartTour}
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Compass className="w-3.5 h-3.5 text-amber-400" />
+                    <span>بدء الجولة التعريفية بالنظام 🧭</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleSendSupportRequest} className="space-y-3 pt-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">تفاصيل طلب الدعم الفني أو الاستفسار</label>
+                <textarea
+                  rows={3}
+                  value={supportMessage}
+                  onChange={(e) => setSupportMessage(e.target.value)}
+                  placeholder="اكتب رسالتك أو طلبك التقني للمطور هنا..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3 text-xs text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                {supportSubmittedSuccess && (
+                  <span className="text-xs text-emerald-400 font-bold">
+                    ✓ تم إرسال طلب الدعم الفني للمطور بنجاح وسيتم الرد قريباً!
+                  </span>
+                )}
+                <button
+                  type="submit"
+                  disabled={!supportMessage.trim()}
+                  className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 cursor-pointer ml-auto"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>إرسال طلب الدعم للمطور 🚀</span>
+                </button>
+              </div>
+            </form>
+
+            <div className="border-t border-slate-800 pt-4 space-y-3">
+              <h3 className="font-black text-sm text-white flex items-center gap-2">
+                <Bell className="w-4 h-4 text-amber-400" />
+                <span>سجل تذاكر الدعم والردود الواردة من المطور</span>
+              </h3>
+
+              <div className="space-y-2.5">
+                {developerReplies.filter(n => n.senderPhone === (settings.whatsappNumber || '0500000000') || n.title.includes(settings.storeName || 'متجر')).length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 text-xs">لا توجد طلبات دعم سابقة أو ردود حالياً</div>
+                ) : (
+                  developerReplies
+                    .filter(n => n.senderPhone === (settings.whatsappNumber || '0500000000') || n.title.includes(settings.storeName || 'متجر'))
+                    .map((ticket) => (
+                      <div key={ticket.id} className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-black text-white">{ticket.title}</span>
+                          <span className="text-slate-400 font-mono text-[10px]">{new Date(ticket.timestamp).toLocaleString('ar-SA')}</span>
+                        </div>
+                        <p className="text-xs text-slate-300">{ticket.message}</p>
+                        {ticket.quickReply ? (
+                          <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-500/40 text-xs text-purple-200 flex items-center gap-2 mt-2">
+                            <MessageSquare className="w-4 h-4 text-purple-400 shrink-0" />
+                            <span><strong>رد المطور:</strong> {ticket.quickReply}</span>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-amber-400/90 font-medium">
+                            ⏳ بانتظار رد المطور...
+                          </div>
+                        )}
+                      </div>
+                    ))
+                )}
+              </div>
             </div>
           </div>
         </div>

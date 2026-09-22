@@ -609,63 +609,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </div>
 
-          {/* 2. Language Switcher */}
-          <div className="relative" ref={languageMenuRef}>
-            <button
-              type="button"
-              id="top-language-switcher-btn"
-              onClick={handleToggleLanguageDropdown}
-              className="h-8 sm:h-9 px-2 sm:px-2.5 bg-slate-800/90 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 text-slate-200 hover:text-white rounded-xl flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm text-xs font-bold"
-              title={t.switchLanguage}
-            >
-              <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="text-[11px] sm:text-xs">{language === 'ar' ? 'عربي' : 'EN'}</span>
-              <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
-            </button>
-
-            {showLanguageDropdown && (
-              <div
-                className="fixed sm:absolute top-14 sm:top-full mt-2 inset-x-2 sm:inset-x-auto end-0 sm:w-56 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-50 p-2 text-xs space-y-1 animate-in fade-in zoom-in-95 overflow-y-auto max-h-[85vh] custom-scrollbar"
-              >
-                <div className="px-2 py-1 text-[11px] font-bold text-slate-300 border-b border-slate-800 mb-1">
-                  {t.switchLanguage}
-                </div>
-                <button
-                  type="button"
-                  id="lang-option-ar"
-                  onClick={() => handleToggleLanguage('ar')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer border ${
-                    language === 'ar'
-                      ? 'bg-emerald-950/80 text-emerald-200 font-bold border-emerald-500/50'
-                      : 'text-slate-100 hover:bg-slate-800 border-transparent hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">🇸🇦</span>
-                    <span>العربية (Arabic)</span>
-                  </div>
-                  {language === 'ar' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                </button>
-                <button
-                  type="button"
-                  id="lang-option-en"
-                  onClick={() => handleToggleLanguage('en')}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer border ${
-                    language === 'en'
-                      ? 'bg-emerald-950/80 text-emerald-200 font-bold border-emerald-500/50'
-                      : 'text-slate-100 hover:bg-slate-800 border-transparent hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">🇺🇸</span>
-                    <span>English (US)</span>
-                  </div>
-                  {language === 'en' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* Adhan & Prayer Times Widget */}
           <AdhanTopBarWidget isDarkMode={true} isRTL={language === 'ar'} compact={true} />
 
@@ -709,33 +652,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               />
             )}
           </div>
-
-          {/* 4. Settings Button */}
-          <button
-            type="button"
-            id="top-btn-settings"
-            onClick={() => onOpenSettings()}
-            className="h-8 w-8 sm:h-9 sm:w-9 bg-slate-800/90 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 text-slate-200 hover:text-white rounded-xl flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm"
-            title={t.navSettings}
-          >
-            <SettingsIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-300" />
-          </button>
-
-          {/* 4.5. Onboarding Tour Button */}
-          {onStartTour && (
-            <button
-              type="button"
-              id="top-btn-tour"
-              onClick={onStartTour}
-              className="h-8 sm:h-9 px-2 sm:px-2.5 bg-slate-800/90 hover:bg-slate-750 border border-amber-500/50 hover:border-amber-400 text-amber-200 hover:text-amber-100 rounded-xl flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm text-xs font-bold"
-              title={language === 'ar' ? 'الجولة التعريفية بالنظام وإضافة أول صنف' : 'System Onboarding Tour'}
-            >
-              <Compass className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
-              <span className="hidden lg:inline">
-                {language === 'ar' ? 'جولة تعريفية' : 'Tour'}
-              </span>
-            </button>
-          )}
 
           {/* 5. User Account Profile / Direct Sign In */}
           <div className="relative" ref={userMenuRef}>

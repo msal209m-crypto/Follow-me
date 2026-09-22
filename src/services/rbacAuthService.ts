@@ -2,6 +2,8 @@ import { UserProfile, UserRole, DriverProfile, CustomerSession, StoreDirectoryRe
 import { getStoresDirectory, saveStoresDirectory, saveDriverProfile, clearDriverProfile } from './deliveryService';
 import { getPlatformDeveloperSettings, verifyDeveloperCredentials, isAuthorizedDeveloperPhone } from './platformSettingsService';
 import { supabase } from '../lib/supabase';
+import { db } from '../lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 const MERCHANTS_STORE_KEY = 'flowapp_rbac_merchants_v1';
 const DRIVERS_STORE_KEY = 'flowapp_rbac_drivers_v1';
@@ -122,6 +124,14 @@ export function getMerchants(): MerchantAccountRecord[] {
 export function saveMerchants(merchants: MerchantAccountRecord[]): void {
   try {
     localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify(merchants));
+    // Sync to Firestore in background
+    merchants.forEach((m) => {
+      try {
+        setDoc(doc(db, 'merchants', m.id), m, { merge: true }).catch((e) => console.warn('Firestore merchant sync error:', e));
+      } catch (e) {
+        console.warn('Firestore merchant sync error:', e);
+      }
+    });
   } catch {}
 }
 
@@ -171,6 +181,15 @@ export function registerMerchant(params: {
 
   merchants.unshift(newMerchant);
   saveMerchants(merchants);
+
+  addDeveloperNotification({
+    type: 'NEW_MERCHANT',
+    title: 'تسجيل متجر جديد 🏪',
+    message: `تم تسجيل متجر جديد باسم "${newMerchant.storeName}" للتاجر ${newMerchant.name} في ${newMerchant.village}`,
+    senderName: newMerchant.name,
+    senderPhone: newMerchant.phone,
+    merchantId: newMerchant.id
+  });
 
   // Sync to stores directory under merchant's unique ID
   const stores = getStoresDirectory();
@@ -234,10 +253,12 @@ export function loginMerchant(
   );
 
   if (!merchant) {
+    logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: identifier, status: 'FAILED', reason: 'لم يتم العثور على حساب تاجر بهذه البيانات' });
     return { success: false, message: 'لم يتم العثور على حساب تاجر بهذه البيانات، يرجى التأكد من الرقم أو التسجيل أولاً' };
   }
 
   if (merchant.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234') {
+    logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: merchant.phone, status: 'FAILED', reason: 'كلمة المرور غير صحيحة' });
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة أو استخدام "نسيت كلمة المرور"' };
   }
 
@@ -245,6 +266,7 @@ export function loginMerchant(
   setActiveSessionRole('MERCHANT');
   syncMerchantToAuth(merchant);
 
+  logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: merchant.phone, status: 'SUCCESS' });
   return { success: true, message: `أهلاً بك يا ${merchant.name}`, merchant };
 }
 
@@ -302,6 +324,14 @@ export function getDrivers(): DriverAccountRecord[] {
 export function saveDrivers(drivers: DriverAccountRecord[]): void {
   try {
     localStorage.setItem(DRIVERS_STORE_KEY, JSON.stringify(drivers));
+    // Sync to Firestore in background
+    drivers.forEach((d) => {
+      try {
+        setDoc(doc(db, 'drivers', d.id), d, { merge: true }).catch((e) => console.warn('Firestore driver sync error:', e));
+      } catch (e) {
+        console.warn('Firestore driver sync error:', e);
+      }
+    });
   } catch {}
 }
 
@@ -341,6 +371,7 @@ export function registerDriver(params: {
     vehiclePlate: params.vehiclePlate,
     zone: params.zone || 'القرية',
     createdAt: new Date().toISOString(),
+    isApproved: true,
   };
 
   drivers.unshift(newDriver);
@@ -376,10 +407,12 @@ export function loginDriver(phoneInput: string, passwordInput: string): {
 
   const driver = drivers.find((d) => d.phone === cleanPhone);
   if (!driver) {
+    logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: phoneInput, status: 'FAILED', reason: 'لم يتم العثور على سائق مسجل بهذا الرقم' });
     return { success: false, message: 'لم يتم العثور على سائق مسجل بهذا الرقم، يرجى التسجيل أولاً' };
   }
 
   if (driver.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234') {
+    logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'FAILED', reason: 'كلمة المرور غير صحيحة' });
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مجدداً' };
   }
 
@@ -398,6 +431,7 @@ export function loginDriver(phoneInput: string, passwordInput: string): {
   saveDriverProfile(profile);
   setActiveSessionRole('DRIVER');
 
+  logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'SUCCESS' });
   return { success: true, message: `أهلاً بك يا ${driver.name}`, driver };
 }
 
@@ -467,16 +501,20 @@ export function verifyDeveloperAccess(codeOrPin: string, phone?: string): boolea
     const res = verifyDeveloperCredentials(phone, codeOrPin);
     if (res.success) {
       setActiveSessionRole('DEVELOPER');
+      logAccessAttempt({ portal: 'DEVELOPER', usernameOrPhone: phone, status: 'SUCCESS' });
       return true;
     }
+    logAccessAttempt({ portal: 'DEVELOPER', usernameOrPhone: phone, status: 'FAILED', reason: res.message || 'بيانات اعتماد خاطئة' });
     return false;
   }
   const clean = codeOrPin.trim();
   const settings = getPlatformDeveloperSettings();
   if (clean === settings.developerPin || clean === 'admin' || clean === '1234' || clean === 'dev2026') {
     setActiveSessionRole('DEVELOPER');
+    logAccessAttempt({ portal: 'DEVELOPER', usernameOrPhone: 'مدخل PIN السريع', status: 'SUCCESS' });
     return true;
   }
+  logAccessAttempt({ portal: 'DEVELOPER', usernameOrPhone: 'مدخل PIN السريع', status: 'FAILED', reason: 'رمز PIN المطور غير صحيح' });
   return false;
 }
 
@@ -487,6 +525,9 @@ export function verifyDeveloperFullCredentials(
   const result = verifyDeveloperCredentials(phone, secretKey);
   if (result.success) {
     setActiveSessionRole('DEVELOPER');
+    logAccessAttempt({ portal: 'DEVELOPER', usernameOrPhone: phone, status: 'SUCCESS' });
+  } else {
+    logAccessAttempt({ portal: 'DEVELOPER', usernameOrPhone: phone, status: 'FAILED', reason: result.message || 'رقم هاتف أو مفتاح سري خاطئ' });
   }
   return result;
 }
@@ -628,5 +669,180 @@ export function resetPasswordWithOTP(
     return { success: true, message: 'تم تعيين كلمة المرور الجديدة بنجاح! يمكنك الآن تسجيل الدخول مباشرة' };
   } catch {
     return { success: false, message: 'فشل حفظ كلمة المرور الجديدة' };
+  }
+}
+
+export interface AccessLogEntry {
+  id: string;
+  timestamp: string;
+  portal: 'MERCHANT' | 'DRIVER' | 'DEVELOPER' | 'ADMIN';
+  usernameOrPhone: string;
+  status: 'SUCCESS' | 'FAILED';
+  reason?: string;
+  ipAddress?: string;
+}
+
+function getMockAccessLogs(): AccessLogEntry[] {
+  return [
+    {
+      id: 'log-1',
+      timestamp: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
+      portal: 'DEVELOPER',
+      usernameOrPhone: '0500000000',
+      status: 'SUCCESS',
+      ipAddress: '192.168.1.1'
+    },
+    {
+      id: 'log-2',
+      timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+      portal: 'DRIVER',
+      usernameOrPhone: '0555556666',
+      status: 'FAILED',
+      reason: 'الحساب غير مسجل بالمنظومة',
+      ipAddress: '192.168.2.14'
+    },
+    {
+      id: 'log-3',
+      timestamp: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
+      portal: 'MERCHANT',
+      usernameOrPhone: '0599887766',
+      status: 'SUCCESS',
+      ipAddress: '192.168.1.15'
+    },
+    {
+      id: 'log-4',
+      timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
+      portal: 'ADMIN',
+      usernameOrPhone: 'المدير العام',
+      status: 'FAILED',
+      reason: 'رمز PIN خاطئ',
+      ipAddress: '172.16.5.9'
+    }
+  ];
+}
+
+export interface DeveloperNotification {
+  id: string;
+  type: 'NEW_MERCHANT' | 'TECH_SUPPORT';
+  title: string;
+  message: string;
+  senderName: string;
+  senderPhone: string;
+  merchantId?: string;
+  timestamp: string;
+  isRead: boolean;
+  quickReply?: string;
+}
+
+export function getDeveloperNotifications(): DeveloperNotification[] {
+  try {
+    const raw = localStorage.getItem('qaryati_dev_notifications');
+    if (!raw) {
+      const initial: DeveloperNotification[] = [
+        {
+          id: 'notif-1',
+          type: 'NEW_MERCHANT',
+          title: 'تسجيل متجر جديد 🏪',
+          message: 'تم تسجيل متجر جديد باسم "مخبز القرية التراثي" للتاجر سالم العتيبي في قرية الفصور',
+          senderName: 'سالم العتيبي',
+          senderPhone: '0501234567',
+          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+          isRead: false
+        },
+        {
+          id: 'notif-2',
+          type: 'TECH_SUPPORT',
+          title: 'طلب دعم فني من تاجر 🛠️',
+          message: 'أحتاج إلى مساعدة في تحديث أسعار المنتجات وإضافة تصنيف العسل البري الجديد.',
+          senderName: 'أبو محمد',
+          senderPhone: '0559876543',
+          timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+          isRead: false
+        }
+      ];
+      localStorage.setItem('qaryati_dev_notifications', JSON.stringify(initial));
+      return initial;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function addDeveloperNotification(notif: Omit<DeveloperNotification, 'id' | 'timestamp' | 'isRead'>) {
+  try {
+    const list = getDeveloperNotifications();
+    const newEntry: DeveloperNotification = {
+      ...notif,
+      id: `devnotif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      isRead: false
+    };
+    list.unshift(newEntry);
+    localStorage.setItem('qaryati_dev_notifications', JSON.stringify(list));
+  } catch (e) {
+    console.warn('Failed to add dev notification:', e);
+  }
+}
+
+export function markDeveloperNotificationRead(id: string) {
+  try {
+    const list = getDeveloperNotifications();
+    const updated = list.map((n) => (n.id === id ? { ...n, isRead: true } : n));
+    localStorage.setItem('qaryati_dev_notifications', JSON.stringify(updated));
+  } catch {}
+}
+
+export function replyDeveloperNotification(id: string, replyText: string) {
+  try {
+    const list = getDeveloperNotifications();
+    const updated = list.map((n) => (n.id === id ? { ...n, quickReply: replyText, isRead: true } : n));
+    localStorage.setItem('qaryati_dev_notifications', JSON.stringify(updated));
+  } catch {}
+}
+
+export function submitMerchantSupport(params: {
+  merchantId: string;
+  merchantName: string;
+  storeName: string;
+  phone: string;
+  message: string;
+}) {
+  addDeveloperNotification({
+    type: 'TECH_SUPPORT',
+    title: `طلب دعم فني من متجر: ${params.storeName} 🛠️`,
+    message: params.message,
+    senderName: params.merchantName,
+    senderPhone: params.phone,
+    merchantId: params.merchantId
+  });
+}
+
+export function getAccessLogs(): AccessLogEntry[] {
+  try {
+    const raw = localStorage.getItem('qaryati_access_logs');
+    if (!raw) {
+      const mock = getMockAccessLogs();
+      localStorage.setItem('qaryati_access_logs', JSON.stringify(mock));
+      return mock;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function logAccessAttempt(entry: Omit<AccessLogEntry, 'id' | 'timestamp'>) {
+  try {
+    const logs = getAccessLogs();
+    const newEntry: AccessLogEntry = {
+      ...entry,
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString()
+    };
+    logs.unshift(newEntry);
+    localStorage.setItem('qaryati_access_logs', JSON.stringify(logs.slice(0, 100)));
+  } catch (e) {
+    console.warn('Failed to save access log attempt:', e);
   }
 }

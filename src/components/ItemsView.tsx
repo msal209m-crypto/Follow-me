@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Package,
   Search,
@@ -26,6 +26,8 @@ import {
   MapPin,
   FileSpreadsheet,
 } from 'lucide-react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { useApp } from '../context/AppContext';
 import { useSubscription, FREE_ITEM_LIMIT } from '../context/SubscriptionContext';
 import { Item } from '../types';
@@ -77,10 +79,93 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
   const [selectedItemForTracking, setSelectedItemForTracking] = useState<Item | null>(null);
   const [itemToDelete, setItemToDelete] = useState<Item | null>(null);
 
+  // Real-time synchronization for items of all stores in the same village
+  const [realTimeItems, setRealTimeItems] = useState<Item[]>(items);
+
+  useEffect(() => {
+    setRealTimeItems(items);
+  }, [items]);
+
+  useEffect(() => {
+    const currentVillage = settings.address || '';
+    if (!currentVillage) {
+      setRealTimeItems(items);
+      return;
+    }
+
+    // Subscribe to stores to find stores in the same village
+    const unsubStores = onSnapshot(collection(db, 'stores'), (storesSnapshot) => {
+      const storeIdsInVillage: string[] = [];
+      storesSnapshot.forEach((docSnap) => {
+        const storeData = docSnap.data();
+        if (
+          storeData.cityOrVillage === currentVillage ||
+          storeData.village === currentVillage ||
+          storeData.address === currentVillage
+        ) {
+          storeIdsInVillage.push(docSnap.id);
+        }
+      });
+
+      if (storeIdsInVillage.length === 0) {
+        setRealTimeItems(items);
+        return;
+      }
+
+      const unsubsItems: (() => void)[] = [];
+      const allStoresItemsMap = new Map<string, Item[]>();
+
+      // Fallback/current items
+      allStoresItemsMap.set(settings.storeId || 'current', items);
+
+      storeIdsInVillage.forEach((storeId) => {
+        const itemsCol = collection(db, 'stores', storeId, 'items');
+        const unsub = onSnapshot(itemsCol, (itemsSnapshot) => {
+          const storeItems: Item[] = [];
+          itemsSnapshot.forEach((itemDoc) => {
+            storeItems.push({ id: itemDoc.id, ...itemDoc.data() } as Item);
+          });
+          allStoresItemsMap.set(storeId, storeItems);
+
+          // Merge all items
+          const merged: Item[] = [];
+          allStoresItemsMap.forEach((itemList) => {
+            merged.push(...itemList);
+          });
+
+          // Deduplicate
+          const uniqueMerged: Item[] = [];
+          const seenIds = new Set<string>();
+          merged.forEach((item) => {
+            if (!seenIds.has(item.id)) {
+              seenIds.add(item.id);
+              uniqueMerged.push(item);
+            }
+          });
+
+          setRealTimeItems(uniqueMerged);
+        }, (err) => {
+          console.warn(`Error syncing items for store ${storeId}:`, err);
+        });
+        unsubsItems.push(unsub);
+      });
+
+      return () => {
+        unsubsItems.forEach((unsub) => unsub());
+      };
+    }, (error) => {
+      console.warn('Error syncing stores for village in ItemsView:', error);
+    });
+
+    return () => {
+      unsubStores();
+    };
+  }, [settings.address, items]);
+
   // Compute all items activity tracking (last sale, last purchase, turnover status)
   const itemMovementsMap = useMemo(() => {
-    return computeAllItemMovements(items, transactions, getPendingOrderQtyForItem);
-  }, [items, transactions, getPendingOrderQtyForItem]);
+    return computeAllItemMovements(realTimeItems, transactions, getPendingOrderQtyForItem);
+  }, [realTimeItems, transactions, getPendingOrderQtyForItem]);
 
   // Movement counts for filter badges
   const movementCounts = useMemo(() => {
@@ -132,15 +217,15 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
   // Unique categories
   const categories = useMemo(() => {
     const set = new Set<string>();
-    items.forEach((item) => {
+    realTimeItems.forEach((item) => {
       if (item.category) set.add(item.category);
     });
     return Array.from(set);
-  }, [items]);
+  }, [realTimeItems]);
 
   // Filtered and sorted items
   const filteredItems = useMemo(() => {
-    return items
+    return realTimeItems
       .filter((item) => {
         const query = searchQuery.trim().toLowerCase();
         const matchesSearch =
@@ -194,7 +279,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
         return 0;
       });
   }, [
-    items,
+    realTimeItems,
     searchQuery,
     selectedCategory,
     filterLowStockOnly,
@@ -260,7 +345,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">{t.inventoryTitle}</h2>
             <div className="flex items-center gap-2 flex-wrap text-xs text-slate-300 mt-0.5">
               <span>
-                {t.totalRegisteredItems}: <strong className="text-emerald-400 font-bold">{items.length}</strong> {t.itemUnit}
+                {t.totalRegisteredItems}: <strong className="text-emerald-400 font-bold">{realTimeItems.length}</strong> {t.itemUnit}
               </span>
               {!isPro ? (
                 <button
@@ -270,7 +355,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
                   title={language === 'ar' ? 'الباقة المجانية: الحد 75 صنفاً. اضغط للترقية' : 'Free Tier: 75 items limit. Click to upgrade'}
                 >
                   <Crown className="w-3 h-3 text-amber-400" />
-                  <span>{items.length} / {FREE_ITEM_LIMIT} {language === 'ar' ? 'صنف (مجاني)' : 'Items (Free)'}</span>
+                  <span>{realTimeItems.length} / {FREE_ITEM_LIMIT} {language === 'ar' ? 'صنف (مجاني)' : 'Items (Free)'}</span>
                 </button>
               ) : (
                 <button
@@ -323,7 +408,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
       </div>
 
       {/* Free Plan Limit Notice Banner */}
-      {!isPro && items.length >= FREE_ITEM_LIMIT && (
+      {!isPro && realTimeItems.length >= FREE_ITEM_LIMIT && (
         <div className="bg-gradient-to-r from-amber-950/90 via-slate-900 to-amber-950/90 border border-amber-500/70 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg animate-in fade-in">
           <div className="flex items-center gap-3 text-center sm:text-start">
             <span className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0">
@@ -519,7 +604,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
             onChange={(e) => setSelectedCategory(e.target.value)}
             className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-xs sm:text-sm text-slate-100 font-medium focus:outline-none focus:border-emerald-500 cursor-pointer"
           >
-            <option value="ALL">{t.allCategories} ({items.length})</option>
+            <option value="ALL">{t.allCategories} ({realTimeItems.length})</option>
             {categories.map((cat) => (
               <option key={cat} value={cat}>
                 {cat}
@@ -642,7 +727,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
                     <Package className="w-12 h-12 mx-auto mb-2 opacity-40 text-slate-300" />
                     <p className="font-bold text-slate-200 text-sm">{t.noItemsMatch}</p>
                     <p className="text-xs mt-1 text-slate-400">{t.noItemsMatchSub}</p>
-                    {items.length === 0 && (
+                    {realTimeItems.length === 0 && (
                       <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
                         <button
                           type="button"
@@ -916,7 +1001,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
         <div className="p-3.5 bg-slate-950/80 border-t border-slate-800 flex flex-wrap items-center justify-between text-xs text-slate-300 font-medium">
           <span>
             {t.showing} <strong className="text-white font-bold">{filteredItems.length}</strong> {t.ofTotal}{' '}
-            <strong className="text-white font-bold">{items.length}</strong> {t.itemUnit}
+            <strong className="text-white font-bold">{realTimeItems.length}</strong> {t.itemUnit}
           </span>
           <span className="flex items-center gap-1.5 text-emerald-300 font-bold">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />

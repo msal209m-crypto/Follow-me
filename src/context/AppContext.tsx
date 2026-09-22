@@ -895,6 +895,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Save to Cloud in background
     if (canWriteToCloud && currentUser) {
       safeSetDoc(doc(db, 'users', currentUser.uid, 'items', newItem.id), newItem).catch(console.warn);
+      safeSetDoc(doc(db, 'stores', currentUser.uid, 'items', newItem.id), newItem).catch(console.warn);
     }
 
     return newItem;
@@ -952,6 +953,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
           if (canWriteToCloud && currentUser) {
             safeSetDoc(doc(db, 'users', currentUser.uid, 'items', id), updated, { merge: true }).catch(console.warn);
+            safeSetDoc(doc(db, 'stores', currentUser.uid, 'items', id), updated, { merge: true }).catch(console.warn);
           }
           return updated;
         }
@@ -976,6 +978,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setItems((prev) => prev.filter((item) => item.id !== id));
     if (canWriteToCloud && currentUser) {
       deleteDoc(doc(db, 'users', currentUser.uid, 'items', id)).catch(console.warn);
+      deleteDoc(doc(db, 'stores', currentUser.uid, 'items', id)).catch(console.warn);
     }
   };
 

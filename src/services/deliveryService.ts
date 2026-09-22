@@ -1,4 +1,6 @@
 import { DeliveryOrder, DeliveryOrderStatus, DriverProfile, StoreDirectoryRecord, Item } from '../types';
+import { db } from '../lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 const ORDERS_STORAGE_KEY = 'qaryati_delivery_orders';
 const DRIVER_PROFILE_KEY = 'qaryati_driver_profile';
@@ -149,6 +151,14 @@ export function saveDeliveryOrders(orders: DeliveryOrder[]) {
   try {
     localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
     window.dispatchEvent(new CustomEvent('qaryati:orders-updated', { detail: orders }));
+    // Sync to Firestore in background
+    orders.forEach((o) => {
+      try {
+        setDoc(doc(db, 'delivery_orders', o.id), o, { merge: true }).catch((e) => console.warn('Firestore order sync error:', e));
+      } catch (e) {
+        console.warn('Firestore order sync error:', e);
+      }
+    });
   } catch (e) {
     console.error('Failed to save delivery orders:', e);
   }
@@ -254,6 +264,14 @@ export function saveStoresDirectory(stores: StoreDirectoryRecord[]) {
   try {
     localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify(stores));
     window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: stores }));
+    // Sync to Firestore in background
+    stores.forEach((s) => {
+      try {
+        setDoc(doc(db, 'stores', s.id), s, { merge: true }).catch((e) => console.warn('Firestore store sync error:', e));
+      } catch (e) {
+        console.warn('Firestore store sync error:', e);
+      }
+    });
   } catch {}
 }
 
@@ -319,6 +337,15 @@ export function saveStoreProducts(storeId: string, products: Item[]) {
   try {
     localStorage.setItem(`merchant_${storeId}_items`, JSON.stringify(products));
     
+    // Sync each product/item to Firestore under stores/{storeId}/items
+    products.forEach((prod) => {
+      try {
+        setDoc(doc(db, 'stores', storeId, 'items', prod.id), prod, { merge: true }).catch((e) => console.warn('Firestore store product sync error:', e));
+      } catch (e) {
+        console.warn('Firestore store product sync error:', e);
+      }
+    });
+
     // Update store items count in directory
     const stores = getStoresDirectory();
     const idx = stores.findIndex((s) => s.id === storeId || s.merchantId === storeId);

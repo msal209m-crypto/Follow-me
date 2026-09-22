@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { copyToClipboard } from '../utils/clipboardUtils';
 import {
   Search,
@@ -56,6 +58,7 @@ import {
 } from '../services/rbacAuthService';
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
 import { StorePrayerClosedBanner } from './StorePrayerClosedBanner';
+import { AdBannerWidget } from './AdBannerWidget';
 
 interface VillageStoreViewProps {
   items: Item[];
@@ -180,8 +183,28 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
   useEffect(() => {
     if (selectedStoreId && selectedStoreId !== 'default') {
+      // Load local storage first for quick display
       const prods = getStoreProducts(selectedStoreId);
       setStoreSpecificProducts(prods);
+
+      // Real-time listener from Firestore
+      const itemsCol = collection(db, 'stores', selectedStoreId, 'items');
+      const unsub = onSnapshot(itemsCol, (snapshot) => {
+        const loaded: Item[] = [];
+        snapshot.forEach((docSnap) => {
+          loaded.push({ id: docSnap.id, ...docSnap.data() } as Item);
+        });
+        setStoreSpecificProducts(loaded);
+        try {
+          localStorage.setItem(`merchant_${selectedStoreId}_items`, JSON.stringify(loaded));
+        } catch (e) {
+          console.warn('Failed to cache store products locally:', e);
+        }
+      }, (error) => {
+        console.warn('Real-time store items subscription error:', error);
+      });
+
+      return () => unsub();
     } else {
       setStoreSpecificProducts([]);
     }
@@ -735,6 +758,11 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
           </div>
         </div>
       </header>
+
+      {/* Promoted Ads Banner Widget */}
+      <div className="max-w-6xl mx-auto px-4 mt-4 mb-1">
+        <AdBannerWidget currentVillage={selectedVillage} isDarkMode={true} isRTL={isRTL} />
+      </div>
 
       {/* Hero Welcome Bar */}
       <div className="bg-gradient-to-b from-slate-900 via-slate-900/80 to-slate-950 border-b border-slate-800/60 py-6 px-4">

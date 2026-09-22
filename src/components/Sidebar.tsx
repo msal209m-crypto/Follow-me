@@ -166,6 +166,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: language === 'ar' ? '📢 إعلانات وأخبار القرية' : 'Village Bulletin',
           icon: Megaphone,
         },
+        {
+          id: 'merchant_ads',
+          label: language === 'ar' ? '📈 الترويج والإعلانات' : 'Promotions & Ads',
+          icon: Megaphone,
+        },
       ];
 
   const handleSelectTab = (tab: NavigationTab) => {
