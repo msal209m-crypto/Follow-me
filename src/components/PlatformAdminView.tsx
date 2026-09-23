@@ -59,7 +59,11 @@ import {
   getDeveloperNotifications,
   markDeveloperNotificationRead,
   replyDeveloperNotification,
-  DeveloperNotification
+  DeveloperNotification,
+  approveMerchantAccount,
+  rejectMerchantAccount,
+  approveDriverAccount,
+  rejectDriverAccount
 } from '../services/rbacAuthService';
 import { compressImageFile } from '../utils/imageUtils';
 import { supabase } from '../lib/supabase';
@@ -544,18 +548,17 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   };
 
   const handleUpdateMerchantApproval = async (merchantId: string, approve: boolean, merchantName: string) => {
+    if (approve) {
+      approveMerchantAccount(merchantId);
+    } else {
+      rejectMerchantAccount(merchantId);
+    }
+
     const updated = supabaseMerchants.map((item: any) =>
       item.id === merchantId ? { ...item, isApproved: approve, is_approved: approve } : item
     );
     setSupabaseMerchants(updated);
-
-    try {
-      const local = JSON.parse(localStorage.getItem('flowapp_rbac_merchants_v1') || '[]');
-      const updatedLocal = local.map((item: any) =>
-        item.id === merchantId ? { ...item, isApproved: approve } : item
-      );
-      localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify(updatedLocal));
-    } catch (e) {}
+    refreshStoresAndOrders();
 
     try {
       await supabase.from('merchants').update({ is_approved: approve, isApproved: approve }).eq('id', merchantId);
@@ -1856,6 +1859,108 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                   </div>
                 </div>
 
+                {/* Dedicated Storefront UI Customization Panel for Developer */}
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-slate-950 to-teal-950/30 border border-emerald-500/30 space-y-4 shadow-lg">
+                  <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Store className="w-5 h-5 text-emerald-400" />
+                      <div>
+                        <h3 className="font-black text-sm text-emerald-300">تخصيص واجهة العميل والتسوق (Storefront Customization Panel)</h3>
+                        <p className="text-[11px] text-slate-400">تحكم كامل في نصوص الترحيب، الشارات، الألوان، وأسلوب عرض القرى والتصنيفات في متجر العميل</p>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      خاص بالمطور 👑
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">عنوان الترحيب الترويجي للعملاء</label>
+                      <input
+                        type="text"
+                        value={devSettings.storefrontHeaderTitle || ''}
+                        onChange={(e) => setDevSettings({ ...devSettings, storefrontHeaderTitle: e.target.value })}
+                        placeholder="مثال: أهلاً بكم في متجر قريتي والخدمات السريعة"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">الشارة البارزة أعلى واجهة التسوق</label>
+                      <input
+                        type="text"
+                        value={devSettings.storefrontBadgeText || ''}
+                        onChange={(e) => setDevSettings({ ...devSettings, storefrontBadgeText: e.target.value })}
+                        placeholder="مثال: متجر القرية والعملاء - تصفح المنتجات والطلب الفوري"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-300 mb-1">الوصف التفصيلي أسفل الترحيب</label>
+                      <input
+                        type="text"
+                        value={devSettings.storefrontSubTitle || ''}
+                        onChange={(e) => setDevSettings({ ...devSettings, storefrontSubTitle: e.target.value })}
+                        placeholder="مثال: اختر ما تحتاجه من أصناف وأضفها لسلتك واطلبها فوراً عبر الواتساب"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-300 mb-1">الشريط الإعلاني العالي للعملاء (Banner Announcement)</label>
+                      <input
+                        type="text"
+                        value={devSettings.storefrontBannerText || ''}
+                        onChange={(e) => setDevSettings({ ...devSettings, storefrontBannerText: e.target.value })}
+                        placeholder="مثال: توصيل مجاني لجميع أهالي القرية عند الطلب المباشر!"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">طابع الألوان المفضل لواجهة العميل</label>
+                      <select
+                        value={devSettings.storefrontPrimaryTheme || 'emerald'}
+                        onChange={(e) => setDevSettings({ ...devSettings, storefrontPrimaryTheme: e.target.value as any })}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                      >
+                        <option value="emerald">🟢 زمردي الملكي (Royal Emerald - افتراضي)</option>
+                        <option value="amber">🟡 الذهبي الدافئ (Warm Gold & Amber)</option>
+                        <option value="indigo">🔵 الأزرق الملكي (Indigo & Sapphire)</option>
+                        <option value="violet">🟣 البنفسجي الساحر (Deep Violet & Purple)</option>
+                        <option value="teal">🩵 التيل العصري (Ocean Teal & Cyan)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">أسلوب عرض أيقونات القرى والتصنيفات</label>
+                      <select
+                        value={devSettings.storefrontCategoryStyle || 'circular'}
+                        onChange={(e) => setDevSettings({ ...devSettings, storefrontCategoryStyle: e.target.value as any })}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                      >
+                        <option value="circular">🔘 دائرية بارزة مع أيقونات تفاعلية (افتراضي أنيق)</option>
+                        <option value="pills">💊 أزرار حبوب عصرية ملساء (Modern Pills)</option>
+                        <option value="cards">🎴 بطاقات شبكية عريضة (Grid Cards)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between border-t border-slate-800">
+                    <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={devSettings.storefrontShowAdhan !== false}
+                        onChange={(e) => setDevSettings({ ...devSettings, storefrontShowAdhan: e.target.checked })}
+                        className="w-4 h-4 rounded text-emerald-600 bg-slate-900 border-slate-700"
+                      />
+                      <span>إظهار شريط مواقيت الصلاة والأذان في أعلى المتجر</span>
+                    </label>
+                  </div>
+                </div>
+
                 {/* Maintenance Mode Configuration */}
                 <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-500/30 space-y-3">
                   <div className="flex items-center justify-between">
@@ -2030,6 +2135,43 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                   يتم حفظ تفضيلات اللغة تلقائياً في حساب المتجر والمنظومة وتطبيقها في شاشات الكاشير، الفواتير، ونظام التوصيل.
                 </span>
               </div>
+            </div>
+
+            {/* Factory Reset / Platform Data Purge Card */}
+            <div className="bg-red-950/30 border border-red-900/60 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+              <div>
+                <h2 className="font-black text-base text-red-400 flex items-center gap-2">
+                  <Trash2 className="w-5 h-5 text-red-500" />
+                  <span>إعادة ضبط المصنع الشامل للمنصة (Factory Reset)</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  حذف كافة البيانات التجريبية، المتاجر الوهمية، أصناف المخزون، سجلات المبيعات، والديون، وإعادة ضبط المنصة بالكامل لتكون بيضاء ونظيفة بانتظار أول تاجر حقيقي.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('هل أنت متأكد تماماً من رغبتك في إجراء إعادة ضبط مصنع شامل وتطهير جميع البيانات والمتاجر والأصناف؟ هذه العملية لا يمكن التراجع عنها.')) {
+                    const keysToRemove: string[] = [];
+                    for (let i = 0; i < localStorage.length; i++) {
+                      const key = localStorage.key(i);
+                      if (key && (key.includes('qaryati_') || key.includes('merchant_') || key.includes('item') || key.includes('tx') || key.includes('debt'))) {
+                        keysToRemove.push(key);
+                      }
+                    }
+                    keysToRemove.forEach(k => localStorage.removeItem(k));
+                    localStorage.clear();
+                    showToast('تم إجراء إعادة ضبط المصنع بنجاح وتطهير كافة البيانات التجريبية.');
+                    setTimeout(() => {
+                      window.location.reload();
+                    }, 1500);
+                  }
+                }}
+                className="px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg cursor-pointer flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>تنفيذ إعادة الضبط الشامل وتطهير المنصة (Factory Reset)</span>
+              </button>
             </div>
           </div>
         )}

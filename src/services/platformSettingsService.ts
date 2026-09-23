@@ -66,6 +66,13 @@ export interface PlatformDeveloperSettings {
   welcomeSubtitle: string;
   welcomeImageUrl: string;
   showWelcomeSplash: boolean;
+  storefrontBannerText?: string;
+  storefrontBadgeText?: string;
+  storefrontHeaderTitle?: string;
+  storefrontSubTitle?: string;
+  storefrontPrimaryTheme?: 'emerald' | 'amber' | 'indigo' | 'violet' | 'teal';
+  storefrontShowAdhan?: boolean;
+  storefrontCategoryStyle?: 'circular' | 'pills' | 'cards';
 }
 
 const ADS_STORAGE_KEY = 'qaryati_platform_ads_v1';
@@ -186,6 +193,13 @@ const DEFAULT_DEVELOPER_SETTINGS: PlatformDeveloperSettings = {
   welcomeSubtitle: 'منصة موحدة لإدارة متجر القرية، طلبات التوصيل، حسابات التجار، والخدمات الرقمية المتكاملة',
   welcomeImageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1200',
   showWelcomeSplash: true,
+  storefrontBannerText: 'توصيل مجاني لكافة أهالي القرية عند الطلب المباشر عبر الواتساب!',
+  storefrontBadgeText: 'متجر القرية الموحد - تسوق سريع واطلب مباشرة',
+  storefrontHeaderTitle: 'متجر القرية والخدمات السريعة',
+  storefrontSubTitle: 'اختر الأصناف والتموينات الغذائية وأضفها لسلتك، ثم أرسل الطلب فوراً ليصلك المندوب حتى باب منزلك',
+  storefrontPrimaryTheme: 'emerald',
+  storefrontShowAdhan: true,
+  storefrontCategoryStyle: 'circular',
 };
 
 // --- Ads Management ---

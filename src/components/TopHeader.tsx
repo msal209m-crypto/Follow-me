@@ -25,7 +25,6 @@ import {
   Zap,
   Share2,
   ShieldAlert,
-  MessageCircle,
   X,
   Store,
   Megaphone,
@@ -45,9 +44,10 @@ import { useSubscription } from '../context/SubscriptionContext';
 import { POPULAR_CURRENCIES, getDefaultRatesForBase } from '../data/currencies';
 import { ReorderAlertsDropdown } from './ReorderAlertsDropdown';
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
+import { GlobalSettingsModal } from './GlobalSettingsModal';
+import { getGlobalPreferences } from '../services/globalizationService';
 import { Item } from '../types';
 import { clearAllSystemSessions, getActiveSessionRole } from '../services/rbacAuthService';
-import { OWNER_CONTACT } from '../config/ownerContact';
 import { getDismissedAlertIds } from '../utils/alertUtils';
 import { getDeliveryOrders } from '../services/deliveryService';
 import { getPlatformDeveloperSettings } from '../services/platformSettingsService';
@@ -56,7 +56,7 @@ interface TopHeaderProps {
   onOpenMobileMenu: () => void;
   onOpenAddItem: () => void;
   onOpenOrderGoods: (item?: Item) => void;
-  onOpenSettings: (tab?: 'GENERAL' | 'CURRENCY' | 'BACKUPS') => void;
+  onOpenSettings: (tab?: 'GENERAL' | 'CURRENCY' | 'BACKUPS' | 'SUBSCRIPTIONS' | 'SUPPORT' | 'SUBSCRIPTIONS_SUPPORT') => void;
   onOpenAuthModal: () => void;
   onNavigateToItems?: (item?: Item) => void;
   onNavigateToDashboard?: () => void;
@@ -104,6 +104,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const { isPro, subscription, setShowSubscriptionModal } = useSubscription();
 
   const [showCurrencyDropdown, setShowCurrencyDropdown] = useState(false);
+  const [showGlobalModal, setShowGlobalModal] = useState(false);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showAlertsDropdown, setShowAlertsDropdown] = useState(false);
@@ -542,6 +543,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </button>
           )}
 
+          {/* Global Hub 🌍 Country, Currency & Language Switcher */}
+          <button
+            type="button"
+            id="top-global-hub-btn"
+            onClick={() => setShowGlobalModal(true)}
+            className="h-8 sm:h-9 px-2 sm:px-2.5 bg-slate-800/90 hover:bg-slate-750 border border-indigo-500/40 hover:border-indigo-400 text-indigo-300 hover:text-white rounded-xl flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm text-xs font-bold"
+            title="إعدادات الدولة، العملة، واللغة ومواقيت الأذان العالمية"
+          >
+            <Globe className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <span className="hidden md:inline font-bold">العالمية</span>
+          </button>
+
           {/* 1. Currency Switcher */}
           <div className="relative" ref={currencyMenuRef}>
             <button
@@ -803,44 +816,33 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     type="button"
                     onClick={() => {
                       setShowUserDropdown(false);
-                      setShowSubscriptionModal(true);
+                      onOpenSettings('SUBSCRIPTIONS_SUPPORT');
                     }}
                     className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-amber-300 hover:bg-amber-950/40 border border-transparent hover:border-amber-700/60 transition-colors cursor-pointer active:scale-98"
                   >
                     <div className="flex items-center gap-2">
                       <Crown className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span>{isPro ? (language === 'ar' ? 'باقة المحترف (نشطة 👑)' : 'Pro License (Active 👑)') : (language === 'ar' ? 'ترقية المتجر (PRO)' : 'Upgrade Pro')}</span>
+                      <span>{language === 'ar' ? 'الاشتراكات والدعم الفني' : 'Subscriptions & Support'}</span>
                     </div>
-                    <span className="text-[10px] text-amber-400 font-bold">{isPro ? '👑 PRO' : (language === 'ar' ? 'ترقية' : 'Upgrade')}</span>
+                    <span className="text-[10px] text-amber-400 font-bold">{isPro ? '👑 PRO' : (language === 'ar' ? 'الإعدادات ⚙️' : 'Settings ⚙️')}</span>
                   </button>
 
-                  {onOpenShareModal && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowUserDropdown(false);
-                        onOpenShareModal();
-                      }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-sky-300 hover:bg-sky-950/40 border border-transparent hover:border-sky-700/60 transition-colors cursor-pointer active:scale-98"
-                    >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUserDropdown(false);
+                      onOpenSettings('GENERAL');
+                    }}
+                    className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-sky-300 hover:bg-sky-950/40 border border-transparent hover:border-sky-700/60 transition-colors cursor-pointer active:scale-98"
+                  >
+                    <div className="flex items-center gap-2">
                       <Share2 className="w-4 h-4 text-sky-400 shrink-0" />
-                      <span>{language === 'ar' ? 'مشاركة رابط التطبيق' : 'Share App Link'}</span>
-                    </button>
-                  )}
-
-                  {!isInstalled && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowUserDropdown(false);
-                        setShowInstallPromptModal(true);
-                      }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-cyan-300 hover:bg-cyan-950/40 border border-transparent hover:border-cyan-700/60 transition-colors cursor-pointer active:scale-98"
-                    >
-                      <Smartphone className="w-4 h-4 text-cyan-400 shrink-0" />
-                      <span>{language === 'ar' ? 'تثبيت التطبيق على جهازك' : 'Install App'}</span>
-                    </button>
-                  )}
+                      <span>{language === 'ar' ? 'قسم المشاركة والتثبيت' : 'Share & Install Section'}</span>
+                    </div>
+                    <span className="text-[10px] bg-sky-950 text-sky-300 border border-sky-500/40 px-1.5 py-0.5 rounded font-bold">
+                      {language === 'ar' ? 'الإعدادات ⚙️' : 'Settings ⚙️'}
+                    </span>
+                  </button>
 
                   <button
                     type="button"
@@ -853,20 +855,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     <SettingsIcon className="w-4 h-4 text-slate-300 shrink-0" />
                     <span>{t.advancedSettings}</span>
                   </button>
-
-                  <a
-                    href={OWNER_CONTACT.getWhatsAppUrl({ storeName: settings.storeName })}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setShowUserDropdown(false)}
-                    className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-emerald-300 hover:bg-emerald-950/50 border border-transparent hover:border-emerald-600/50 transition-colors cursor-pointer active:scale-98"
-                  >
-                    <div className="flex items-center gap-2">
-                      <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>{language === 'ar' ? 'طلب كود وتواصل (واتساب)' : 'WhatsApp Owner / Order Key'}</span>
-                    </div>
-                    <span className="text-[10px] text-emerald-400 font-mono font-bold">{OWNER_CONTACT.phoneLocal}</span>
-                  </a>
 
                   {onSwitchToStore && (
                     <button
@@ -1043,6 +1031,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         )}
       </div>
     </div>
+
+    <GlobalSettingsModal
+      isOpen={showGlobalModal}
+      onClose={() => setShowGlobalModal(false)}
+      isDarkMode={true}
+    />
     </header>
   );
 };

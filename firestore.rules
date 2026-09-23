@@ -71,11 +71,29 @@ service cloud.firestore {
       }
     }
 
-    // Orders collection: Customers and Merchants can access their respective orders
-    match /delivery_orders/{orderId} {
+    // Merchants directory & sync
+    match /merchants/{merchantId} {
+      allow read: if true;
       allow create: if true;
-      allow read: if isAdmin() || (request.auth != null && (resource.data.merchantId == request.auth.uid || resource.data.customerId == request.auth.uid));
-      allow update: if isAdmin() || (request.auth != null && (resource.data.merchantId == request.auth.uid || request.resource.data.merchantId == request.auth.uid));
+      allow update, delete: if isAdmin() || (request.auth != null && (merchantId == request.auth.uid || resource.data.ownerId == request.auth.uid));
+    }
+
+    // Drivers directory & sync
+    match /drivers/{driverId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin() || (request.auth != null && (driverId == request.auth.uid || resource.data.ownerId == request.auth.uid));
+    }
+
+    // Advertisements (Village bulletin & sponsored ads)
+    match /ads/{adId} {
+      allow read: if true;
+      allow write: if isAdmin() || request.auth != null;
+    }
+
+    // Orders collection: Customers, Merchants, and Drivers can access and sync orders in real-time
+    match /delivery_orders/{orderId} {
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 

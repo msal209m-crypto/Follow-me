@@ -159,6 +159,7 @@ export interface SubscriptionInfo {
 }
 
 export interface CustomerSession {
+  id?: string;
   name: string;
   phone: string;
   nationalId?: string;
@@ -167,6 +168,21 @@ export interface CustomerSession {
   village?: string;
   savedAt?: string;
   lastActiveAt?: string;
+  status?: 'NEW' | 'VERIFIED' | 'BLOCKED';
+  isVerified?: boolean;
+}
+
+export interface CustomerAccountRecord {
+  id: string;
+  name: string;
+  phone: string;
+  nationalId: string;
+  villageName?: string;
+  villageId?: string;
+  status: 'NEW' | 'VERIFIED' | 'BLOCKED';
+  isVerified: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface UserProfile {
@@ -394,6 +410,8 @@ export interface AdPackage {
   description: string;
 }
 
+export type AdThemeType = 'CELEBRATION' | 'HOT_DEAL' | 'OFFICIAL' | 'DEFAULT';
+
 export interface AdRecord {
   id: string;
   merchantId?: string;
@@ -410,5 +428,10 @@ export interface AdRecord {
   endDate?: string;
   createdAt: string;
   approvedBy?: string;
+  theme?: AdThemeType;
+  badgeText?: string;
+  isConfettiEnabled?: boolean;
+  actionText?: string;
+  actionUrl?: string;
 }
 

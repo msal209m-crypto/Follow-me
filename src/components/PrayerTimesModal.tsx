@@ -21,7 +21,10 @@ import {
   Moon,
   Sunset,
   CloudSun,
-  Store
+  Store,
+  Radio,
+  Music,
+  Check
 } from 'lucide-react';
 import {
   calculateVillagePrayerTimes,
@@ -32,11 +35,14 @@ import {
   isAdhanAudioPlaying,
   PRESET_VILLAGE_LOCATIONS,
   DEFAULT_VILLAGE_MOSQUES,
+  AVAILABLE_ADHAN_SOUNDS,
+  AdhanSoundType,
   PrayerTimeInfo,
   PrayerName,
   AdhanSettings,
   PrayerTimesDay,
 } from '../services/adhanService';
+import { VillageMapPickerModal } from './VillageMapPickerModal';
 
 export interface PrayerTimesModalProps {
   isOpen: boolean;
@@ -52,10 +58,14 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
   isRTL = true,
 }) => {
   const [settings, setSettings] = useState<AdhanSettings>(getAdhanSettings());
-  const [prayerData, setPrayerData] = useState<PrayerTimesDay>(() => calculateVillagePrayerTimes(new Date(), settings));
+  const [prayerData, setPrayerData] = useState<PrayerTimesDay>(() =>
+    calculateVillagePrayerTimes(new Date(), settings)
+  );
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [activeSoundPreview, setActiveSoundPreview] = useState<AdhanSoundType | null>(null);
   const [activeTab, setActiveTab] = useState<'times' | 'mosques' | 'qibla' | 'settings'>('times');
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   // Update clock & countdown every second
   useEffect(() => {
@@ -68,7 +78,24 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
 
     tick();
     const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
+
+    const handleAdhanState = (e: any) => {
+      if (e.detail) {
+        setIsPlayingAudio(!!e.detail.isPlaying);
+        if (!e.detail.isPlaying) {
+          setActiveSoundPreview(null);
+        } else if (e.detail.soundType) {
+          setActiveSoundPreview(e.detail.soundType);
+        }
+      }
+    };
+
+    window.addEventListener('qaryati:adhan-playing-state', handleAdhanState);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('qaryati:adhan-playing-state', handleAdhanState);
+    };
   }, [isOpen, settings]);
 
   if (!isOpen) return null;
@@ -79,11 +106,26 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
     setPrayerData(calculateVillagePrayerTimes(new Date(), updated));
   };
 
-  const handleTogglePlayAudio = async () => {
+  const handleTogglePlaySpecificSound = async (soundId: AdhanSoundType) => {
+    if (isPlayingAudio && activeSoundPreview === soundId) {
+      stopAdhanAudio();
+      setIsPlayingAudio(false);
+      setActiveSoundPreview(null);
+    } else {
+      setActiveSoundPreview(soundId);
+      setIsPlayingAudio(true);
+      await playAdhanAudio(soundId, settings.volume);
+      setIsPlayingAudio(isAdhanAudioPlaying());
+    }
+  };
+
+  const handleTogglePlayDefaultAudio = async () => {
     if (isPlayingAudio) {
       stopAdhanAudio();
       setIsPlayingAudio(false);
+      setActiveSoundPreview(null);
     } else {
+      setActiveSoundPreview(settings.selectedAdhanSound);
       setIsPlayingAudio(true);
       await playAdhanAudio(settings.selectedAdhanSound, settings.volume);
       setIsPlayingAudio(isAdhanAudioPlaying());
@@ -131,6 +173,10 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
     }
   };
 
+  const currentSelectedSoundInfo =
+    AVAILABLE_ADHAN_SOUNDS.find((s) => s.id === settings.selectedAdhanSound) ||
+    AVAILABLE_ADHAN_SOUNDS[0];
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md transition-all animate-fadeIn"
@@ -174,25 +220,23 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleTogglePlayAudio}
+              onClick={handleTogglePlayDefaultAudio}
               className={`p-2 rounded-xl transition-all flex items-center gap-1.5 text-xs font-bold ${
                 isPlayingAudio
                   ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 animate-pulse'
-                  : isDarkMode
-                  ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
               }`}
-              title={isPlayingAudio ? 'إيقاف صوت الأذان' : 'تشغيل تجربة صوت الأذان'}
+              title={isPlayingAudio ? 'إيقاف صوت الأذان' : 'سماع الأذان المختار'}
             >
               {isPlayingAudio ? (
                 <>
                   <Square className="w-4 h-4 fill-current" />
-                  <span>إيقاف</span>
+                  <span className="hidden sm:inline">إيقاف</span>
                 </>
               ) : (
                 <>
-                  <Volume2 className="w-4 h-4 text-emerald-400" />
-                  <span>تجربة الأذان</span>
+                  <Volume2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">سماع الأذان</span>
                 </>
               )}
             </button>
@@ -236,7 +280,7 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
             }`}
           >
             <MapPin className="w-3.5 h-3.5" />
-            مساجد القرية والإقامة
+            مساجد القرية
           </button>
           <button
             type="button"
@@ -248,7 +292,7 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
             }`}
           >
             <Compass className="w-3.5 h-3.5" />
-            اتجاه القبلة
+            القبلة
           </button>
           <button
             type="button"
@@ -259,8 +303,8 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Settings className="w-3.5 h-3.5" />
-            الإعدادات والصوت
+            <Volume2 className="w-3.5 h-3.5" />
+            أصوات الحرمين
           </button>
         </div>
 
@@ -294,6 +338,67 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
                 {prayerData.timeRemainingFormatted}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Quick Adhan Listen Banner for Makkah & Madinah */}
+        <div className="mb-4 p-3 rounded-2xl bg-gradient-to-r from-amber-950/30 via-slate-900 to-emerald-950/30 border border-amber-500/30">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-1.5 text-xs font-black text-amber-300">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>أصوات أذان الحرمين الشريفين المتاحة:</span>
+            </div>
+            <span className="text-[10px] text-slate-400">المؤذن المعتمد: <strong className="text-emerald-400">{currentSelectedSoundInfo.title}</strong></span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {/* Makkah Quick Button */}
+            <button
+              type="button"
+              onClick={() => handleTogglePlaySpecificSound('makkah')}
+              className={`p-2.5 rounded-xl border flex items-center justify-between text-xs font-bold transition-all cursor-pointer ${
+                isPlayingAudio && (activeSoundPreview === 'makkah' || activeSoundPreview === 'makkah_ali_mulla')
+                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/30 animate-pulse'
+                  : 'bg-slate-950/70 hover:bg-slate-900 border-amber-500/30 text-amber-200 hover:border-amber-400'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">🕋</span>
+                <div className="text-right">
+                  <div className="font-extrabold text-[11px] sm:text-xs">أذان الحرم المكي</div>
+                  <div className="text-[9px] opacity-80">مكة المكرمة</div>
+                </div>
+              </div>
+              {isPlayingAudio && (activeSoundPreview === 'makkah' || activeSoundPreview === 'makkah_ali_mulla') ? (
+                <Square className="w-3.5 h-3.5 fill-current" />
+              ) : (
+                <Play className="w-3.5 h-3.5 fill-current opacity-80" />
+              )}
+            </button>
+
+            {/* Madinah Quick Button */}
+            <button
+              type="button"
+              onClick={() => handleTogglePlaySpecificSound('madinah')}
+              className={`p-2.5 rounded-xl border flex items-center justify-between text-xs font-bold transition-all cursor-pointer ${
+                isPlayingAudio && (activeSoundPreview === 'madinah' || activeSoundPreview === 'madinah_bukhari' || activeSoundPreview === 'madinah_surayhi')
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/30 animate-pulse'
+                  : 'bg-slate-950/70 hover:bg-slate-900 border-emerald-500/30 text-emerald-200 hover:border-emerald-400'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">🕌</span>
+                <div className="text-right">
+                  <div className="font-extrabold text-[11px] sm:text-xs">أذان الحرم النبوي</div>
+                  <div className="text-[9px] opacity-80">المدينة المنورة</div>
+                </div>
+              </div>
+              {isPlayingAudio && (activeSoundPreview === 'madinah' || activeSoundPreview === 'madinah_bukhari' || activeSoundPreview === 'madinah_surayhi') ? (
+                <Square className="w-3.5 h-3.5 fill-current" />
+              ) : (
+                <Play className="w-3.5 h-3.5 fill-current opacity-80" />
+              )}
+            </button>
           </div>
         </div>
 
@@ -349,10 +454,10 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-right sm:text-left">
-                    <span className="text-base sm:text-lg font-black font-mono text-emerald-400">
+                  <div className="text-left font-mono">
+                    <div className={`text-base sm:text-lg font-black ${isNext ? 'text-emerald-400 font-extrabold' : 'text-slate-200'}`}>
                       {prayer.formattedTime}
-                    </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -360,92 +465,53 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
           </div>
         )}
 
-        {/* TAB 2: Village Mosques & Iqamah */}
+        {/* TAB 2: Village Mosques */}
         {activeTab === 'mosques' && (
           <div className="space-y-3">
-            <p className="text-xs text-slate-400">
-              قائمة بمساجد وجوامع القرية مع أوقات الإقامة المعتمدة والمسافة التقديرية:
-            </p>
-
             {DEFAULT_VILLAGE_MOSQUES.map((mosque) => (
               <div
                 key={mosque.id}
-                className={`p-4 rounded-2xl border transition-all ${
-                  isDarkMode
-                    ? 'bg-slate-800/50 border-slate-700/60 text-white'
-                    : 'bg-slate-50 border-slate-200 text-slate-900'
-                }`}
+                className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-800/40 border-slate-700/60' : 'bg-slate-50 border-slate-200'}`}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
-                      🕌
-                    </div>
-                    <div>
-                      <h4 className="font-extrabold text-sm sm:text-base">{mosque.name}</h4>
-                      {mosque.imamName && (
-                        <p className="text-[11px] text-slate-400">الإمام: {mosque.imamName}</p>
-                      )}
-                    </div>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div>
+                    <h4 className="font-extrabold text-sm text-emerald-400">{mosque.name}</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      الإمام: <strong className="text-slate-300">{mosque.imamName}</strong> • المؤذن: <strong className="text-slate-300">{mosque.muezzinName}</strong>
+                    </p>
                   </div>
                   {mosque.distanceKm && (
-                    <span className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      {mosque.distanceKm} كم
+                    <span className="px-2 py-1 rounded-xl text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                      تبعد {mosque.distanceKm} كم
                     </span>
                   )}
                 </div>
 
-                <div className="grid grid-cols-5 gap-1.5 mt-3 pt-3 border-t border-slate-700/40 text-center">
-                  <div className="p-1.5 rounded-lg bg-slate-900/40">
-                    <span className="text-[10px] text-slate-400 block">الفجر</span>
-                    <span className="text-xs font-bold text-emerald-400">+{mosque.iqamahOffsets.fajr}د</span>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-slate-900/40">
-                    <span className="text-[10px] text-slate-400 block">الظهر</span>
-                    <span className="text-xs font-bold text-emerald-400">+{mosque.iqamahOffsets.dhuhr}د</span>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-slate-900/40">
-                    <span className="text-[10px] text-slate-400 block">العصر</span>
-                    <span className="text-xs font-bold text-emerald-400">+{mosque.iqamahOffsets.asr}د</span>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-slate-900/40">
-                    <span className="text-[10px] text-slate-400 block">المغرب</span>
-                    <span className="text-xs font-bold text-emerald-400">+{mosque.iqamahOffsets.maghrib}د</span>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-slate-900/40">
-                    <span className="text-[10px] text-slate-400 block">العشاء</span>
-                    <span className="text-xs font-bold text-emerald-400">+{mosque.iqamahOffsets.isha}د</span>
-                  </div>
+                <div className="mt-3 pt-3 border-t border-slate-700/40 grid grid-cols-5 gap-1.5 text-center">
+                  {(['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'] as PrayerName[]).map((pName) => (
+                    <div key={pName} className="p-1.5 rounded-xl bg-slate-900/60 border border-slate-800 text-[10px]">
+                      <span className="text-slate-400 block">{pName === 'fajr' ? 'الفجر' : pName === 'dhuhr' ? 'الظهر' : pName === 'asr' ? 'العصر' : pName === 'maghrib' ? 'المغرب' : 'العشاء'}</span>
+                      <strong className="text-emerald-400 block mt-0.5">+{mosque.iqamahOffsets[pName]} د</strong>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* TAB 3: Qibla Direction Compass */}
+        {/* TAB 3: Qibla Compass */}
         {activeTab === 'qibla' && (
-          <div className="flex flex-col items-center justify-center py-6 text-center">
-            <div className="relative w-48 h-48 sm:w-56 sm:h-56 rounded-full border-4 border-emerald-500/40 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center shadow-2xl shadow-emerald-950/60 p-4 mb-4">
-              {/* Compass Cardinal Points */}
-              <span className="absolute top-2 text-xs font-black text-rose-500">N (الشمال)</span>
-              <span className="absolute bottom-2 text-xs font-bold text-slate-400">S (الجنوب)</span>
-              <span className="absolute right-3 text-xs font-bold text-slate-400">E (الشرق)</span>
-              <span className="absolute left-3 text-xs font-bold text-slate-400">W (الغرب)</span>
-
-              {/* Kaaba Direction Needle */}
-              <div
-                className="w-full h-full absolute inset-0 flex items-center justify-center transition-transform duration-700"
-                style={{ transform: `rotate(${prayerData.qiblaDegrees}deg)` }}
-              >
-                <div className="w-1.5 h-20 bg-gradient-to-t from-emerald-400 to-teal-300 rounded-full shadow-lg relative -top-6">
-                  <div className="w-4 h-4 bg-emerald-400 rounded-full absolute -top-2 -left-1.5 border-2 border-white flex items-center justify-center shadow-md">
-                    <span className="text-[7px] text-slate-950 font-bold">🕋</span>
-                  </div>
-                </div>
+          <div className="p-6 rounded-2xl bg-slate-950/60 border border-slate-800 text-center flex flex-col items-center justify-center">
+            <div className="relative w-44 h-44 mb-4 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-dashed border-emerald-500/30 animate-spin-slow" />
+              <div className="w-36 h-36 rounded-full bg-slate-900 border-2 border-emerald-500/50 flex items-center justify-center shadow-inner relative">
+                <Navigation
+                  className="w-16 h-16 text-emerald-400 transition-transform duration-700 filter drop-shadow-[0_0_12px_rgba(16,185,129,0.5)]"
+                  style={{ transform: `rotate(${prayerData.qiblaDegrees}deg)` }}
+                />
+                <span className="absolute top-2 text-[10px] font-black text-slate-400">شمال</span>
               </div>
-
-              {/* Center Pivot */}
-              <div className="w-6 h-6 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center z-10 shadow-lg" />
             </div>
 
             <h4 className="font-extrabold text-lg text-white mb-1">
@@ -457,87 +523,160 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
           </div>
         )}
 
-        {/* TAB 4: Settings & Location Selection */}
+        {/* TAB 4: Settings & Complete Sound Selection */}
         {activeTab === 'settings' && (
           <div className="space-y-4">
             {/* Location Selector */}
-            <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-800/40 border-slate-700/60' : 'bg-slate-50 border-slate-200'}`}>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-emerald-400" />
-                  موقع القرية / المنطقة
-                </label>
+            <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-800/40 border-slate-700/60' : 'bg-slate-50 border-slate-200'} space-y-3`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-black text-slate-200 flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-emerald-400" />
+                    <span>موقع وقرية الأذان: <span className="text-emerald-400 font-bold">{prayerData.villageName}</span></span>
+                  </label>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    يمكنك تحديد قريتك على الخريطة التفاعلية وكتابة اسمها بحرية تامة دون أي قيود
+                  </p>
+                </div>
+              </div>
+
+              {/* Free Custom Village Name Input */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={settings.customVillageName || ''}
+                  onChange={(e) =>
+                    handleUpdateSettings({
+                      customVillageName: e.target.value,
+                    })
+                  }
+                  placeholder="✍️ اكتب اسم قريتك بحرية (مثلاً: قرية بقعة، وادي ظهر، حي الصفا...)"
+                  className={`flex-1 p-2.5 rounded-xl border text-xs font-bold outline-none transition-all ${
+                    isDarkMode
+                      ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500 focus:border-emerald-500'
+                      : 'bg-white border-slate-300 text-slate-800 placeholder-slate-400'
+                  }`}
+                />
+              </div>
+
+              {/* Action Buttons: Map Picker & Live GPS */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMapPicker(true)}
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/40 cursor-pointer active:scale-95 transition-all"
+                >
+                  <MapPin className="w-4 h-4" />
+                  <span>🗺️ تحديد قريتي على الخريطة والـ GPS</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleUseCurrentGPS}
-                  className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1"
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer transition-colors shrink-0"
+                  title="تحديد الموقع الحالي فوراً بالـ GPS"
                 >
-                  <LocateFixed className="w-3.5 h-3.5" />
-                  تحديد موقعي بالـ GPS
+                  <LocateFixed className="w-4 h-4 text-emerald-400" />
+                  <span>GPS 📍</span>
                 </button>
               </div>
 
-              <select
-                value={settings.selectedVillageId}
-                onChange={(e) =>
-                  handleUpdateSettings({
-                    selectedVillageId: e.target.value,
-                    customCoords: null,
-                  })
-                }
-                className={`w-full p-2.5 rounded-xl border text-sm font-semibold outline-none transition-all ${
-                  isDarkMode
-                    ? 'bg-slate-900 border-slate-700 text-white'
-                    : 'bg-white border-slate-300 text-slate-800'
-                }`}
-              >
-                {PRESET_VILLAGE_LOCATIONS.map((loc) => (
-                  <option key={loc.id} value={loc.id}>
-                    {loc.name} ({loc.region})
-                  </option>
-                ))}
-              </select>
-
               {locationStatus && (
-                <p className="text-xs text-emerald-400 mt-2 font-medium bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20">
+                <p className="text-xs text-emerald-400 font-medium bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20">
                   {locationStatus}
                 </p>
               )}
             </div>
 
-            {/* Adhan Sound Picker */}
+            {/* Adhan Sound Picker: Makkah, Madinah & Holy Places */}
             <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-800/40 border-slate-700/60' : 'bg-slate-50 border-slate-200'}`}>
-              <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5 mb-2.5">
-                <Volume2 className="w-4 h-4 text-emerald-400" />
-                صوت مؤذن المنصة
-              </label>
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Volume2 className="w-4 h-4 text-emerald-400" />
+                  مكتبة أصوات أذان الحرمين والمؤذنين
+                </label>
+                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  {AVAILABLE_ADHAN_SOUNDS.length} أصوات مسجلة
+                </span>
+              </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: 'makkah', label: 'أذان الحرم المكي' },
-                  { id: 'madinah', label: 'أذان الحرم النبوي' },
-                  { id: 'quds', label: 'أذان المسجد الأقصى' },
-                  { id: 'takbeer', label: 'تكبيرات الأذان القصيرة' },
-                  { id: 'chime', label: 'نغمة هادئة (بدون إنترنت)' },
-                ].map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => handleUpdateSettings({ selectedAdhanSound: s.id as any })}
-                    className={`p-2.5 rounded-xl border text-xs font-bold text-right transition-all flex items-center justify-between ${
-                      settings.selectedAdhanSound === s.id
-                        ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300'
-                        : isDarkMode
-                        ? 'bg-slate-900/60 border-slate-700/60 text-slate-400'
-                        : 'bg-white border-slate-200 text-slate-700'
-                    }`}
-                  >
-                    <span>{s.label}</span>
-                    {settings.selectedAdhanSound === s.id && (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    )}
-                  </button>
-                ))}
+              <div className="space-y-2">
+                {AVAILABLE_ADHAN_SOUNDS.map((s) => {
+                  const isSelected = settings.selectedAdhanSound === s.id;
+                  const isCurrentlyPlaying = isPlayingAudio && activeSoundPreview === s.id;
+
+                  return (
+                    <div
+                      key={s.id}
+                      className={`p-3 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                        isSelected
+                          ? 'bg-emerald-950/40 border-emerald-500 shadow-md shadow-emerald-950/40'
+                          : isDarkMode
+                          ? 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                          : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-xl shrink-0">{s.icon}</div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <strong className="text-xs sm:text-sm font-bold text-white">{s.title}</strong>
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                              {s.badge}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">{s.subTitle}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        {/* Listen preview button */}
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePlaySpecificSound(s.id)}
+                          className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            isCurrentlyPlaying
+                              ? 'bg-emerald-500 text-slate-950 animate-pulse'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                          }`}
+                          title={isCurrentlyPlaying ? 'إيقاف الاستماع' : 'استماع تجريبي'}
+                        >
+                          {isCurrentlyPlaying ? (
+                            <>
+                              <Square className="w-3.5 h-3.5 fill-current" />
+                              <span>إيقاف</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-3.5 h-3.5 fill-current" />
+                              <span>استماع 🔊</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* Select as default button */}
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSettings({ selectedAdhanSound: s.id })}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {isSelected ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              <span>المعتمد ✅</span>
+                            </>
+                          ) : (
+                            <span>اختيار</span>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Volume Slider */}
@@ -555,6 +694,31 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
                   onChange={(e) => handleUpdateSettings({ volume: parseFloat(e.target.value) })}
                   className="w-full accent-emerald-500 cursor-pointer"
                 />
+              </div>
+            </div>
+
+            {/* Auto Play Adhan on Prayer Times */}
+            <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-800/40 border-slate-700/60' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                    <Volume2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">رفع الأذان تلقائياً عند دخول الوقت</h4>
+                    <p className="text-[11px] text-slate-400">تشغيل أذان الحرمين المختار تلقائياً في المتجر</p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.autoPlayAdhan}
+                    onChange={(e) => handleUpdateSettings({ autoPlayAdhan: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
               </div>
             </div>
 
@@ -591,12 +755,24 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="text-emerald-400 hover:underline font-bold"
+            className="text-emerald-400 hover:underline font-bold cursor-pointer"
           >
             إغلاق
           </button>
         </div>
       </div>
+
+      {/* Interactive Map Picker Modal */}
+      <VillageMapPickerModal
+        isOpen={showMapPicker}
+        onClose={() => {
+          setShowMapPicker(false);
+          const updated = getAdhanSettings();
+          setSettings(updated);
+          setPrayerData(calculateVillagePrayerTimes(new Date(), updated));
+        }}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 };

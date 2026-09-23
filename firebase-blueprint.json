@@ -75,6 +75,52 @@
         "remainingDebt": { "type": "number" }
       },
       "required": ["id", "personName", "totalDebt", "remainingDebt"]
+    },
+    "Merchant": {
+      "title": "Merchant",
+      "description": "Registered merchant account record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "storeName": { "type": "string" },
+        "phone": { "type": "string" },
+        "village": { "type": "string" }
+      },
+      "required": ["id", "storeName"]
+    },
+    "Driver": {
+      "title": "Driver",
+      "description": "Registered delivery driver record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "village": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Ad": {
+      "title": "Ad",
+      "description": "Village marketplace advertisement record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "village": { "type": "string" }
+      },
+      "required": ["id", "title"]
+    },
+    "DeliveryOrder": {
+      "title": "DeliveryOrder",
+      "description": "Village marketplace delivery order record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerName": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "customerName"]
     }
   },
   "firestore": {
@@ -97,6 +143,22 @@
     "/users/{userId}/debts/{debtId}": {
       "schema": "DebtRecord",
       "description": "Isolated merchant debt records subcollection"
+    },
+    "/merchants/{merchantId}": {
+      "schema": "Merchant",
+      "description": "Merchants registry collection"
+    },
+    "/drivers/{driverId}": {
+      "schema": "Driver",
+      "description": "Drivers registry collection"
+    },
+    "/ads/{adId}": {
+      "schema": "Ad",
+      "description": "Advertisements collection"
+    },
+    "/delivery_orders/{orderId}": {
+      "schema": "DeliveryOrder",
+      "description": "Delivery orders collection"
     }
   }
 }

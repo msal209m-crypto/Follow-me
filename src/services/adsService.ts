@@ -1,6 +1,6 @@
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { AdRecord, AdPackage } from '../types';
+import { AdRecord, AdPackage, AdThemeType } from '../types';
 
 const ADS_STORAGE_KEY = 'qaryati_ads_directory';
 
@@ -24,14 +24,60 @@ export const DEFAULT_AD_PACKAGES: AdPackage[] = [
     name: 'الباقة الذهبية الممتازة VIP 👑',
     price: 299,
     durationDays: 90,
-    description: 'ترويج حصري وممتاز لمدة 3 أشهر مع إحصائيات ظهور متقدمة ودعم فني خاص لرفع المبيعات.'
+    description: 'ترويج حصري وممتاز لمدة 3 أشهر مع إحصائيات ظهور متقدمة ودعم فني خاص لرفع المبيعات مع مؤثرات احتفالية متحركة.'
+  }
+];
+
+const INITIAL_FESTIVE_ADS: AdRecord[] = [
+  {
+    id: 'ad_festive_opening_1',
+    storeName: 'بقالة البركة المركزية',
+    title: '🎉 تم بحمد الله وتوفيقه افتتاح بقالة البركة المركزية في قرية بني عيسى!',
+    description: 'يسرنا استقبالكم بأحدث المنتجات الطازجة والمواد الغذائية مع خصومات وهدايا كبرى بمناسبة الافتتاح المبارك وتوصيل فوري لجميع المنازل 🚚✨',
+    imageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800',
+    packageName: 'الباقة الذهبية الممتازة VIP 👑',
+    status: 'APPROVED',
+    village: 'بني عيسى',
+    theme: 'CELEBRATION',
+    badgeText: 'افتتاح رسمي مبارك 🎉',
+    isConfettiEnabled: true,
+    actionText: 'تسوق من بقالة البركة الآن 🛒',
+    actionUrl: '',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: '2035-12-31',
+    createdAt: new Date().toISOString(),
+    approvedBy: 'المطور المعتمد'
+  },
+  {
+    id: 'ad_festive_opening_2',
+    storeName: 'مخبز وأفران القرية الحديثة',
+    title: '🔥 عروض نارية بمناسبة تدشين الفرع الجديد في قرية الجعدة!',
+    description: 'خصم خاص 20% على كافة المخبوزات والحلويات والمعجنات الطازجة لأهالي قريتنا الكرام مع التوصيل السريع للمنازل 🥐🍰',
+    imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800',
+    packageName: 'الباقة الشهرية الفضية 🥈',
+    status: 'APPROVED',
+    village: 'الجعدة',
+    theme: 'HOT_DEAL',
+    badgeText: 'عروض الافتتاح الكبرى 🔥',
+    isConfettiEnabled: true,
+    actionText: 'اطلب من المخبز فوراً 🥖',
+    actionUrl: '',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: '2035-12-31',
+    createdAt: new Date().toISOString(),
+    approvedBy: 'المطور المعتمد'
   }
 ];
 
 export function getAds(): AdRecord[] {
   try {
     const raw = localStorage.getItem(ADS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (raw === null) {
+      localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(INITIAL_FESTIVE_ADS));
+      return INITIAL_FESTIVE_ADS;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -72,9 +118,65 @@ export function deleteAdRecord(id: string) {
   }
 }
 
+export function toggleAdActiveStatus(id: string): AdRecord | null {
+  const ads = getAds();
+  const ad = ads.find((a) => a.id === id);
+  if (ad) {
+    const newStatus: AdRecord['status'] = ad.status === 'APPROVED' ? 'REJECTED' : 'APPROVED';
+    const updated: AdRecord = {
+      ...ad,
+      status: newStatus,
+      approvedBy: newStatus === 'APPROVED' ? 'المطور المعتمد' : ad.approvedBy,
+      startDate: newStatus === 'APPROVED' ? (ad.startDate || new Date().toISOString().split('T')[0]) : ad.startDate,
+      endDate: newStatus === 'APPROVED' ? (ad.endDate || '2035-12-31') : ad.endDate
+    };
+    saveAdRecord(updated);
+    return updated;
+  }
+  return null;
+}
+
+export function pauseAllAds(): void {
+  try {
+    const ads = getAds();
+    const updated = ads.map((ad) => ({
+      ...ad,
+      status: 'REJECTED' as const
+    }));
+    localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: updated }));
+  } catch (e) {
+    console.warn('Failed to pause all ads:', e);
+  }
+}
+
+export function resumeAllAds(): void {
+  try {
+    const ads = getAds();
+    const updated = ads.map((ad) => ({
+      ...ad,
+      status: 'APPROVED' as const,
+      approvedBy: 'المطور المعتمد'
+    }));
+    localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: updated }));
+  } catch (e) {
+    console.warn('Failed to resume all ads:', e);
+  }
+}
+
+export function clearAllAds(): void {
+  try {
+    localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: [] }));
+  } catch (e) {
+    console.warn('Failed to clear all ads:', e);
+  }
+}
+
 export function submitAdRequest(params: {
-  merchantId: string;
-  storeId: string;
+  merchantId?: string;
+  storeId?: string;
   storeName: string;
   title: string;
   description: string;
@@ -82,6 +184,14 @@ export function submitAdRequest(params: {
   linkUrl?: string;
   packageName: string;
   village: string;
+  status?: AdRecord['status'];
+  theme?: AdThemeType;
+  badgeText?: string;
+  isConfettiEnabled?: boolean;
+  actionText?: string;
+  actionUrl?: string;
+  startDate?: string;
+  endDate?: string;
 }): AdRecord {
   const adId = `ad_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
   const newAd: AdRecord = {
@@ -91,12 +201,20 @@ export function submitAdRequest(params: {
     storeName: params.storeName,
     title: params.title.trim(),
     description: params.description.trim(),
-    imageUrl: params.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=600',
+    imageUrl: params.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800',
     linkUrl: params.linkUrl || '',
     packageName: params.packageName,
-    status: 'PENDING',
+    status: params.status || 'PENDING',
     village: params.village,
-    createdAt: new Date().toISOString()
+    theme: params.theme || 'CELEBRATION',
+    badgeText: params.badgeText || 'إعلان ترويجي 📢',
+    isConfettiEnabled: params.isConfettiEnabled !== false,
+    actionText: params.actionText || 'تسوق الآن 🛒',
+    actionUrl: params.actionUrl || '',
+    startDate: params.startDate || (params.status === 'APPROVED' ? new Date().toISOString().split('T')[0] : undefined),
+    endDate: params.endDate || (params.status === 'APPROVED' ? '2035-12-31' : undefined),
+    createdAt: new Date().toISOString(),
+    approvedBy: params.status === 'APPROVED' ? 'المطور المعتمد' : undefined
   };
 
   saveAdRecord(newAd);
@@ -120,7 +238,7 @@ export function updateAdStatus(id: string, status: AdRecord['status'], approvedB
 
 function calculateEndDate(packageName: string): string {
   const pack = DEFAULT_AD_PACKAGES.find((p) => p.name === packageName || p.id === packageName);
-  const days = pack ? pack.durationDays : 7;
+  const days = pack ? pack.durationDays : 365;
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().split('T')[0];

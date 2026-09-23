@@ -21,6 +21,13 @@ import {
   WifiOff,
   HardDrive,
   Zap,
+  Share2,
+  HelpCircle,
+  Send,
+  MessageSquare,
+  MessageCircle,
+  Bell,
+  Key,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { usePWA } from '../context/PWAContext';
@@ -28,13 +35,18 @@ import { useSubscription } from '../context/SubscriptionContext';
 import { POPULAR_CURRENCIES } from '../data/currencies';
 import { CloudBackupsManager } from './CloudBackupsManager';
 import { MultiCurrencySettingsTab } from './MultiCurrencySettingsTab';
+import { submitMerchantSupport, getDeveloperNotifications } from '../services/rbacAuthService';
+import { OWNER_CONTACT } from '../config/ownerContact';
+
+export type SettingsTabType = 'GENERAL' | 'CURRENCY' | 'BACKUPS' | 'SUBSCRIPTIONS' | 'SUPPORT' | 'SUBSCRIPTIONS_SUPPORT';
 
 interface SettingsModalProps {
   onClose: () => void;
-  initialTab?: 'GENERAL' | 'CURRENCY' | 'BACKUPS';
+  initialTab?: SettingsTabType;
+  onOpenShareModal?: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTab = 'GENERAL' }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTab = 'GENERAL', onOpenShareModal }) => {
   const {
     settings,
     updateSettings,
@@ -62,11 +74,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
     refreshOfflineCache,
   } = usePWA();
 
-  const { isPro, subscription, setShowSubscriptionModal } = useSubscription();
+  const { isPro, subscription, setShowSubscriptionModal, activateLicenseKey, freeItemLimit } = useSubscription();
 
-  const [activeSubTab, setActiveSubTab] = useState<'GENERAL' | 'CURRENCY' | 'BACKUPS'>(initialTab);
+  // Normalize initial tab
+  const getNormalizedTab = (tab?: string): 'GENERAL' | 'CURRENCY' | 'BACKUPS' | 'SUBSCRIPTIONS_SUPPORT' => {
+    if (tab === 'SUBSCRIPTIONS' || tab === 'SUPPORT' || tab === 'SUBSCRIPTIONS_SUPPORT') return 'SUBSCRIPTIONS_SUPPORT';
+    if (tab === 'CURRENCY') return 'CURRENCY';
+    if (tab === 'BACKUPS') return 'BACKUPS';
+    return 'GENERAL';
+  };
+
+  const [activeSubTab, setActiveSubTab] = useState<'GENERAL' | 'CURRENCY' | 'BACKUPS' | 'SUBSCRIPTIONS_SUPPORT'>(() => getNormalizedTab(initialTab));
+  const [serviceSubSection, setServiceSubSection] = useState<'PLANS' | 'SUPPORT'>(() => initialTab === 'SUPPORT' ? 'SUPPORT' : 'PLANS');
   const [isWarmingCache, setIsWarmingCache] = useState(false);
   const [cacheWarmedSuccess, setCacheWarmedSuccess] = useState(false);
+
+  // Dev Support Ticket State inside Settings
+  const [supportMessage, setSupportMessage] = useState('');
+  const [supportSubmittedSuccess, setSupportSubmittedSuccess] = useState(false);
+  const [developerReplies, setDeveloperReplies] = useState(() => getDeveloperNotifications());
+
+  // License Key State
+  const [licenseKeyInput, setLicenseKeyInput] = useState('');
+  const [licenseKeyStatusMsg, setLicenseKeyStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSendSupportRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supportMessage.trim()) return;
+    submitMerchantSupport({
+      merchantId: 'merchant-id',
+      merchantName: settings.storeName || 'متجر القرية',
+      storeName: settings.storeName || 'متجر القرية',
+      message: supportMessage.trim(),
+      phone: settings.phone || '0500000000',
+    });
+    setSupportSubmittedSuccess(true);
+    setSupportMessage('');
+    setDeveloperReplies(getDeveloperNotifications());
+    setTimeout(() => setSupportSubmittedSuccess(false), 4000);
+  };
+
+  const handleActivateLicense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!licenseKeyInput.trim()) return;
+    const res = await activateLicenseKey(licenseKeyInput.trim());
+    if (res.success) {
+      setLicenseKeyStatusMsg({ type: 'success', text: language === 'ar' ? 'تم تفعيل مفتاح الترخيص بنجاح! 🎉' : 'License key activated!' });
+      setLicenseKeyInput('');
+    } else {
+      setLicenseKeyStatusMsg({ type: 'error', text: (res as any).error || (language === 'ar' ? 'مفتاح الترخيص غير صحيح!' : 'Invalid license key!') });
+    }
+  };
 
   const [storeName, setStoreName] = useState(settings.storeName);
   const [phone, setPhone] = useState(settings.phone);
@@ -141,11 +199,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
         </div>
 
         {/* Tab Navigation Switcher */}
-        <div className="grid grid-cols-3 p-1 bg-slate-950 border border-slate-800 rounded-xl gap-1">
+        <div className="grid grid-cols-2 sm:grid-cols-4 p-1 bg-slate-950 border border-slate-800 rounded-xl gap-1 text-[11px]">
           <button
             type="button"
             onClick={() => setActiveSubTab('GENERAL')}
-            className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer truncate ${
+            className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg font-bold transition-all cursor-pointer truncate ${
               activeSubTab === 'GENERAL'
                 ? 'bg-slate-800 text-white shadow-sm border border-slate-700'
                 : 'text-slate-400 hover:text-slate-200'
@@ -157,8 +215,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
 
           <button
             type="button"
+            onClick={() => setActiveSubTab('SUBSCRIPTIONS_SUPPORT')}
+            className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg font-bold transition-all cursor-pointer truncate ${
+              activeSubTab === 'SUBSCRIPTIONS_SUPPORT'
+                ? 'bg-gradient-to-r from-amber-950/90 to-purple-950/90 text-amber-300 shadow-sm border border-amber-500/50'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="truncate">{language === 'ar' ? 'الاشتراكات والدعم الفني' : 'Subscriptions & Support'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveSubTab('CURRENCY')}
-            className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer truncate ${
+            className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg font-bold transition-all cursor-pointer truncate ${
               activeSubTab === 'CURRENCY'
                 ? 'bg-amber-950/80 text-amber-300 shadow-sm border border-amber-600/50'
                 : 'text-slate-400 hover:text-slate-200'
@@ -171,7 +242,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
           <button
             type="button"
             onClick={() => setActiveSubTab('BACKUPS')}
-            className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer truncate ${
+            className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg font-bold transition-all cursor-pointer truncate ${
               activeSubTab === 'BACKUPS'
                 ? 'bg-emerald-950/80 text-emerald-300 shadow-sm border border-emerald-600/50'
                 : 'text-slate-400 hover:text-slate-200'
@@ -187,6 +258,285 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
 
         {/* Tab 2: Cloud Backups Manager */}
         {activeSubTab === 'BACKUPS' && <CloudBackupsManager />}
+
+        {/* NEW UNIFIED SECTION: Subscriptions & Developer Tech Support */}
+        {activeSubTab === 'SUBSCRIPTIONS_SUPPORT' && (
+          <div className="space-y-4 text-xs animate-fadeIn">
+            {/* Top Sub-Navigation Segment Switcher */}
+            <div className="p-1 bg-slate-950 border border-slate-800 rounded-xl grid grid-cols-2 gap-1">
+              <button
+                type="button"
+                onClick={() => setServiceSubSection('PLANS')}
+                className={`py-2 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  serviceSubSection === 'PLANS'
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-md font-black'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Crown className="w-4 h-4" />
+                <span>{language === 'ar' ? 'باقات واشتراكات المتجر (PRO)' : 'Store Subscriptions & PRO'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setServiceSubSection('SUPPORT')}
+                className={`py-2 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  serviceSubSection === 'SUPPORT'
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md font-black'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <HelpCircle className="w-4 h-4" />
+                <span>{language === 'ar' ? 'الدعم الفني والمساعدة المباشرة' : 'Direct Tech Support'}</span>
+                {developerReplies.filter(r => !r.isRead).length > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                )}
+              </button>
+            </div>
+
+            {/* SUB-SECTION 1: PLANS & PRO SUBSCRIPTION */}
+            {serviceSubSection === 'PLANS' && (
+              <div className="space-y-4">
+                {/* Pro Status Card */}
+                <div className="bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950/40 border border-amber-500/40 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
+                        isPro ? 'bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 font-black shadow-amber-500/20' : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        <Crown className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-sm sm:text-base text-white">
+                            {subscription.planName || (isPro ? 'باقة المحترف PRO 👑' : 'الباقة الأساسية المجانية')}
+                          </span>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                            isPro ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-slate-800 text-slate-400'
+                          }`}>
+                            {isPro ? 'نشطة ✓' : 'مجانية'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          {isPro
+                            ? (language === 'ar' ? 'سعة غير محدودة للمنتجات والفواتير والمزامنة السحابية' : 'Unlimited catalog, invoices & cloud sync')
+                            : (language === 'ar' ? `مقتصرة على ${freeItemLimit} صنف فقط مع حفظ محلي` : `Limited to ${freeItemLimit} items with local storage`)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        setShowSubscriptionModal(true);
+                      }}
+                      className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl text-xs cursor-pointer active:scale-95 shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>{isPro ? (language === 'ar' ? 'تجديد أو ترقية الباقة' : 'Renew / Upgrade') : (language === 'ar' ? 'ترقية إلى باقة PRO ⚡' : 'Upgrade to PRO ⚡')}</span>
+                    </button>
+                  </div>
+
+                  {/* Metrics grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-800/80">
+                    <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block mb-0.5">{language === 'ar' ? 'الأيام المتبقية' : 'Days Left'}</span>
+                      <span className="text-sm font-black text-amber-400 font-mono">
+                        {isPro ? `${subscription.daysRemaining} يوم` : (language === 'ar' ? 'حساب مجاني' : 'Free')}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block mb-0.5">{language === 'ar' ? 'سعة الأصناف' : 'Capacity'}</span>
+                      <span className="text-sm font-black text-emerald-400 font-mono">
+                        {isPro ? 'غير محدود ∞' : `${freeItemLimit} منتج`}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 col-span-2 sm:col-span-1">
+                      <span className="text-[10px] text-slate-400 block mb-0.5">{language === 'ar' ? 'تاريخ الانتهاء' : 'Expiry'}</span>
+                      <span className="text-xs font-mono font-bold text-slate-200">
+                        {subscription.expiresAt ? new Date(subscription.expiresAt).toLocaleDateString('ar-SA') : (language === 'ar' ? 'مفتوح / دائم' : 'Permanent')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Pro Features highlights */}
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+                    <span className="text-[11px] font-bold text-amber-400 block mb-2">
+                      {language === 'ar' ? 'مميزات باقة المحترف (FlowApp Pro):' : 'Pro Plan Features:'}
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300">
+                      <div className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>إضافة وتعديل أصناف ومخزون بلا حدود</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>فواتير إلكترونية ومبيعات غير محدودة</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>مزامنة سحابية فائقة الأمان على جميع أجهزتك</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>شارة المتجر المعتمد وعرض حصري لعملاء القرية</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* License Key Activation Form */}
+                <form onSubmit={handleActivateLicense} className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Key className="w-4 h-4 text-amber-400" />
+                      <span>{language === 'ar' ? 'تفعيل مفتاح ترخيص PRO الرقمي للمطور' : 'Activate PRO Digital License Key'}</span>
+                    </label>
+                    <span className="text-[10px] text-slate-500 font-mono">FLOW-PRO-XXXX</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    {language === 'ar'
+                      ? 'إذا حصلت على كود تفعيل أو مفتاح ترخيص من مالك المنصة، أدخله هنا لتفعيل المتجر فوراً.'
+                      : 'If you have a license key from the owner, enter it below to activate immediately.'}
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={licenseKeyInput}
+                      onChange={(e) => setLicenseKeyInput(e.target.value)}
+                      placeholder="FLOW-PRO-XXXX-XXXX"
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 font-mono text-xs text-white focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!licenseKeyInput.trim()}
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs cursor-pointer disabled:opacity-50 transition-colors shadow"
+                    >
+                      {language === 'ar' ? 'تفعيل المفتاح' : 'Activate'}
+                    </button>
+                  </div>
+                  {licenseKeyStatusMsg && (
+                    <p className={`text-[11px] font-bold ${licenseKeyStatusMsg.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {licenseKeyStatusMsg.text}
+                    </p>
+                  )}
+                </form>
+              </div>
+            )}
+
+            {/* SUB-SECTION 2: DEV SUPPORT & HELP */}
+            {serviceSubSection === 'SUPPORT' && (
+              <div className="space-y-4">
+                {/* Official WhatsApp & Contact Card */}
+                <div className="bg-gradient-to-r from-emerald-950/60 via-slate-950 to-teal-950/60 border border-emerald-500/40 rounded-2xl p-4 flex items-center justify-between gap-3 flex-wrap shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                      <MessageCircle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-white text-sm">
+                        {language === 'ar' ? 'الدعم المباشر عبر الواتساب للمطور' : 'Official WhatsApp Dev Support'}
+                      </h4>
+                      <p className="text-[11px] text-emerald-300 mt-0.5">
+                        {language === 'ar'
+                          ? `تواصل فوري وسريع مع فريق التطوير: ${OWNER_CONTACT.phoneDisplay}`
+                          : `Fast direct contact: ${OWNER_CONTACT.phoneDisplay}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <a
+                    href={OWNER_CONTACT.getWhatsAppUrl({ storeName: settings.storeName })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-2 transition-all shadow-md shadow-emerald-950 cursor-pointer active:scale-95"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>{language === 'ar' ? 'محادثة واتساب فورية 💬' : 'Chat on WhatsApp 💬'}</span>
+                  </a>
+                </div>
+
+                {/* Tech Support Ticket Form */}
+                <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                  <div className="flex items-center gap-2 font-bold text-slate-200">
+                    <HelpCircle className="w-4 h-4 text-purple-400" />
+                    <span>{language === 'ar' ? 'إرسال تذكرة دعم فني / استفسار للمطور' : 'Send Tech Ticket / Developer Query'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    {language === 'ar'
+                      ? 'أرسل أي مشكلة تقنية أو استفسار بخصوص المتجر، وسيتلقى المطور إشعاراً في لوحة التحكم للرد عليك ومساعدتك.'
+                      : 'Submit any technical inquiry, and the developer will be notified instantly.'}
+                  </p>
+
+                  <form onSubmit={handleSendSupportRequest} className="space-y-2.5">
+                    <textarea
+                      rows={3}
+                      value={supportMessage}
+                      onChange={(e) => setSupportMessage(e.target.value)}
+                      placeholder={language === 'ar' ? 'اكتب تفاصيل استفسارك أو مشكلتك هنا بوضوح...' : 'Type your message or inquiry here...'}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                    />
+                    <div className="flex items-center justify-between">
+                      {supportSubmittedSuccess && (
+                        <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>تم إرسال تذكرتك للمطور بنجاح ✓</span>
+                        </span>
+                      )}
+                      <button
+                        type="submit"
+                        disabled={!supportMessage.trim()}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-xl text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors shadow ml-auto"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{language === 'ar' ? 'إرسال التذكرة للمطور 🚀' : 'Send Ticket 🚀'}</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Support Replies Log */}
+                <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-300">
+                      <Bell className="w-4 h-4 text-amber-400" />
+                      <span>{language === 'ar' ? 'سجل التذاكر والردود السابقة' : 'Ticket History & Replies'}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">({developerReplies.length})</span>
+                  </div>
+                  <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                    {developerReplies.length === 0 ? (
+                      <p className="text-[11px] text-slate-500 text-center py-4 bg-slate-900/50 rounded-xl border border-slate-900">
+                        {language === 'ar' ? 'لا توجد تذاكر دعم مرسلة بعد' : 'No previous tickets found'}
+                      </p>
+                    ) : (
+                      developerReplies.map((ticket) => (
+                        <div key={ticket.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-[11px] space-y-1.5">
+                          <div className="flex justify-between font-bold text-slate-200">
+                            <span>{ticket.title}</span>
+                            <span className="text-slate-500 font-mono text-[9px]">{new Date(ticket.timestamp).toLocaleString('ar-SA')}</span>
+                          </div>
+                          <p className="text-slate-300 bg-slate-950/60 p-2 rounded-lg border border-slate-800/60">{ticket.message}</p>
+                          {ticket.quickReply ? (
+                            <div className="text-purple-300 bg-purple-950/50 p-2 rounded-lg border border-purple-500/30 space-y-0.5">
+                              <span className="text-[10px] font-bold text-purple-400 block">رد المطور الرسمي:</span>
+                              <p>{ticket.quickReply}</p>
+                            </div>
+                          ) : (
+                            <p className="text-amber-400 text-[10px] font-bold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                              <span>⏳ قيد المراجعة وبانتظار رد المطور...</span>
+                            </p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tab 3: General Store Settings */}
         {activeSubTab === 'GENERAL' && (
@@ -375,24 +725,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
               </div>
             </div>
 
-            {/* App Installation & Real-Time Updates Section */}
+            {/* App Installation, Share & Real-Time Updates Section */}
             <div className="pt-3 border-t border-slate-800 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 font-bold text-slate-200 text-xs">
                   <Smartphone className="w-4 h-4 text-emerald-400" />
-                  <span>{language === 'ar' ? 'تطبيق فلو اب والتحديثات (PWA)' : 'App Installation & Updates'}</span>
+                  <span>{language === 'ar' ? 'قسم المشاركة وتثبيت التطبيق (PWA & Share)' : 'App Installation & Share Section'}</span>
                 </div>
                 <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-500/40">
                   {newVersionInfo?.version ? `v${newVersionInfo.version}` : 'v2.4.0'}
                 </span>
               </div>
 
-              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">{language === 'ar' ? 'حالة التثبيت:' : 'Installation Status:'}</span>
+                  <span className="text-slate-400">{language === 'ar' ? 'حالة التثبيت على الجهاز:' : 'Installation Status:'}</span>
                   <span className={`font-bold ${isInstalled ? 'text-emerald-400' : 'text-cyan-400'}`}>
                     {isInstalled
-                      ? (language === 'ar' ? 'مثبت على هذا الجهاز ✅' : 'Installed ✅')
+                      ? (language === 'ar' ? 'مثبت بنجاح ✅' : 'Installed ✅')
                       : (language === 'ar' ? 'جاهز للتثبيت 📱' : 'Ready to install 📱')}
                   </span>
                 </div>
@@ -415,27 +765,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
                   </div>
                 )}
 
-                <div className="flex gap-2 pt-1">
-                  {!isInstalled && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  {/* Share App Button inside Settings */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onOpenShareModal) {
+                        onOpenShareModal();
+                      } else {
+                        try {
+                          navigator.clipboard.writeText(window.location.href);
+                          alert('تم نسخ رابط التطبيق للحافظة بنجاح! 🔗');
+                        } catch {}
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-sky-200 text-xs font-bold rounded-xl border border-sky-500/40 transition-all cursor-pointer shadow-sm active:scale-98"
+                  >
+                    <Share2 className="w-4 h-4 text-sky-400" />
+                    <span>{language === 'ar' ? 'مشاركة رابط التطبيق 🔗' : 'Share App Link 🔗'}</span>
+                  </button>
+
+                  {/* Install App Button inside Settings */}
+                  {!isInstalled ? (
                     <button
                       type="button"
                       onClick={() => setShowInstallPromptModal(true)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-200 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+                      className="flex items-center justify-center gap-2 py-2 px-3 bg-gradient-to-r from-cyan-950 to-teal-950 hover:from-cyan-900 hover:to-teal-900 border border-cyan-500/50 text-cyan-200 rounded-xl text-xs font-bold cursor-pointer transition-all shadow-sm active:scale-98"
                     >
-                      <Smartphone className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>{language === 'ar' ? 'تثبيت التطبيق' : 'Install App'}</span>
+                      <Smartphone className="w-4 h-4 text-cyan-400" />
+                      <span>{language === 'ar' ? 'تثبيت التطبيق على جهازك 📱' : 'Install App 📱'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={checkForUpdates}
+                      disabled={checkingForUpdates}
+                      className="flex items-center justify-center gap-2 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold cursor-pointer transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-4 h-4 text-teal-400 ${checkingForUpdates ? 'animate-spin' : ''}`} />
+                      <span>{checkingForUpdates ? (language === 'ar' ? 'جارٍ الفحص...' : 'Checking...') : (language === 'ar' ? 'فحص التحديثات' : 'Check Updates')}</span>
                     </button>
                   )}
-
-                  <button
-                    type="button"
-                    onClick={checkForUpdates}
-                    disabled={checkingForUpdates}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold cursor-pointer transition-colors disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 text-teal-400 ${checkingForUpdates ? 'animate-spin' : ''}`} />
-                    <span>{checkingForUpdates ? (language === 'ar' ? 'جارٍ الفحص...' : 'Checking...') : (language === 'ar' ? 'فحص التحديثات' : 'Check for Updates')}</span>
-                  </button>
                 </div>
               </div>
             </div>

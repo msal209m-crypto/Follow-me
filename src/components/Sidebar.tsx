@@ -24,9 +24,7 @@ import {
   Smartphone,
   Rocket,
   Cloud,
-  Crown,
   Share2,
-  MessageCircle,
   KeyRound,
   Lock,
   ShoppingCart,
@@ -38,14 +36,13 @@ import {
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { usePWA } from '../context/PWAContext';
-import { useSubscription } from '../context/SubscriptionContext';
+import { clearAllSystemSessions } from '../services/rbacAuthService';
 import { NavigationTab } from '../types';
-import { OWNER_CONTACT } from '../config/ownerContact';
 
 interface SidebarProps {
   onOpenAddItem: () => void;
   onOpenOrderGoods: () => void;
-  onOpenSettings: (tab?: 'GENERAL' | 'CURRENCY' | 'BACKUPS') => void;
+  onOpenSettings: (tab?: 'GENERAL' | 'CURRENCY' | 'BACKUPS' | 'SUBSCRIPTIONS' | 'SUPPORT' | 'SUBSCRIPTIONS_SUPPORT') => void;
   onOpenAuthModal?: () => void;
   onOpenShareModal?: () => void;
   onSwitchToStore?: () => void;
@@ -73,7 +70,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { currentUser, userProfile, logout } = useAuth();
   const { isInstalled, setShowInstallPromptModal, updateAvailable, applyUpdate } = usePWA();
-  const { isPro, subscription, setShowSubscriptionModal } = useSubscription();
 
   const {
     activeTab,
@@ -507,75 +503,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {!isCollapsed ? (
               <div className="space-y-2">
-                {/* Pro Subscription Banner */}
-                <div
+                {/* Share & Install Link into Settings Modal */}
+                <button
+                  type="button"
+                  id="sidebar-share-install-settings-btn"
                   onClick={() => {
                     setMobileOpen(false);
-                    setShowSubscriptionModal(true);
+                    onOpenSettings('GENERAL');
                   }}
-                  className={`p-2.5 rounded-xl border transition-all cursor-pointer shadow-sm ${
-                    isPro
-                      ? 'bg-gradient-to-r from-amber-950/70 via-slate-900 to-yellow-950/60 border-amber-500/50 hover:border-amber-400'
-                      : 'bg-gradient-to-r from-amber-500/15 via-slate-900 to-yellow-500/15 border-amber-500/50 hover:border-amber-400'
-                  }`}
+                  className="w-full flex items-center justify-between py-2 px-3 bg-slate-850 hover:bg-slate-800 text-sky-200 hover:text-white text-xs font-bold rounded-xl border border-sky-500/30 transition-all cursor-pointer shadow-sm active:scale-98"
+                  title={language === 'ar' ? 'فتح قسم المشاركة والتثبيت داخل جدول الإعدادات' : 'Open Share & Install in Settings'}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span className="text-xs font-black text-white truncate">
-                        {isPro ? (language === 'ar' ? 'باقة المحترف (PRO)' : 'Pro Plan') : (language === 'ar' ? 'ترقية باقة المحترف' : 'Upgrade to Pro')}
-                      </span>
-                    </div>
-                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${isPro ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-amber-400 text-slate-950'}`}>
-                      {isPro ? (subscription.expiresAt ? `${subscription.daysRemaining} يوم` : 'دائم') : '👑 PRO'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Share App Button */}
-                {onOpenShareModal && (
-                  <button
-                    type="button"
-                    id="sidebar-share-app-btn"
-                    onClick={() => {
-                      setMobileOpen(false);
-                      onOpenShareModal();
-                    }}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-slate-850 hover:bg-slate-800 text-sky-300 hover:text-sky-200 text-xs font-bold rounded-xl border border-sky-500/30 transition-all cursor-pointer shadow-sm active:scale-98"
-                  >
+                  <div className="flex items-center gap-2">
                     <Share2 className="w-3.5 h-3.5 text-sky-400" />
-                    <span>{language === 'ar' ? 'مشاركة رابط التطبيق' : 'Share App Link'}</span>
-                  </button>
-                )}
-
-                {/* Install PWA Button if not installed */}
-                {!isInstalled && (
-                  <button
-                    type="button"
-                    id="sidebar-pwa-install-btn"
-                    onClick={() => {
-                      setMobileOpen(false);
-                      setShowInstallPromptModal(true);
-                    }}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-gradient-to-r from-cyan-950 to-slate-900 hover:from-cyan-900 hover:to-slate-800 text-cyan-200 text-xs font-bold rounded-xl border border-cyan-500/50 transition-all cursor-pointer shadow-sm active:scale-98"
-                  >
-                    <Smartphone className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>{language === 'ar' ? '📱 تثبيت التطبيق على جهازك' : '📱 Install App'}</span>
-                  </button>
-                )}
-
-                {/* Update PWA Button if update is ready */}
-                {updateAvailable && (
-                  <button
-                    type="button"
-                    id="sidebar-pwa-update-btn"
-                    onClick={applyUpdate}
-                    className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-gradient-to-r from-amber-500 to-rose-500 text-slate-950 text-xs font-black rounded-xl shadow-md transition-all cursor-pointer active:scale-98 animate-bounce"
-                  >
-                    <Rocket className="w-3.5 h-3.5" />
-                    <span>{language === 'ar' ? '🚀 تطبيق التحديث الجديد' : '🚀 Apply Update'}</span>
-                  </button>
-                )}
+                    <span>{language === 'ar' ? 'المشاركة والتثبيت' : 'Share & Install'}</span>
+                  </div>
+                  <span className="text-[10px] text-sky-300 bg-sky-950 px-1.5 py-0.5 rounded border border-sky-500/40">
+                    {language === 'ar' ? 'الإعدادات ⚙️' : 'Settings ⚙️'}
+                  </span>
+                </button>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2">
@@ -589,14 +535,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <Share2 className="w-4 h-4" />
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShowSubscriptionModal(true)}
-                  title={language === 'ar' ? 'باقة المحترف (PRO)' : 'Pro Subscription'}
-                  className="p-2 text-amber-400 hover:text-amber-300 bg-amber-950/60 hover:bg-amber-900/80 rounded-lg text-xs font-bold border border-amber-500/50 shadow-sm"
-                >
-                  <Crown className="w-4 h-4" />
-                </button>
               </div>
             )}
           </div>
@@ -617,16 +555,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     type="button"
                     id="sidebar-return-to-store-main-btn"
-                    onClick={() => {
+                    onClick={async () => {
                       setMobileOpen(false);
+                      clearAllSystemSessions();
+                      try { await logout(); } catch {}
                       onSwitchToStore();
                     }}
                     className="w-full flex items-center justify-between py-2.5 px-3 bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 hover:from-emerald-900 hover:to-teal-900 border-2 border-emerald-500/70 hover:border-emerald-400 text-emerald-100 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md shadow-emerald-950/50 active:scale-[0.98]"
-                    title={language === 'ar' ? 'الخروج والعودة إلى واجهة المتجر الرئيسية' : 'Exit / Return to Main Store View'}
+                    title={language === 'ar' ? 'الخروج النهائي والعودة إلى متجر العملاء (يتطلب تسجيل الدخول لاحقاً)' : 'Exit & Logout to Store View'}
                   >
                     <div className="flex items-center gap-2">
                       <Store className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>{language === 'ar' ? 'واجهة المتجر الرئيسية' : 'Main Store View'}</span>
+                      <span>{language === 'ar' ? 'متجر العملاء (خروج)' : 'Store View (Logout)'}</span>
                     </div>
                     <span className="text-[10px] bg-emerald-500/30 text-emerald-200 border border-emerald-400/50 px-1.5 py-0.5 rounded font-extrabold">
                       {language === 'ar' ? 'خروج' : 'Exit'}
@@ -634,35 +574,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </button>
                 )}
 
-                {/* Back to Portals Screen */}
+                {/* Back to Portals Screen (Completes Full Logout) */}
                 {onOpenLanding && (
                   <button
                     type="button"
                     id="sidebar-portals-screen-btn"
-                    onClick={() => {
+                    onClick={async () => {
                       setMobileOpen(false);
+                      clearAllSystemSessions();
+                      try { await logout(); } catch {}
                       onOpenLanding();
                     }}
-                    className="w-full flex items-center justify-center gap-1.5 py-1 text-[11px] text-slate-400 hover:text-white transition-colors"
+                    className="w-full flex items-center justify-between py-2.5 px-3 bg-gradient-to-r from-rose-950/80 via-slate-900 to-amber-950/70 hover:from-rose-900 hover:to-amber-900 border-2 border-rose-500/70 hover:border-rose-400 text-rose-100 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md shadow-rose-950/40 active:scale-[0.98]"
+                    title={language === 'ar' ? 'تسجيل الخروج النهائي من حساب التاجر والعودة للواجهة الرئيسية (تتطلب كلمة المرور عند العودة)' : 'Full Logout & Return to Landing'}
                   >
-                    <span>{language === 'ar' ? 'شاشة البوابات الرئيسية' : 'Portals Screen'}</span>
+                    <div className="flex items-center gap-2">
+                      <LogOut className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span>{language === 'ar' ? 'الخروج النهائى للرئيسية' : 'Full Logout to Landing'}</span>
+                    </div>
+                    <span className="text-[10px] bg-rose-500/30 text-rose-200 border border-rose-400/50 px-1.5 py-0.5 rounded font-extrabold">
+                      🔒 {language === 'ar' ? 'إنهاء' : 'Logout'}
+                    </span>
                   </button>
                 )}
-
-                {/* WhatsApp Support Link */}
-                <a
-                  href={OWNER_CONTACT.getWhatsAppUrl({ storeName: settings.storeName })}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-between py-2 px-3 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-500/50 text-emerald-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.98]"
-                  title={`${language === 'ar' ? 'تواصل مع المالك الرسمي عبر الواتساب' : 'Contact Owner via WhatsApp'}: ${OWNER_CONTACT.phoneDisplay}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <MessageCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span>{language === 'ar' ? 'واتساب المالك الرسمي' : 'Owner WhatsApp'}</span>
-                  </div>
-                  <span className="font-mono text-[10px] text-emerald-400 font-bold">{OWNER_CONTACT.phoneLocal}</span>
-                </a>
 
                 {/* Settings & Language Toggle */}
                 <div className="flex items-center justify-between gap-2">
@@ -726,16 +660,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <Store className="w-4 h-4" />
                   </button>
                 )}
-
-                <a
-                  href={OWNER_CONTACT.getWhatsAppUrl({ storeName: settings.storeName })}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={`${language === 'ar' ? 'واتساب المالك الرسمي' : 'Owner WhatsApp'}: ${OWNER_CONTACT.phoneDisplay}`}
-                  className="p-2 text-emerald-400 hover:text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900 rounded-lg text-xs font-bold border border-emerald-500/50 shadow-sm cursor-pointer"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                </a>
 
                 <button
                   onClick={toggleLanguage}

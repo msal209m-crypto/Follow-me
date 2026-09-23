@@ -39,7 +39,21 @@ import {
   KeyRound,
   AlertTriangle,
   Star,
+  Wallet,
+  Navigation,
+  Bot
 } from 'lucide-react';
+import { VillageWalletModal } from './VillageWalletModal';
+import { LiveDriverTrackerModal } from './LiveDriverTrackerModal';
+import { AIMerchantAssistantModal } from './AIMerchantAssistantModal';
+import { getVillageWallet, payWithWallet } from '../services/villageWalletService';
+import {
+  getGlobalPreferences,
+  formatGlobalCurrency,
+  getCountryPaymentGateways,
+  getCountryByCode,
+} from '../services/globalizationService';
+import { generateWhatsAppOrderLink } from '../services/whatsappHelper';
 import { Item, StoreSettings, DeliveryOrder, StoreDirectoryRecord } from '../types';
 import {
   createDeliveryOrder,
@@ -56,6 +70,12 @@ import {
   clearActiveCustomer,
   setActiveSessionRole,
 } from '../services/rbacAuthService';
+import {
+  getApprovedMerchantsByVillage,
+  initSupabaseRealtime,
+  FIXED_VILLAGES_LIST,
+  registerCustomerAccount
+} from '../services/supabaseQaryatiService';
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
 import { StorePrayerClosedBanner } from './StorePrayerClosedBanner';
 import { AdBannerWidget } from './AdBannerWidget';
@@ -94,6 +114,23 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'CASH_ON_DELIVERY' | 'TRANSFER'>('CASH_ON_DELIVERY');
   const [copiedLink, setCopiedLink] = useState(false);
   const [customStorePhone, setCustomStorePhone] = useState(settings.phone || '');
+
+  // Enterprise Modals State
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [isLiveTrackerOpen, setIsLiveTrackerOpen] = useState(false);
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(() => getVillageWallet().balance);
+
+  // Sync wallet balance
+  useEffect(() => {
+    const handleWalletUpdate = (e: any) => {
+      if (e.detail?.balance !== undefined) {
+        setWalletBalance(e.detail.balance);
+      }
+    };
+    window.addEventListener('qaryati:wallet-updated', handleWalletUpdate);
+    return () => window.removeEventListener('qaryati:wallet-updated', handleWalletUpdate);
+  }, []);
 
   // Customer Session & Identity (RBAC Customer)
   const [activeCustomer, setActiveCustomer] = useState(() => getActiveCustomer());
@@ -152,24 +189,57 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     }
   }, [activeCustomer]);
 
-  // Village & Store Selection
+  // Village & Store Selection - Strictly Gatekept
   const [allStores, setAllStores] = useState<StoreDirectoryRecord[]>(() =>
-    getStoresDirectory().filter((s) => s.status !== 'SUSPENDED')
+    getStoresDirectory().filter((s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false)
   );
   const [selectedVillage, setSelectedVillage] = useState<string>('ALL');
   const [selectedStoreId, setSelectedStoreId] = useState<string>('default');
 
   useEffect(() => {
     const handleStoresRefresh = () => {
-      setAllStores(getStoresDirectory().filter((s) => s.status !== 'SUSPENDED'));
+      setAllStores(getStoresDirectory().filter((s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false));
     };
     window.addEventListener('qaryati:stores-updated', handleStoresRefresh);
     window.addEventListener('qaryati:order-rated', handleStoresRefresh);
+    window.addEventListener('qaryati:merchant-approval-changed', handleStoresRefresh);
+
+    // Supabase Realtime master sync
+    const unsubRealtime = initSupabaseRealtime({
+      onMerchantApprovalChanged: () => {
+        handleStoresRefresh();
+      },
+    });
+
     return () => {
       window.removeEventListener('qaryati:stores-updated', handleStoresRefresh);
       window.removeEventListener('qaryati:order-rated', handleStoresRefresh);
+      window.removeEventListener('qaryati:merchant-approval-changed', handleStoresRefresh);
+      if (unsubRealtime) unsubRealtime();
     };
   }, []);
+
+  // Sync Supabase merchants dynamically when a village is chosen (Village-First Query)
+  useEffect(() => {
+    let isMounted = true;
+    if (selectedVillage && selectedVillage !== 'ALL') {
+      getApprovedMerchantsByVillage(selectedVillage).then((dbStores) => {
+        if (isMounted && dbStores && dbStores.length > 0) {
+          setAllStores((prev) => {
+            const map = new Map<string, StoreDirectoryRecord>();
+            prev.forEach((st) => map.set(st.id, st));
+            dbStores.forEach((st) => map.set(st.id, st));
+            return Array.from(map.values()).filter(
+              (s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false
+            );
+          });
+        }
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedVillage]);
 
   // Rating State for Customer Order Review
   const [ratingStoreScore, setRatingStoreScore] = useState<number>(5);
@@ -252,10 +322,18 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   // Strictly the 10 fixed villages requested by user
   const villageList = FIXED_VILLAGES;
 
-  // Stores available in the selected village
+  // Stores available in the selected village - strictly enforcing Village-First Filtering:
+  // Select * From merchants Where village_id = [Chosen_Village] And is_approved = true
   const availableStores = useMemo(() => {
-    if (selectedVillage === 'ALL') return allStores;
-    return allStores.filter((s) => s.cityOrVillage === selectedVillage);
+    const approvedStores = allStores.filter(
+      (s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false
+    );
+    if (selectedVillage === 'ALL') return approvedStores;
+    return approvedStores.filter(
+      (s) =>
+        s.cityOrVillage === selectedVillage ||
+        s.cityOrVillage?.includes(selectedVillage)
+    );
   }, [allStores, selectedVillage]);
 
   // Currently active selected store target
@@ -515,6 +593,15 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       village: validAddress,
     });
 
+    if (activeCustomer?.nationalId) {
+      registerCustomerAccount({
+        name: validName,
+        phone: validPhone,
+        nationalId: activeCustomer.nationalId,
+        villageName: validAddress,
+      }).catch(() => {});
+    }
+
     const newOrder = createDeliveryOrder({
       customerName: validName,
       customerPhone: validPhone,
@@ -657,77 +744,100 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-slate-800 shadow-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           {/* Logo & Store Branding */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Back to Portals Button */}
             <button
               onClick={onOpenLanding}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-medium"
-              title="العودة لشاشة البوابات الرئيسية"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold border border-slate-700/80 shadow-xs cursor-pointer"
+              title="الرجوع إلى القائمة الرئيسية للبوابات وشاشات الدخول"
             >
-              {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
-              <span className="hidden sm:inline">البوابات</span>
+              {isRTL ? <ArrowRight className="w-4 h-4 text-emerald-400" /> : <ArrowLeft className="w-4 h-4 text-emerald-400" />}
+              <span className="text-[11px] sm:text-xs">البوابات</span>
             </button>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <div
                 onClick={handleLogoSecretTap}
-                className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-900/30 cursor-pointer active:scale-95 transition-transform"
-                title="شعار المتجر (النقر 5 مرات متتالية يفتح وضع المطور السري)"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-900/30 cursor-pointer active:scale-95 transition-transform"
+                title="شعار المتجر (النقر 5 مرات يفتح خيارات المطور)"
               >
                 <Store className="w-5 h-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="font-bold text-base sm:text-lg text-white leading-tight">
+                <div className="flex items-center gap-1.5">
+                  <h1 className="font-bold text-sm sm:text-base text-white leading-tight">
                     {settings.storeName || 'متجر قريتي'}
                   </h1>
-                  <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                     مفتوح للطلب
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-xs">
+                <p className="text-[10px] sm:text-xs text-slate-400 truncate max-w-[130px] sm:max-w-xs">
                   {settings.address || 'تسوق واطلب مباشرة عبر الواتساب'}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Action Buttons: Cart & Merchant Entry */}
-          <div className="flex items-center gap-2">
+          {/* Action Buttons: Tracking, Cart, Share & Merchant Portal */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {/* Active Order Tracker Button */}
             {trackedOrder && trackedOrder.status !== 'CANCELLED' && (
               <button
                 onClick={() => setIsTrackingModalOpen(true)}
-                className="px-2.5 sm:px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-                title="متابعة حالة طلبك المباشرة"
+                className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                title="متابعة حالة الطلب الحالي المباشرة"
               >
-                <Clock className="w-4 h-4 text-amber-400 animate-spin" />
-                <span className="hidden sm:inline">متابعة طلبي</span>
-                <span className="font-mono text-[11px] font-black bg-amber-400/20 px-1.5 py-0.5 rounded">
-                  {trackedOrder.orderNumber}
+                <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                <span className="text-[11px] sm:text-xs">متابعة طلبي</span>
+                <span className="font-mono text-[10px] font-black bg-amber-400/20 px-1 py-0.5 rounded">
+                  #{trackedOrder.orderNumber}
                 </span>
               </button>
             )}
 
-            {/* Share Link */}
+            {/* Digital Village Wallet Header Button */}
+            <button
+              onClick={() => setIsWalletModalOpen(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-950 to-teal-900 hover:from-emerald-900 hover:to-teal-800 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+              title="فتح محفظة القرية الرقمية وشحن الرصيد"
+            >
+              <Wallet className="w-4 h-4 text-emerald-400" />
+              <span className="hidden sm:inline">محفظتي:</span>
+              <span className="font-black font-mono text-emerald-300">{formatGlobalCurrency(walletBalance)}</span>
+            </button>
+
+            {/* AI Commerce Assistant Button */}
+            <button
+              onClick={() => setIsAIModalOpen(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="فتح مساعد الذكاء الاصطناعي لتوليد العروض وتحليل المخزون"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-[11px] sm:text-xs">مساعد AI</span>
+            </button>
+
+            {/* Share Link Button */}
             <button
               onClick={handleShareStoreLink}
-              className="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-all flex items-center gap-1.5 text-xs font-medium border border-slate-700/50"
-              title="مشاركة رابط المتجر لأهالي القرية"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold border border-slate-700/80 cursor-pointer shadow-xs"
+              title="مشاركة رابط هذا المتجر المباشر عبر الواتساب ووسائل التواصل"
             >
-              <Share2 className="w-4 h-4 text-emerald-400" />
-              <span className="hidden md:inline">{copiedLink ? 'تم نسخ الرابط!' : 'مشاركة المتجر'}</span>
+              <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[11px] sm:text-xs">{copiedLink ? 'تم النسخ!' : 'مشاركة'}</span>
             </button>
 
             {/* Shopping Cart Button */}
             <button
               onClick={() => setIsCartOpen(true)}
-              className="relative px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-emerald-900/30 transition-all hover:scale-105 active:scale-95"
+              className="relative px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-md shadow-emerald-900/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+              title="فتح سلة التسوق ومعاينة الأصناف المختارة"
             >
               <ShoppingCart className="w-4 h-4" />
               <span>السلة</span>
               {totalCartCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-xs font-bold leading-none animate-bounce">
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black leading-none animate-bounce">
                   {totalCartCount}
                 </span>
               )}
@@ -736,28 +846,36 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             {/* Merchant / Admin Door Button */}
             <button
               onClick={onOpenMerchantPortal}
-              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 transition-colors border border-slate-800 flex items-center gap-1.5 text-xs font-medium cursor-pointer"
-              title="دخول التاجر والإدارة (محمي)"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-emerald-400 transition-all border border-slate-700/80 flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-xs"
+              title="دخول التاجر والمدير لإدارة المنتجات والمبيعات"
             >
-              <ShieldCheck className="w-4 h-4 text-slate-400 hover:text-emerald-400" />
-              <span className="hidden lg:inline">بوابة التاجر</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[11px] sm:text-xs">التاجر</span>
             </button>
 
-            {/* Dedicated Roles & Auth Modal Icon Button */}
+            {/* Dedicated Roles & Auth Modal Button */}
             {onOpenAuthModal && (
               <button
                 type="button"
                 onClick={() => onOpenAuthModal('MERCHANT')}
-                className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-emerald-400 transition-all border border-slate-700/60 flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
-                title="تسجيل الدخول وإدارة الأدوار والصلاحيات (المطور، التاجر، السائق، العميل)"
+                className="px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-emerald-400 transition-all border border-slate-700/80 flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-xs"
+                title="فتح نافذة تبديل الأدوار وتجهيز حسابات التجار والسائقين"
               >
-                <KeyRound className="w-4 h-4 text-emerald-400" />
-                <span className="hidden xl:inline">نافذة الأدوار</span>
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[11px] sm:text-xs">الأدوار</span>
               </button>
             )}
           </div>
         </div>
       </header>
+
+      {/* Developer Customizable Top Banner */}
+      {(devSettings.storefrontBannerText || devSettings.developerAnnouncement) && (
+        <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 border-b border-emerald-500/40 px-4 py-2 text-emerald-200 text-center text-xs font-bold shadow-md flex items-center justify-center gap-2 z-20">
+          <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+          <span>{devSettings.storefrontBannerText || devSettings.developerAnnouncement}</span>
+        </div>
+      )}
 
       {/* Promoted Ads Banner Widget */}
       <div className="max-w-6xl mx-auto px-4 mt-4 mb-1">
@@ -767,15 +885,15 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       {/* Hero Welcome Bar */}
       <div className="bg-gradient-to-b from-slate-900 via-slate-900/80 to-slate-950 border-b border-slate-800/60 py-6 px-4">
         <div className="max-w-6xl mx-auto text-center">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-3">
-            <Sparkles className="w-3.5 h-3.5" />
-            متجر القرية والعملاء - تصفح المنتجات والطلب الفوري
+          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 mb-3 shadow-xs">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            {devSettings.storefrontBadgeText || 'متجر القرية والعملاء - تصفح المنتجات والطلب الفوري'}
           </span>
           <h2 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">
-            أهلاً بكم في {settings.storeName || 'متجر قريتي'}
+            {devSettings.storefrontHeaderTitle || `أهلاً بكم في ${settings.storeName || 'متجر قريتي'}`}
           </h2>
-          <p className="mt-2 text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
-            اختر ما تحتاجه من أصناف، أضفها إلى سلتك، واضغط زر إرسال الطلب ليتواصل معك المتجر فوراً عبر الواتساب وتجهيز طلبك.
+          <p className="mt-2 text-xs sm:text-sm text-slate-300 max-w-xl mx-auto leading-relaxed">
+            {devSettings.storefrontSubTitle || 'اختر ما تحتاجه من أصناف، أضفها إلى سلتك، واضغط زر إرسال الطلب ليتواصل معك المتجر فوراً عبر الواتساب وتجهيز طلبك.'}
           </p>
         </div>
       </div>
@@ -868,7 +986,9 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               </select>
             </div>
             {/* Adhan & Prayer Times Widget */}
-            <AdhanTopBarWidget isRTL={isRTL} isDarkMode={true} compact={false} />
+            {devSettings.storefrontShowAdhan !== false && (
+              <AdhanTopBarWidget isRTL={isRTL} isDarkMode={true} compact={false} />
+            )}
           </div>
         </div>
       </div>
@@ -893,7 +1013,12 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             {/* Standalone Circular Icons and Buttons (No boxes or card containers) */}
             <div className="flex flex-wrap items-start justify-center gap-7 sm:gap-10 py-6 max-w-4xl mx-auto">
               {villageList.map((village) => {
-                const villageStores = allStores.filter((s) => s.cityOrVillage === village);
+                const villageStores = allStores.filter(
+                  (s) =>
+                    (s.cityOrVillage === village || s.cityOrVillage?.includes(village)) &&
+                    s.status !== 'SUSPENDED' &&
+                    (s as any).isApproved !== false
+                );
                 return (
                   <button
                     key={village}
@@ -1736,12 +1861,21 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
                     {trackedOrder.driverPhone && (
                       <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsLiveTrackerOpen(true)}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                        >
+                          <Navigation className="w-3.5 h-3.5 text-white animate-spin" />
+                          <span>فتح الخريطة الحية للتتبع بالـ GPS 🗺️</span>
+                        </button>
+
                         <a
                           href={`tel:${trackedOrder.driverPhone}`}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 text-xs font-bold flex items-center gap-1.5"
+                          className="px-2.5 py-1.5 rounded-xl bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 text-xs font-bold flex items-center gap-1.5"
                         >
                           <Phone className="w-3 h-3" />
-                          <span>اتصال بالسائق: {trackedOrder.driverPhone}</span>
+                          <span>اتصال</span>
                         </a>
                       </div>
                     )}
@@ -2101,6 +2235,33 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Enterprise Modals */}
+      <VillageWalletModal
+        isOpen={isWalletModalOpen}
+        onClose={() => setIsWalletModalOpen(false)}
+        isDarkMode={true}
+      />
+
+      <LiveDriverTrackerModal
+        isOpen={isLiveTrackerOpen}
+        onClose={() => setIsLiveTrackerOpen(false)}
+        orderId={trackedOrder?.orderNumber || '101'}
+        customerName={customerName || activeCustomer?.name || 'العميل العزيز'}
+        driverName={trackedOrder?.driverName || 'المندوب علي العفيفي'}
+        driverPhone={trackedOrder?.driverPhone || '+966501234567'}
+        villageName={selectedVillage || 'قريتك المحددة'}
+        isDarkMode={true}
+      />
+
+      <AIMerchantAssistantModal
+        isOpen={isAIModalOpen}
+        onClose={() => setIsAIModalOpen(false)}
+        storeName={settings.storeName || 'متجر قريتي'}
+        villageName={selectedVillage}
+        items={activeDisplayItems}
+        isDarkMode={true}
+      />
 
       {/* Footer */}
       <footer className="mt-auto border-t border-slate-800/80 bg-slate-900/40 py-5 px-4 text-center text-xs text-slate-500">

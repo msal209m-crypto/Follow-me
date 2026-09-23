@@ -1,21 +1,101 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Store, 
   User, 
   Truck, 
   ShieldCheck, 
   Users, 
-  ArrowLeft,
-  History,
-  Lock,
-  Unlock,
-  RefreshCw,
-  Trash2,
-  Fingerprint,
-  Activity,
-  LayoutGrid
+  ArrowLeft, 
+  History, 
+  Lock, 
+  Unlock, 
+  RefreshCw, 
+  Trash2, 
+  Fingerprint, 
+  Activity, 
+  LayoutGrid, 
+  Database, 
+  CheckCircle2, 
+  XCircle, 
+  AlertCircle, 
+  MapPin, 
+  Clock, 
+  Copy, 
+  Check, 
+  Phone, 
+  MessageCircle, 
+  Search, 
+  IdCard, 
+  UserCheck, 
+  UserX, 
+  ExternalLink, 
+  Shield, 
+  Filter, 
+  Sparkles, 
+  MessageSquare, 
+  Mail,
+  HelpCircle,
+  Eye,
+  Radio,
+  SlidersHorizontal,
+  ChevronRight,
+  PartyPopper,
+  Flame,
+  Megaphone,
+  Plus,
+  BadgeDollarSign,
+  LogOut,
+  Pause,
+  Play,
+  Power,
+  ToggleLeft,
+  ToggleRight,
+  Ban,
+  UserCheck2,
+  AlertTriangle
 } from 'lucide-react';
-import { getAccessLogs, AccessLogEntry } from '../services/rbacAuthService';
+import { 
+  getAccessLogs, 
+  AccessLogEntry, 
+  getMerchants, 
+  getDrivers, 
+  approveMerchantAccount, 
+  rejectMerchantAccount, 
+  approveDriverAccount, 
+  rejectDriverAccount,
+  getDeveloperNotifications,
+  markDeveloperNotificationRead,
+  DeveloperNotification,
+  clearAccessLogs,
+  deleteAccessLog,
+  deleteMerchantAccount,
+  deleteDriverAccount,
+  toggleMerchantStatus,
+  toggleDriverStatus
+} from '../services/rbacAuthService';
+import { 
+  FIXED_VILLAGES_LIST, 
+  getApprovedMerchantsByVillage, 
+  fetchAllCustomers, 
+  getCustomersLocalCache, 
+  updateCustomerStatus, 
+  deleteCustomerRecord, 
+  SupabaseCustomerRecord 
+} from '../services/supabaseQaryatiService';
+import { 
+  getAds, 
+  updateAdStatus, 
+  deleteAdRecord, 
+  submitAdRequest,
+  toggleAdActiveStatus,
+  pauseAllAds,
+  resumeAllAds,
+  clearAllAds
+} from '../services/adsService';
+import { AdRecord } from '../types';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { copyToClipboard } from '../utils/clipboardUtils';
+import { OWNER_CONTACT } from '../config/ownerContact';
 
 interface DeveloperControlPanelProps {
   onNavigate: (mode: 'store' | 'merchant' | 'driver' | 'admin' | 'manage-merchants' | 'manage-drivers') => void;
@@ -23,37 +103,431 @@ interface DeveloperControlPanelProps {
   isDarkMode?: boolean;
 }
 
+type DeveloperSubTab = 'GATEKEEPING' | 'CUSTOMERS' | 'MESSAGES' | 'PORTALS' | 'LOGS';
+
 export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({ 
   onNavigate, 
   onClose,
   isDarkMode = true 
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'PORTALS' | 'LOGS'>('PORTALS');
-  const [logs, setLogs] = useState<AccessLogEntry[]>([]);
+  // Navigation State
+  const [activeSubTab, setActiveSubTab] = useState<DeveloperSubTab>('GATEKEEPING');
 
-  // Load logs
+  // Core Data States
+  const [logs, setLogs] = useState<AccessLogEntry[]>([]);
+  const [notifications, setNotifications] = useState<DeveloperNotification[]>(() => getDeveloperNotifications());
+  const [merchants, setMerchants] = useState(() => getMerchants());
+  const [drivers, setDrivers] = useState(() => getDrivers());
+  const [customers, setCustomers] = useState<SupabaseCustomerRecord[]>(() => getCustomersLocalCache());
+  const [ads, setAds] = useState<AdRecord[]>(() => getAds());
+  
+  // Logout Confirmation Modal State
+  const [showLogoutConfirmModal, setShowLogoutConfirmModal] = useState(false);
+
+  // Create Ad Form Modal State
+  const [showCreateAdModal, setShowCreateAdModal] = useState(false);
+  const [adFormTitle, setAdFormTitle] = useState('');
+  const [adFormDesc, setAdFormDesc] = useState('');
+  const [adFormStoreName, setAdFormStoreName] = useState('');
+  const [adFormVillage, setAdFormVillage] = useState(FIXED_VILLAGES_LIST[0].name);
+  const [adFormTheme, setAdFormTheme] = useState<'CELEBRATION' | 'HOT_DEAL' | 'OFFICIAL'>('CELEBRATION');
+  const [adFormBadge, setAdFormBadge] = useState('افتتاح رسمي مبارك 🎉');
+  const [adFormAction, setAdFormAction] = useState('تسوق الآن 🛒');
+  const [adFormImage, setAdFormImage] = useState('');
+  
+  // UI & Filter States
+  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [selectedVillageFilter, setSelectedVillageFilter] = useState('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'NEW' | 'VERIFIED' | 'BLOCKED'>('ALL');
+  const [logFilterStatus, setLogFilterStatus] = useState<'ALL' | 'SUCCESS' | 'FAILURE'>('ALL');
+  const [copiedCustomerField, setCopiedCustomerField] = useState<string | null>(null);
+  const [showAllMerchantsList, setShowAllMerchantsList] = useState(false);
+  const [showAllDriversList, setShowAllDriversList] = useState(false);
+
+  // Live Query Simulator State
+  const [testVillage, setTestVillage] = useState(FIXED_VILLAGES_LIST[0].name);
+  const [testQueryResult, setTestQueryResult] = useState<any[]>([]);
+  const [isQuerying, setIsQuerying] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
+  const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+
+  // Synchronizers
   const loadLogs = () => {
     setLogs(getAccessLogs());
   };
 
-  useEffect(() => {
-    loadLogs();
-  }, [activeSubTab]);
+  const refreshAccounts = () => {
+    setMerchants(getMerchants());
+    setDrivers(getDrivers());
+  };
 
-  const handleClearLogs = () => {
-    if (window.confirm('هل أنت متأكد من رغبتك في مسح سجل محاولات الدخول بالكامل؟')) {
-      localStorage.setItem('qaryati_access_logs', JSON.stringify([]));
-      setLogs([]);
+  const loadNotifications = () => {
+    setNotifications(getDeveloperNotifications());
+  };
+
+  const loadAdsList = () => {
+    setAds(getAds());
+  };
+
+  const loadCustomers = async () => {
+    setIsLoadingCustomers(true);
+    try {
+      const res = await fetchAllCustomers();
+      setCustomers(res);
+    } catch (err) {
+      console.warn('Failed to load customers from Supabase:', err);
+    } finally {
+      setIsLoadingCustomers(false);
     }
   };
 
-  const tools = [
-    { mode: 'store', label: 'واجهة العميل', icon: Store, color: 'text-blue-400' },
-    { mode: 'merchant', label: 'واجهة التاجر', icon: User, color: 'text-emerald-400' },
-    { mode: 'driver', label: 'واجهة السائق', icon: Truck, color: 'text-amber-400' },
-    { mode: 'admin', label: 'واجهة المدير العام', icon: ShieldCheck, color: 'text-rose-400' },
-    { mode: 'manage-merchants', label: 'إدارة التجار', icon: Users, color: 'text-purple-400' },
-    { mode: 'manage-drivers', label: 'إدارة السائقين', icon: Truck, color: 'text-amber-500' },
+  const handleRefreshEverything = async () => {
+    setIsRefreshingAll(true);
+    loadLogs();
+    refreshAccounts();
+    loadNotifications();
+    loadAdsList();
+    await loadCustomers();
+    await runTestQuery();
+    setIsRefreshingAll(false);
+    setActionSuccessMsg('تمت مزامنة كامل بيانات المنظومة مع السحابة بنجاح! ⚡');
+    setTimeout(() => setActionSuccessMsg(null), 3000);
+  };
+
+  useEffect(() => {
+    loadLogs();
+    refreshAccounts();
+    loadCustomers();
+    loadNotifications();
+    loadAdsList();
+
+    const handleNewCust = () => {
+      loadCustomers();
+      loadNotifications();
+    };
+    const handleStatusUpd = () => {
+      loadCustomers();
+      loadNotifications();
+    };
+    const handleAdsUpd = () => {
+      loadAdsList();
+    };
+
+    window.addEventListener('qaryati:new-customer-registered', handleNewCust);
+    window.addEventListener('qaryati:customer-status-updated', handleStatusUpd);
+    window.addEventListener('qaryati:customer-deleted', handleStatusUpd);
+    window.addEventListener('qaryati:ads-updated', handleAdsUpd);
+    window.addEventListener('focus', loadNotifications);
+
+    return () => {
+      window.removeEventListener('qaryati:new-customer-registered', handleNewCust);
+      window.removeEventListener('qaryati:customer-status-updated', handleStatusUpd);
+      window.removeEventListener('qaryati:customer-deleted', handleStatusUpd);
+      window.removeEventListener('qaryati:ads-updated', handleAdsUpd);
+      window.removeEventListener('focus', loadNotifications);
+    };
+  }, [activeSubTab]);
+
+  // Derived Metrics
+  const pendingMerchants = useMemo(() => merchants.filter((m) => m.isApproved === false), [merchants]);
+  const approvedMerchants = useMemo(() => merchants.filter((m) => m.isApproved !== false), [merchants]);
+  const pendingDrivers = useMemo(() => drivers.filter((d) => d.isApproved === false), [drivers]);
+  const approvedDrivers = useMemo(() => drivers.filter((d) => d.isApproved !== false), [drivers]);
+  const newCustomersCount = useMemo(() => customers.filter((c) => c.status === 'NEW' || !c.is_verified).length, [customers]);
+  const verifiedCustomersCount = useMemo(() => customers.filter((c) => c.status === 'VERIFIED' || c.is_verified).length, [customers]);
+  const unreadMessagesCount = useMemo(() => notifications.filter((n) => !n.isRead).length, [notifications]);
+  const pendingAdsCount = useMemo(() => ads.filter((a) => a.status === 'PENDING').length, [ads]);
+
+  // Ads Management Actions (إدارة وتفعيل وحذف وإيقاف الإعلانات اللحظي)
+  const handleApproveAd = (id: string, storeName: string) => {
+    updateAdStatus(id, 'APPROVED', 'المطور المعتمد');
+    loadAdsList();
+    setActionSuccessMsg(`تم اعتماد وتفعيل بنر إعلان (${storeName}) في القرية بنجاح! 🎊`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleRejectAd = (id: string, storeName: string) => {
+    updateAdStatus(id, 'REJECTED', 'المطور المعتمد');
+    loadAdsList();
+    setActionSuccessMsg(`تم إيقاف إعلان (${storeName}) عن الظهور ⏸️`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleToggleAd = (id: string, storeName: string) => {
+    const res = toggleAdActiveStatus(id);
+    loadAdsList();
+    if (res && res.status === 'APPROVED') {
+      setActionSuccessMsg(`تم تفعيل وإظهار إعلان (${storeName}) في المتجر والشاشات ▶️`);
+    } else {
+      setActionSuccessMsg(`تم إيقاف إعلان (${storeName}) عن الظهور مؤقتاً ⏸️`);
+    }
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleDeleteAd = (id: string, storeName: string) => {
+    if (window.confirm(`هل أنت متأكد من حذف إعلان (${storeName}) نهائياً من النظام؟`)) {
+      deleteAdRecord(id);
+      loadAdsList();
+      setActionSuccessMsg(`تم حذف الإعلان نهائياً 🗑️`);
+      setTimeout(() => setActionSuccessMsg(null), 3000);
+    }
+  };
+
+  const handlePauseAllAds = () => {
+    if (window.confirm('هل تريد إيقاف ظهور جميع الإعلانات في المتجر حالياً؟')) {
+      pauseAllAds();
+      loadAdsList();
+      setActionSuccessMsg('تم إيقاف كافة الإعلانات عن الظهور في المنصة ⏸️');
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
+  };
+
+  const handleResumeAllAds = () => {
+    resumeAllAds();
+    loadAdsList();
+    setActionSuccessMsg('تم تفعيل وتشغيل كافة الإعلانات في المنصة ▶️');
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleClearAllAds = () => {
+    if (window.confirm('تحذير: هل أنت متأكد من مسح وحذف كافة الإعلانات نهائياً وتصفير القائمة؟')) {
+      clearAllAds();
+      loadAdsList();
+      setActionSuccessMsg('تم مسح وتصفير كافة الإعلانات 🧹');
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
+  };
+
+  const handleCreateCelebratoryAd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adFormTitle.trim() || !adFormStoreName.trim()) return;
+
+    submitAdRequest({
+      storeName: adFormStoreName.trim(),
+      title: adFormTitle.trim(),
+      description: adFormDesc.trim() || 'يسرنا استقبالكم بأفضل المنتجات وأقوى العروض مع التوصيل الفوري لجميع المنازل! 🚚✨',
+      imageUrl: adFormImage.trim() || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800',
+      packageName: 'الباقة الذهبية الممتازة VIP 👑',
+      village: adFormVillage,
+      status: 'APPROVED',
+      theme: adFormTheme,
+      badgeText: adFormBadge,
+      isConfettiEnabled: true,
+      actionText: adFormAction,
+      actionUrl: '',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: '2035-12-31'
+    });
+
+    loadAdsList();
+    setShowCreateAdModal(false);
+    setAdFormTitle('');
+    setAdFormDesc('');
+    setAdFormStoreName('');
+    setActionSuccessMsg('تم نشر بنر الافتتاح الاحتفالي بنجاح! الأوراق المتطايرة مفعلة الآن في المتجر 🎉');
+    setTimeout(() => setActionSuccessMsg(null), 4000);
+  };
+
+  // Notifications Actions
+  const handleMarkNotifRead = (id: string) => {
+    markDeveloperNotificationRead(id);
+    loadNotifications();
+  };
+
+  // Customers Actions
+  const handleVerifyCustomer = async (id: string, name: string) => {
+    await updateCustomerStatus(id, 'VERIFIED', true);
+    await loadCustomers();
+    setActionSuccessMsg(`تم توثيق واعتماد هوية العميل (${name}) بنجاح! ✅`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleBlockCustomer = async (id: string, name: string) => {
+    await updateCustomerStatus(id, 'BLOCKED', false);
+    await loadCustomers();
+    setActionSuccessMsg(`تم حظر / تجميد حساب العميل (${name}) 🚫`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleResetCustomerStatus = async (id: string, name: string) => {
+    await updateCustomerStatus(id, 'NEW', false);
+    await loadCustomers();
+    setActionSuccessMsg(`تم تعيين حالة العميل (${name}) إلى جديد 🟢`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleDeleteCustomer = async (id: string, name: string) => {
+    if (window.confirm(`هل أنت متأكد من حذف العميل (${name}) نهائياً من قاعدة بيانات Supabase؟`)) {
+      await deleteCustomerRecord(id);
+      await loadCustomers();
+      setActionSuccessMsg(`تم حذف العميل (${name}) من قاعدة البيانات 🗑️`);
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
+  };
+
+  const handleCopyText = async (text: string, fieldKey: string) => {
+    await copyToClipboard(text);
+    setCopiedCustomerField(fieldKey);
+    setTimeout(() => setCopiedCustomerField(null), 2000);
+  };
+
+  // Merchants & Drivers Gatekeeping Actions
+  const handleApproveMerchant = (id: string, name: string) => {
+    approveMerchantAccount(id);
+    refreshAccounts();
+    setActionSuccessMsg(`تم اعتماد التاجر (${name}) بنجاح! أصبح متجره ظاهراً لأهالي قريته ✅`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleRejectMerchant = (id: string, name: string) => {
+    rejectMerchantAccount(id);
+    refreshAccounts();
+    setActionSuccessMsg(`تم رفض / حظر حساب التاجر (${name}) 🚫`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleToggleMerchant = (id: string, name: string, currentApproval: boolean) => {
+    toggleMerchantStatus(id, !currentApproval);
+    refreshAccounts();
+    setActionSuccessMsg(
+      !currentApproval 
+        ? `تم تنشيط وتفعيل حساب التاجر (${name}) بنجاح ✅` 
+        : `تم إيقاف وتعليق حساب التاجر (${name}) مؤقتاً ⏸️`
+    );
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleDeleteMerchant = (id: string, name: string) => {
+    if (window.confirm(`هل أنت متأكد من حذف حساب التاجر (${name}) ومتجره نهائياً؟`)) {
+      deleteMerchantAccount(id);
+      refreshAccounts();
+      setActionSuccessMsg(`تم حذف حساب التاجر (${name}) نهائياً 🗑️`);
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
+  };
+
+  const handleApproveDriver = (id: string, name: string) => {
+    approveDriverAccount(id);
+    refreshAccounts();
+    setActionSuccessMsg(`تم اعتماد السائق (${name}) بنجاح! أصبح جاهزاً لتوصيل الطلبات 🛵✅`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleRejectDriver = (id: string, name: string) => {
+    rejectDriverAccount(id);
+    refreshAccounts();
+    setActionSuccessMsg(`تم رفض / تعليق حساب السائق (${name}) 🚫`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleToggleDriver = (id: string, name: string, currentApproval: boolean) => {
+    toggleDriverStatus(id, !currentApproval);
+    refreshAccounts();
+    setActionSuccessMsg(
+      !currentApproval 
+        ? `تم تنشيط وتفعيل حساب السائق (${name}) بنجاح ✅` 
+        : `تم إيقاف وتعليق حساب السائق (${name}) مؤقتاً ⏸️`
+    );
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleDeleteDriver = (id: string, name: string) => {
+    if (window.confirm(`هل أنت متأكد من حذف حساب السائق (${name}) نهائياً؟`)) {
+      deleteDriverAccount(id);
+      refreshAccounts();
+      setActionSuccessMsg(`تم حذف حساب السائق (${name}) نهائياً 🗑️`);
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
+  };
+
+  // Logs Actions
+  const handleClearLogs = () => {
+    if (window.confirm('هل أنت متأكد من رغبتك في مسح سجل محاولات الدخول بالكامل وتصفير كافة السجلات؟')) {
+      clearAccessLogs();
+      setLogs([]);
+      setActionSuccessMsg('تم مسح سجل العمليات بالكامل 🧹');
+      setTimeout(() => setActionSuccessMsg(null), 2500);
+    }
+  };
+
+  const handleDeleteSingleLog = (id: string) => {
+    deleteAccessLog(id);
+    setLogs((prev) => prev.filter((l) => l.id !== id));
+    setActionSuccessMsg('تم حذف السجل المحدد 🗑️');
+    setTimeout(() => setActionSuccessMsg(null), 2000);
+  };
+
+  // Village Query Simulator
+  const runTestQuery = async () => {
+    setIsQuerying(true);
+    try {
+      const res = await getApprovedMerchantsByVillage(testVillage);
+      setTestQueryResult(res);
+    } catch {
+      setTestQueryResult([]);
+    } finally {
+      setIsQuerying(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'GATEKEEPING') {
+      runTestQuery();
+    }
+  }, [testVillage, activeSubTab]);
+
+  // Portals definition
+  const portalTools = [
+    { 
+      mode: 'store', 
+      label: 'متجر القرية الرقمي', 
+      sublabel: 'واجهة أهالي القرى للتسوق والطلبات', 
+      icon: Store, 
+      color: 'text-blue-400',
+      bgColor: 'bg-blue-500/10 border-blue-500/30'
+    },
+    { 
+      mode: 'merchant', 
+      label: 'لوحة تحكم التاجر والكاشير', 
+      sublabel: 'نظام إدارة المنتجات، الفواتير، ونقاط البيع', 
+      icon: User, 
+      color: 'text-emerald-400',
+      bgColor: 'bg-emerald-500/10 border-emerald-500/30'
+    },
+    { 
+      mode: 'driver', 
+      label: 'بوابة كابتن التوصيل', 
+      sublabel: 'واجهة استلام وتنفيذ طلبات التوصيل بالقرية', 
+      icon: Truck, 
+      color: 'text-amber-400',
+      bgColor: 'bg-amber-500/10 border-amber-500/30'
+    },
+    { 
+      mode: 'admin', 
+      label: 'لوحة الإشراف العام للمنصة', 
+      sublabel: 'إدارة العمليات المشتركة والتحكم الشامل', 
+      icon: ShieldCheck, 
+      color: 'text-rose-400',
+      bgColor: 'bg-rose-500/10 border-rose-500/30'
+    },
+    { 
+      mode: 'manage-merchants', 
+      label: 'شاشة تدقيق ومتابعة التجار', 
+      sublabel: 'استعراض بيانات ومتاجر التجار المسجلين', 
+      icon: Users, 
+      color: 'text-purple-400',
+      bgColor: 'bg-purple-500/10 border-purple-500/30'
+    },
+    { 
+      mode: 'manage-drivers', 
+      label: 'شاشة إدارة أسطول السائقين', 
+      sublabel: 'متابعة أداء السائقين وتراخيصهم ومركباتهم', 
+      icon: Truck, 
+      color: 'text-amber-500',
+      bgColor: 'bg-amber-500/10 border-amber-500/30'
+    },
   ] as const;
 
   const getPortalLabel = (portal: string) => {
@@ -66,183 +540,1848 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     }
   };
 
+  // Filtered Customers
+  const filteredCustomers = useMemo(() => {
+    return customers.filter((c) => {
+      const q = customerSearchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        c.phone.includes(q) ||
+        (c.national_id && c.national_id.includes(q));
+      const matchesVillage =
+        selectedVillageFilter === 'ALL' || c.village_name === selectedVillageFilter;
+      const matchesStatus =
+        selectedStatusFilter === 'ALL' ||
+        (selectedStatusFilter === 'NEW' && (c.status === 'NEW' || !c.is_verified)) ||
+        (selectedStatusFilter === 'VERIFIED' && (c.status === 'VERIFIED' || c.is_verified)) ||
+        (selectedStatusFilter === 'BLOCKED' && c.status === 'BLOCKED');
+      return matchesSearch && matchesVillage && matchesStatus;
+    });
+  }, [customers, customerSearchQuery, selectedVillageFilter, selectedStatusFilter]);
+
+  // Filtered Logs
+  const filteredLogs = useMemo(() => {
+    if (logFilterStatus === 'ALL') return logs;
+    return logs.filter((l) => l.status === logFilterStatus);
+  }, [logs, logFilterStatus]);
+
   return (
-    <div className={`p-6 rounded-3xl border ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'} max-w-4xl mx-auto w-full`}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-black">
-            <Fingerprint className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-              المنظومة الرقمية الموحدة
-            </h2>
-            <p className="text-[10px] text-slate-400">لوحة تحكم ورصد صلاحيات النظام الشاملة</p>
-          </div>
-        </div>
-        <button onClick={onClose} className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-755 text-slate-400 transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Control Switcher Tabs */}
-      <div className="flex gap-2 p-1.5 bg-slate-950/80 rounded-2xl border border-slate-800 mb-6">
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('PORTALS')}
-          className={`flex-1 py-2 px-4 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
-            activeSubTab === 'PORTALS'
-              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/10'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          <LayoutGrid className="w-4 h-4" />
-          <span>بوابات ومداخل النظام ({tools.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveSubTab('LOGS')}
-          className={`flex-1 py-2 px-4 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
-            activeSubTab === 'LOGS'
-              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/10'
-              : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          <History className="w-4 h-4" />
-          <span>سجل محاولات الدخول ورصد الصلاحيات ({logs.length})</span>
-        </button>
-      </div>
-
-      {/* Content Rendering */}
-      {activeSubTab === 'PORTALS' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {tools.map((tool) => (
-            <button
-              key={tool.mode}
-              onClick={() => onNavigate(tool.mode as any)}
-              className={`flex flex-col items-start gap-3 p-5 rounded-2xl border text-right transition-all group cursor-pointer ${
-                isDarkMode 
-                  ? 'bg-slate-800/40 border-slate-800 hover:border-slate-600 hover:bg-slate-800' 
-                  : 'bg-slate-50 border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              <div className="p-3 rounded-xl bg-slate-950/50 group-hover:bg-amber-500/10 transition-colors">
-                <tool.icon className={`w-6 h-6 ${tool.color}`} />
-              </div>
-              <div>
-                <span className={`text-sm font-black block ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  {tool.label}
+    <div className="w-full max-w-6xl mx-auto p-3 sm:p-6 text-right font-sans" dir="rtl">
+      {/* Luxury Container */}
+      <div className="bg-slate-950/95 border border-slate-800 rounded-3xl shadow-2xl backdrop-blur-2xl overflow-hidden p-4 sm:p-7 space-y-6">
+        
+        {/* ========================================================= */}
+        {/* 1. TOP COMMAND BAR (رأس لوحة القيادة الرقمية للمطور) */}
+        {/* ========================================================= */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-5 border-b border-slate-800/90">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-amber-500/20 shrink-0">
+              <Fingerprint className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide">
+                  المنظومة الرقمية الموحدة للمطور
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-black font-mono">
+                  DEV MASTER V2
                 </span>
-                <span className="text-[10px] text-slate-400 mt-1 block">انقر للتبديل الفوري والدخول المباشر للبوابة</span>
               </div>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Logs Toolbar */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <span className="text-xs text-slate-400 font-bold flex items-center gap-1.5">
-              <Activity className="w-4 h-4 text-amber-500 animate-pulse" />
-              <span>مراقبة الوصول الفوري وبطاقات الصلاحيات:</span>
-            </span>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={loadLogs}
-                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                title="تحديث البيانات"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>تحديث</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleClearLogs}
-                disabled={logs.length === 0}
-                className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
-                  logs.length === 0
-                    ? 'bg-slate-900 text-slate-600 cursor-not-allowed'
-                    : 'bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-900/30'
-                }`}
-                title="مسح السجل بالكامل"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>مسح السجل</span>
-              </button>
+              <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1 flex-wrap">
+                <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  سحابة Supabase متصلة ومستقرة
+                </span>
+                <span className="text-slate-600">•</span>
+                <span>المطور المعتمد: <strong className="text-slate-200 font-mono">{OWNER_CONTACT.phoneDisplay}</strong></span>
+              </div>
             </div>
           </div>
 
-          {/* Logs List */}
-          <div className="max-h-96 overflow-y-auto space-y-2.5 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
-            {logs.length === 0 ? (
-              <div className="bg-slate-950/40 border border-slate-850/80 rounded-2xl p-10 text-center">
-                <Lock className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-                <h4 className="font-bold text-slate-400 text-xs">لا توجد سجلات دخول مسجلة حالياً</h4>
-                <p className="text-[10px] text-slate-500 mt-1">سيتم رصد وتسجيل أي عملية محاولة دخول فاشلة أو ناجحة لبوابات التطبيق فوراً هنا.</p>
-              </div>
+          {/* Quick Command Actions */}
+          <div className="flex items-center gap-2.5 w-full md:w-auto justify-end">
+            <button
+              type="button"
+              onClick={handleRefreshEverything}
+              disabled={isRefreshingAll}
+              className="py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-750 text-slate-200 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm hover:border-slate-600 disabled:opacity-50"
+              title="مزامنة وتحديث كافة بيانات المنظومة"
+            >
+              <RefreshCw className={`w-4 h-4 text-cyan-400 ${isRefreshingAll ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">مزامنة السحابة</span>
+            </button>
+
+            <button 
+              type="button"
+              onClick={() => setShowLogoutConfirmModal(true)} 
+              className="py-2.5 px-4 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-rose-200 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+              title="تسجيل الخروج والرجوع إلى الشاشة الرئيسية"
+            >
+              <LogOut className="w-4 h-4 text-rose-400" />
+              <span>تسجيل الخروج</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Global Feedback Banner */}
+        {actionSuccessMsg && (
+          <div className="p-3.5 rounded-2xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-200 text-xs font-bold flex items-center justify-between gap-2 shadow-lg shadow-emerald-950/20">
+            <div className="flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{actionSuccessMsg}</span>
+            </div>
+            <button 
+              type="button"
+              onClick={() => setActionSuccessMsg(null)}
+              className="text-emerald-400 hover:text-white text-xs cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* 2. EXECUTIVE KPI SUMMARY STRIP (شريط مؤشرات الأداء اللحظي) */}
+        {/* ========================================================= */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* Customers KPI */}
+          <div 
+            onClick={() => setActiveSubTab('CUSTOMERS')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              activeSubTab === 'CUSTOMERS'
+                ? 'bg-cyan-950/30 border-cyan-500/50 shadow-md shadow-cyan-950/30'
+                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">العملاء السحابيون</span>
+              <Users className="w-4 h-4 text-cyan-400" />
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <strong className="text-xl font-black text-white font-mono">{customers.length}</strong>
+              {newCustomersCount > 0 && (
+                <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
+                  +{newCustomersCount} جديد 🟢
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Pending Merchants KPI */}
+          <div 
+            onClick={() => setActiveSubTab('GATEKEEPING')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              activeSubTab === 'GATEKEEPING'
+                ? 'bg-amber-950/30 border-amber-500/50 shadow-md shadow-amber-950/30'
+                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">حراسة المتاجر</span>
+              <Store className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <strong className="text-xl font-black text-white font-mono">{approvedMerchants.length}</strong>
+              {pendingMerchants.length > 0 ? (
+                <span className="text-[10px] font-black text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded-md animate-pulse">
+                  {pendingMerchants.length} معلق ⏳
+                </span>
+              ) : (
+                <span className="text-[10px] text-emerald-400 font-bold">معتمد بالكامل ✓</span>
+              )}
+            </div>
+          </div>
+
+          {/* Pending Drivers KPI */}
+          <div 
+            onClick={() => setActiveSubTab('GATEKEEPING')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              activeSubTab === 'GATEKEEPING'
+                ? 'bg-amber-950/30 border-amber-500/50 shadow-md shadow-amber-950/30'
+                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">أسطول التوصيل</span>
+              <Truck className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <strong className="text-xl font-black text-white font-mono">{approvedDrivers.length}</strong>
+              {pendingDrivers.length > 0 ? (
+                <span className="text-[10px] font-black text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded-md animate-pulse">
+                  {pendingDrivers.length} معلق ⏳
+                </span>
+              ) : (
+                <span className="text-[10px] text-emerald-400 font-bold">معتمد بالكامل ✓</span>
+              )}
+            </div>
+          </div>
+
+          {/* Support Inquiries KPI */}
+          <div 
+            onClick={() => setActiveSubTab('MESSAGES')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              activeSubTab === 'MESSAGES'
+                ? 'bg-emerald-950/30 border-emerald-500/50 shadow-md shadow-emerald-950/30'
+                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">رسائل المنصة</span>
+              <MessageSquare className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <strong className="text-xl font-black text-white font-mono">{notifications.length}</strong>
+              {unreadMessagesCount > 0 ? (
+                <span className="text-[10px] font-black text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded-md animate-pulse">
+                  {unreadMessagesCount} غير مقروء 📩
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-500 font-bold">متابع بالكامل ✓</span>
+              )}
+            </div>
+          </div>
+
+          {/* Portals & Security KPI */}
+          <div 
+            onClick={() => setActiveSubTab('PORTALS')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer col-span-2 sm:col-span-1 ${
+              activeSubTab === 'PORTALS'
+                ? 'bg-indigo-950/30 border-indigo-500/50 shadow-md shadow-indigo-950/30'
+                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">بوابات النظام</span>
+              <LayoutGrid className="w-4 h-4 text-indigo-400" />
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <strong className="text-xl font-black text-white font-mono">6 بوابات</strong>
+              <span className="text-[10px] text-cyan-400 font-bold">جاهزة ومفعلة ✓</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================= */}
+        {/* 3. SEGMENTED TAB NAVIGATION (التبويبات الخمس المنظمة) */}
+        {/* ========================================================= */}
+        <div className="flex gap-2 p-1.5 bg-slate-900/80 rounded-2xl border border-slate-800/90 overflow-x-auto scrollbar-none">
+          {/* Tab 1: Gatekeeping */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('GATEKEEPING')}
+            className={`flex-1 min-w-[170px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeSubTab === 'GATEKEEPING'
+                ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            <span>حراسة الاعتمادات والسحابة</span>
+            {(pendingMerchants.length > 0 || pendingDrivers.length > 0) && (
+              <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black animate-pulse">
+                {pendingMerchants.length + pendingDrivers.length} معلق
+              </span>
+            )}
+          </button>
+
+          {/* Tab 2: Customers */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('CUSTOMERS')}
+            className={`flex-1 min-w-[170px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeSubTab === 'CUSTOMERS'
+                ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>دليل العملاء والمستخدمين</span>
+            {newCustomersCount > 0 ? (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black">
+                {newCustomersCount} جديد 🟢
+              </span>
             ) : (
-              logs.map((log) => (
-                <div
-                  key={log.id}
-                  className={`border rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-right ${
-                    log.status === 'SUCCESS'
-                      ? 'bg-emerald-500/[0.02] border-emerald-500/20 hover:border-emerald-500/30'
-                      : 'bg-rose-500/[0.02] border-rose-500/20 hover:border-rose-500/30'
-                  }`}
-                >
-                  {/* Right: Info and Portal Icon */}
-                  <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-xl mt-0.5 ${
-                      log.status === 'SUCCESS' 
-                        ? 'bg-emerald-500/10 text-emerald-400' 
-                        : 'bg-rose-500/10 text-rose-400'
-                    }`}>
-                      {log.status === 'SUCCESS' ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                    </div>
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+                {customers.length}
+              </span>
+            )}
+          </button>
 
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                          {getPortalLabel(log.portal)}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
-                          log.status === 'SUCCESS'
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'bg-rose-500/20 text-rose-300'
-                        }`}>
-                          {log.status === 'SUCCESS' ? 'دخول ناجح ✅' : 'محاولة فاشلة ❌'}
-                        </span>
-                      </div>
+          {/* Tab 3: Messages */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('MESSAGES')}
+            className={`flex-1 min-w-[170px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeSubTab === 'MESSAGES'
+                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>رسائل واستفسارات الدعم</span>
+            {unreadMessagesCount > 0 ? (
+              <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black animate-pulse">
+                {unreadMessagesCount} جديد 📩
+              </span>
+            ) : (
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+                {notifications.length}
+              </span>
+            )}
+          </button>
 
-                      <div className="text-[11px] text-slate-400">
-                        معرف الحساب / الرقم: <strong className="text-slate-300 font-mono">{log.usernameOrPhone}</strong>
-                      </div>
+          {/* Tab 4: Portals */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('PORTALS')}
+            className={`flex-1 min-w-[150px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeSubTab === 'PORTALS'
+                ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+            <span>مداخل وبوابات النظام</span>
+            <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+              6
+            </span>
+          </button>
 
-                      {log.reason && (
-                        <div className="text-[10px] text-rose-400 bg-rose-500/[0.04] px-2 py-0.5 rounded border border-rose-500/10 inline-block">
-                          السبب: {log.reason}
-                        </div>
-                      )}
-                    </div>
+          {/* Tab 5: Logs */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('LOGS')}
+            className={`flex-1 min-w-[150px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeSubTab === 'LOGS'
+                ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            <span>سجل الأمان والعمليات</span>
+            <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+              {logs.length}
+            </span>
+          </button>
+        </div>
+
+        {/* ========================================================= */}
+        {/* TAB 1: GATEKEEPING & SUPABASE (حراسة الاعتمادات والسحابة) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'GATEKEEPING' && (
+          <div className="space-y-6">
+            {/* Quick Status Sub-Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-bold">القرى الثابتة المعتمدة</span>
+                  <strong className="text-base font-black text-amber-400">10 قرى نموذجية</strong>
+                </div>
+                <MapPin className="w-5 h-5 text-amber-500/50" />
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-bold">فلترة العزل المكاني الذكي</span>
+                  <strong className="text-base font-black text-emerald-400">Village-First نشط ✓</strong>
+                </div>
+                <ShieldCheck className="w-5 h-5 text-emerald-500/50" />
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-bold">قواعد حماية البيانات</span>
+                  <strong className="text-base font-black text-purple-400">RLS + Postgres Security</strong>
+                </div>
+                <Database className="w-5 h-5 text-purple-500/50" />
+              </div>
+            </div>
+
+            {/* Pending Merchants */}
+            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+                    <Store className="w-4 h-4" />
                   </div>
-
-                  {/* Left: Timestamp and Meta */}
-                  <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 border-slate-800/60 pt-2.5 sm:pt-0 shrink-0 font-mono text-[10px] text-slate-500">
-                    <div>{new Date(log.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-                    <div className="mt-0.5">{new Date(log.timestamp).toLocaleDateString('ar-EG', { year: 'numeric', month: 'numeric', day: 'numeric' })}</div>
-                    {log.ipAddress && <div className="text-[9px] text-slate-600 mt-0.5">IP: {log.ipAddress}</div>}
+                  <div>
+                    <h3 className="text-sm font-black text-white">
+                      طلبات اعتماد المتاجر المعلقة ({pendingMerchants.length})
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      لن يظهر أي متجر جديد لأهالي قريته حتى توافق عليه كـ «مطور معتمد».
+                    </p>
                   </div>
                 </div>
-              ))
+                {pendingMerchants.length > 0 && (
+                  <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 text-xs font-bold animate-pulse">
+                    يتطلب قرارك ⚠️
+                  </span>
+                )}
+              </div>
+
+              {pendingMerchants.length === 0 ? (
+                <div className="p-6 rounded-2xl bg-slate-950/40 border border-slate-800/70 text-center">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                  <h4 className="text-xs font-bold text-slate-300">لا توجد طلبات متاجر معلقة حالياً</h4>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    جميع المتاجر النشطة معتمدة ومدققة، وأهالي القرى يتسوقون منها بأمان.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pendingMerchants.map((m) => (
+                    <div 
+                      key={m.id} 
+                      className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    >
+                      <div className="flex items-start gap-3.5">
+                        <img 
+                          src={m.photo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80'} 
+                          alt={m.name} 
+                          className="w-14 h-14 rounded-2xl object-cover border border-amber-500/40 shrink-0"
+                        />
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <strong className="text-white text-sm font-black">{m.storeName}</strong>
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+                              معلق بانتظار الاعتماد ⏳
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-300">
+                            المالك: <strong className="text-white">{m.name}</strong> • القرية: <strong className="text-amber-400 font-bold">{m.village}</strong>
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono flex items-center gap-3">
+                            <span>جوال: {m.phone}</span>
+                            <span>هوية: {m.nationalId}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveMerchant(m.id, m.name)}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-950"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>اعتماد المتجر فوراً ✅</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectMerchant(m.id, m.name)}
+                          className="px-3.5 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          <span>رفض</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* All Registered Merchants Management (Toggle / Delete) */}
+              <div className="pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAllMerchantsList(!showAllMerchantsList)}
+                  className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-950/80 hover:bg-slate-950 border border-slate-800/80 text-right transition-colors cursor-pointer text-xs font-bold text-slate-300"
+                >
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                    <span>عرض وإدارة كافة المتاجر المسجلة بالمنصة ({merchants.length} متجر)</span>
+                  </div>
+                  <span className="text-[10px] text-cyan-400 font-mono">
+                    {showAllMerchantsList ? 'إخفاء ▲' : 'إظهار القائمة والتحكم ▼'}
+                  </span>
+                </button>
+
+                {showAllMerchantsList && (
+                  <div className="mt-3 space-y-2.5">
+                    {merchants.map((m) => {
+                      const isApproved = m.isApproved !== false;
+                      return (
+                        <div
+                          key={m.id}
+                          className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-right ${
+                            isApproved 
+                              ? 'bg-slate-950/60 border-slate-850' 
+                              : 'bg-rose-950/10 border-rose-500/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-sm font-bold text-amber-400 shrink-0">
+                              🏪
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <strong className="text-white text-xs font-bold">{m.storeName}</strong>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                  isApproved 
+                                    ? 'bg-emerald-500/20 text-emerald-300' 
+                                    : 'bg-rose-500/20 text-rose-300'
+                                }`}>
+                                  {isApproved ? 'معتمد ومفعل ✓' : 'موقوف / معلق ⏸️'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-400">
+                                {m.name} • قرية <span className="text-amber-300">{m.village}</span> • {m.phone}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMerchant(m.id, m.name, isApproved)}
+                              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg cursor-pointer transition-colors ${
+                                isApproved
+                                  ? 'bg-amber-950/50 hover:bg-amber-900/60 text-amber-300 border border-amber-800/40'
+                                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                              }`}
+                            >
+                              {isApproved ? 'إيقاف ⏸️' : 'تفعيل ▶️'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMerchant(m.id, m.name)}
+                              className="p-1 bg-slate-900 hover:bg-rose-950 text-slate-500 hover:text-rose-400 rounded-lg cursor-pointer transition-colors"
+                              title="حذف حساب التاجر نهائياً"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Pending Drivers */}
+            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+                    <Truck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">
+                      طلبات اعتماد السائقين والمناديب ({pendingDrivers.length})
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      المناديب الجدد لا يمكنهم استلام طلبات الأهالي حتى يتم التحقق من مركباتهم وهوياتهم.
+                    </p>
+                  </div>
+                </div>
+                {pendingDrivers.length > 0 && (
+                  <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 text-xs font-bold animate-pulse">
+                    يتطلب قرارك ⚠️
+                  </span>
+                )}
+              </div>
+
+              {pendingDrivers.length === 0 ? (
+                <div className="p-6 rounded-2xl bg-slate-950/40 border border-slate-800/70 text-center">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                  <h4 className="text-xs font-bold text-slate-300">لا توجد طلبات سائقين معلقة حالياً</h4>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    جميع السائقين المعتمدين مؤهلون وموزعون حسب نطاقات القرى.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pendingDrivers.map((d) => (
+                    <div 
+                      key={d.id} 
+                      className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    >
+                      <div className="flex items-start gap-3.5">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-black shrink-0 border border-amber-500/30">
+                          <Truck className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <strong className="text-white text-sm font-black">{d.name}</strong>
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+                              سائق معلق ⏳
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-300">
+                            نطاق التوصيل: <strong className="text-amber-400 font-bold">{d.zone}</strong> • المركبة: <strong className="text-white">{d.vehicleType}</strong>
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono flex items-center gap-3">
+                            <span>جوال: {d.phone}</span>
+                            <span>هوية: {d.nationalId}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveDriver(d.id, d.name)}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-950"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>اعتماد السائق ✅</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectDriver(d.id, d.name)}
+                          className="px-3.5 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          <span>رفض</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* All Registered Drivers Management (Toggle / Delete) */}
+              <div className="pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAllDriversList(!showAllDriversList)}
+                  className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-950/80 hover:bg-slate-950 border border-slate-800/80 text-right transition-colors cursor-pointer text-xs font-bold text-slate-300"
+                >
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                    <span>عرض وإدارة كافة السائقين والمناديب ({drivers.length} مندوب)</span>
+                  </div>
+                  <span className="text-[10px] text-cyan-400 font-mono">
+                    {showAllDriversList ? 'إخفاء ▲' : 'إظهار القائمة والتحكم ▼'}
+                  </span>
+                </button>
+
+                {showAllDriversList && (
+                  <div className="mt-3 space-y-2.5">
+                    {drivers.map((d) => {
+                      const isApproved = d.isApproved !== false;
+                      return (
+                        <div
+                          key={d.id}
+                          className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-right ${
+                            isApproved 
+                              ? 'bg-slate-950/60 border-slate-850' 
+                              : 'bg-rose-950/10 border-rose-500/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center text-sm font-bold text-cyan-400 shrink-0">
+                              🛵
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <strong className="text-white text-xs font-bold">{d.name}</strong>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                  isApproved 
+                                    ? 'bg-emerald-500/20 text-emerald-300' 
+                                    : 'bg-rose-500/20 text-rose-300'
+                                }`}>
+                                  {isApproved ? 'معتمد ومفعل ✓' : 'موقوف / معلق ⏸️'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-400">
+                                نطاق <span className="text-amber-300">{d.zone}</span> • {d.vehicleType} • {d.phone}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleDriver(d.id, d.name, isApproved)}
+                              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg cursor-pointer transition-colors ${
+                                isApproved
+                                  ? 'bg-amber-950/50 hover:bg-amber-900/60 text-amber-300 border border-amber-800/40'
+                                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                              }`}
+                            >
+                              {isApproved ? 'إيقاف ⏸️' : 'تفعيل ▶️'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDriver(d.id, d.name)}
+                              className="p-1 bg-slate-900 hover:bg-rose-950 text-slate-500 hover:text-rose-400 rounded-lg cursor-pointer transition-colors"
+                              title="حذف حساب السائق نهائياً"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Ads & Grand Openings Management Section */}
+            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+                    <PartyPopper className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2">
+                      <span>إدارة وبنرات الافتتاحات والإعلانات الترويجية</span>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+                        {ads.length} إعلان
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      تحكم كامل ومباشر: إضافة إعلانات، تفعيلها، إيقافها مؤقتاً، أو حذفها نهائياً بضغطة زر.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {ads.length > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleResumeAllAds}
+                        className="px-2.5 py-1.5 bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-800/40 text-emerald-300 font-bold text-xs rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
+                        title="تفعيل وتشغيل جميع الإعلانات"
+                      >
+                        <Play className="w-3.5 h-3.5" />
+                        <span>تفعيل الكل</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handlePauseAllAds}
+                        className="px-2.5 py-1.5 bg-amber-950/50 hover:bg-amber-900/60 border border-amber-800/40 text-amber-300 font-bold text-xs rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
+                        title="إيقاف مؤقت لكافة الإعلانات"
+                      >
+                        <Pause className="w-3.5 h-3.5" />
+                        <span>إيقاف الكل</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleClearAllAds}
+                        className="px-2.5 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/30 text-rose-300 font-bold text-xs rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
+                        title="مسح وتصفير كافة الإعلانات"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>مسح الكل</span>
+                      </button>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateAdModal(true)}
+                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-amber-500/20 transition-all self-start sm:self-auto"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <span>+ إعلان افتتاح احتفالي جديد 🎉</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Ads List Cards */}
+              {ads.length === 0 ? (
+                <div className="bg-slate-950/40 border border-slate-800/70 rounded-2xl p-8 text-center space-y-3">
+                  <PartyPopper className="w-10 h-10 text-slate-600 mx-auto" />
+                  <h4 className="text-xs font-bold text-slate-300">لا توجد إعلانات حالياً</h4>
+                  <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                    تم مسح كافة الإعلانات، أو لم تتم إضافة إعلانات بعد. يمكنك إنشاء إعلان افتتاح احتفالي جديد في أي وقت!
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateAdModal(true)}
+                    className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold text-xs cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة إعلان الآن</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {ads.map((ad) => {
+                    const isApproved = ad.status === 'APPROVED';
+                    const isPending = ad.status === 'PENDING';
+                    const isPaused = ad.status === 'REJECTED';
+
+                    return (
+                      <div
+                        key={ad.id}
+                        className={`p-4 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
+                          isPending
+                            ? 'bg-amber-950/20 border-amber-500/40 shadow-md'
+                            : isApproved
+                            ? 'bg-emerald-950/10 border-emerald-500/30'
+                            : 'bg-slate-950 border-slate-800 opacity-80'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                          <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center text-xl shrink-0 ${
+                            isApproved 
+                              ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' 
+                              : isPaused 
+                              ? 'bg-slate-800 border-slate-700 text-slate-400' 
+                              : 'bg-amber-500/20 border-amber-500/30 text-amber-400'
+                          }`}>
+                            {ad.theme === 'CELEBRATION' ? '🎉' : ad.theme === 'HOT_DEAL' ? '🔥' : '📢'}
+                          </div>
+                          <div className="space-y-1 flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <strong className="text-white text-xs sm:text-sm font-black truncate">{ad.title}</strong>
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                                isApproved
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : isPending
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
+                                  : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                              }`}>
+                                {isApproved ? '🟢 نشط وشغال' : isPending ? 'طلب معلق ⏳' : '⏸️ متوقف عن الظهور'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-300 line-clamp-1">{ad.description}</p>
+                            <div className="flex items-center gap-3 text-[10px] text-slate-400 flex-wrap">
+                              <span>المتجر: <strong className="text-white">{ad.storeName}</strong></span>
+                              <span>القرية: <strong className="text-amber-400">{ad.village || 'الكل'}</strong></span>
+                              <span>الباقة: <strong className="text-cyan-400">{ad.packageName}</strong></span>
+                              {ad.isConfettiEnabled && (
+                                <span className="text-emerald-400 font-bold">✨ أوراق متطايرة مفعلة</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                          {/* Toggle Button (Active / Stop) */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleAd(ad.id, ad.storeName || 'المتجر')}
+                            className={`px-3 py-1.5 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition-all ${
+                              isApproved
+                                ? 'bg-amber-950/60 hover:bg-amber-900 border border-amber-700/50 text-amber-300'
+                                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-950'
+                            }`}
+                            title={isApproved ? 'إيقاف الإعلان مؤقتاً' : 'تفعيل وتشغيل الإعلان'}
+                          >
+                            {isApproved ? (
+                              <>
+                                <Pause className="w-3.5 h-3.5" />
+                                <span>إيقاف ⏸️</span>
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-3.5 h-3.5" />
+                                <span>تفعيل ▶️</span>
+                              </>
+                            )}
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAd(ad.id, ad.storeName || 'المتجر')}
+                            className="p-2 bg-slate-900 hover:bg-rose-950 border border-slate-800 hover:border-rose-800 text-slate-400 hover:text-rose-300 rounded-xl transition-colors cursor-pointer"
+                            title="حذف الإعلان نهائياً"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Live Village Query Simulator */}
+            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">
+                      محاكي استعلامات الفلترة المكانية (Village-First Query Inspector)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      اختبر واستعرض فورياً ما يراه ساكن كل قرية دون الحاجة لتسجيل الخروج.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={testVillage}
+                    onChange={(e) => setTestVillage(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 text-white text-xs font-bold rounded-xl px-3 py-2 cursor-pointer focus:outline-none focus:border-cyan-500"
+                  >
+                    {FIXED_VILLAGES_LIST.map((v) => (
+                      <option key={v.id} value={v.name}>{v.name}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={runTestQuery}
+                    className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow transition-all"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isQuerying ? 'animate-spin' : ''}`} />
+                    <span>فحص</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2">
+                  <span>المتاجر الظاهرة لأهالي قرية ({testVillage}):</span>
+                  <span className="text-cyan-400 font-mono font-bold">{testQueryResult.length} متجر معتمد</span>
+                </div>
+
+                {testQueryResult.length === 0 ? (
+                  <div className="text-slate-500 text-xs py-4 text-center">
+                    لا توجد متاجر معتمدة مسجلة في {testVillage} حتى الآن. نظام العزل المكاني يمنع ظهور متاجر القرى الأخرى.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {testQueryResult.map((st) => (
+                      <div key={st.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+                        <div>
+                          <strong className="text-white font-bold block">{st.name}</strong>
+                          <span className="text-[10px] text-emerald-400">معتمد ✓ | {st.ownerName}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">{st.phone}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Supabase Schema Reference */}
+            <div className="bg-slate-900/50 border border-slate-800/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 shrink-0">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-white">
+                    مخطط قاعدة بيانات Supabase الرسمية (5 جداول صلبة + RLS)
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    الجداول: customers, merchants, drivers, stores_directory, access_logs في ملف <code className="text-purple-300 font-mono">supabase_qaryati_master_schema.sql</code>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await copyToClipboard('-- Qaryati Supabase Master Schema file: supabase_qaryati_master_schema.sql');
+                  setCopiedSql(true);
+                  setTimeout(() => setCopiedSql(false), 2000);
+                }}
+                className="px-3.5 py-2 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/40 text-purple-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              >
+                {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSql ? 'تم نسخ المسار' : 'نسخ اسم الملف'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 2: CUSTOMERS & NEW USERS (دليل العملاء السحابي) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'CUSTOMERS' && (
+          <div className="space-y-6">
+            {/* Search & Filter Command Bar */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3.5">
+              <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+                {/* Search Input */}
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-500 absolute top-3 right-3.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={customerSearchQuery}
+                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                    placeholder="ابحث بالاسم، رقم الجوال (05xxxx)، أو رقم البطاقة الشخصية (الهوية)..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-10 pl-8 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                  />
+                  {customerSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomerSearchQuery('')}
+                      className="absolute top-2.5 left-3 text-slate-400 hover:text-white text-xs cursor-pointer p-1"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Village Filter */}
+                <div className="relative min-w-[170px]">
+                  <select
+                    value={selectedVillageFilter}
+                    onChange={(e) => setSelectedVillageFilter(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 appearance-none pr-8 cursor-pointer font-bold"
+                  >
+                    <option value="ALL">جميع القرى ({customers.length})</option>
+                    {FIXED_VILLAGES_LIST.map((v) => (
+                      <option key={v.name} value={v.name}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </select>
+                  <MapPin className="w-3.5 h-3.5 text-slate-500 absolute top-3.5 right-2.5 pointer-events-none" />
+                </div>
+
+                {/* Status Filter */}
+                <div className="relative min-w-[150px]">
+                  <select
+                    value={selectedStatusFilter}
+                    onChange={(e) => setSelectedStatusFilter(e.target.value as any)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 appearance-none pr-8 cursor-pointer font-bold"
+                  >
+                    <option value="ALL">كل الحالات ({customers.length})</option>
+                    <option value="NEW">مستخدم جديد 🟢 ({newCustomersCount})</option>
+                    <option value="VERIFIED">موثق ومعتمد ✅ ({verifiedCustomersCount})</option>
+                    <option value="BLOCKED">محظور 🚫</option>
+                  </select>
+                  <Filter className="w-3.5 h-3.5 text-slate-500 absolute top-3.5 right-2.5 pointer-events-none" />
+                </div>
+
+                {/* Cloud Sync Button */}
+                <button
+                  type="button"
+                  onClick={loadCustomers}
+                  disabled={isLoadingCustomers}
+                  className="px-4 py-2.5 bg-slate-950 hover:bg-slate-850 border border-slate-750 text-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <RefreshCw className={`w-4 h-4 text-cyan-400 ${isLoadingCustomers ? 'animate-spin' : ''}`} />
+                  <span>تحديث السحابة</span>
+                </button>
+              </div>
+
+              {/* Quick Status Sub-counter */}
+              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 px-1 flex-wrap gap-2">
+                <span>
+                  النتائج المعروضة: <strong className="text-white font-mono">{filteredCustomers.length}</strong> من إجمالي{' '}
+                  <strong className="text-cyan-400 font-mono">{customers.length}</strong> عميل
+                </span>
+                <span className="text-emerald-400 flex items-center gap-1 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Supabase Live Sync
+                </span>
+              </div>
+            </div>
+
+            {/* Customers Grid */}
+            {filteredCustomers.length === 0 ? (
+              <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-12 text-center">
+                <Users className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <h4 className="font-bold text-slate-300 text-sm">لا يوجد عملاء يطابقون شروط البحث</h4>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  عند تسجيل أي عميل برقم جواله وبطاقته الشخصية، سيظهر هنا فوراً في قاعدة البيانات مع وسم «مستخدم جديد 🟢».
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredCustomers.map((c) => {
+                  const isNew = c.status === 'NEW' || !c.is_verified;
+                  const isVerified = c.status === 'VERIFIED' || c.is_verified;
+                  const isBlocked = c.status === 'BLOCKED';
+
+                  const cleanPhone = c.phone ? c.phone.replace(/\D/g, '') : '';
+                  const intlPhone = cleanPhone.startsWith('0') ? `966${cleanPhone.slice(1)}` : cleanPhone;
+
+                  return (
+                    <div
+                      key={c.id || c.phone}
+                      className={`rounded-2xl border p-4 sm:p-5 flex flex-col justify-between gap-4 transition-all ${
+                        isNew
+                          ? 'bg-emerald-950/20 border-emerald-500/40 hover:border-emerald-500/60 shadow-lg shadow-emerald-950/20'
+                          : isBlocked
+                          ? 'bg-rose-950/20 border-rose-500/30 hover:border-rose-500/50'
+                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Top Bar: Avatar, Name & Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-base shrink-0 ${
+                              isNew
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : isBlocked
+                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                            }`}
+                          >
+                            <User className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-black text-white">
+                              {c.name}
+                            </h4>
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5">
+                              <MapPin className="w-3 h-3 text-cyan-400" />
+                              <span>{c.village_name || 'قرية غير محددة'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        {isNew && (
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black flex items-center gap-1 animate-pulse">
+                            <Sparkles className="w-3 h-3" />
+                            <span>مستخدم جديد 🟢</span>
+                          </span>
+                        )}
+                        {isVerified && !isBlocked && (
+                          <span className="px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-black flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>موثق ومعتمد ✅</span>
+                          </span>
+                        )}
+                        {isBlocked && (
+                          <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-black flex items-center gap-1">
+                            <XCircle className="w-3 h-3" />
+                            <span>محظور 🚫</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Info Cards: National ID & Phone */}
+                      <div className="space-y-2 text-xs">
+                        {/* National ID Field */}
+                        <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <IdCard className="w-4 h-4 text-amber-400 shrink-0" />
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-medium">
+                                رقم البطاقة الشخصية (الهوية)
+                              </span>
+                              <strong className="text-xs font-mono font-black text-white tracking-widest">
+                                {c.national_id || 'غير مسجل'}
+                              </strong>
+                            </div>
+                          </div>
+                          {c.national_id && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(c.national_id!, `nid-${c.id}`)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              title="نسخ رقم الهوية"
+                            >
+                              {copiedCustomerField === `nid-${c.id}` ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <span className="text-emerald-400">تم النسخ</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  <span>نسخ</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Phone Field with Direct Actions */}
+                        <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-medium">رقم الجوال</span>
+                              <strong className="text-xs font-mono font-bold text-white tracking-wider">
+                                {c.phone}
+                              </strong>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-1.5">
+                            {/* WhatsApp Button */}
+                            <a
+                              href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(
+                                `السلام عليكم أخي الكريم ${c.name}، معك مطور منصة قريتي الرقمية بخصوص حسابك الموثق لدينا في ${c.village_name || 'القرية'}.`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 rounded-lg transition-colors cursor-pointer"
+                              title="محادثة واتساب مباشرة"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </a>
+
+                            {/* Direct Call Button */}
+                            <a
+                              href={`tel:${cleanPhone}`}
+                              className="p-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded-lg transition-colors cursor-pointer"
+                              title="اتصال هاتفي مباشر"
+                            >
+                              <Phone className="w-3.5 h-3.5" />
+                            </a>
+
+                            {/* Copy Phone Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(c.phone, `phone-${c.id}`)}
+                              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              title="نسخ رقم الجوال"
+                            >
+                              {copiedCustomerField === `phone-${c.id}` ? (
+                                <Check className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bottom Action Controls: Verify / Block / Delete */}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          {isNew && (
+                            <button
+                              type="button"
+                              onClick={() => handleVerifyCustomer(c.id, c.name)}
+                              className="py-1 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>اعتماد وتوثيق الهوية ✅</span>
+                            </button>
+                          )}
+
+                          {!isBlocked ? (
+                            <button
+                              type="button"
+                              onClick={() => handleBlockCustomer(c.id, c.name)}
+                              className="py-1 px-2.5 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                            >
+                              <span>حظر الحساب</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleResetCustomerStatus(c.id, c.name)}
+                              className="py-1 px-2.5 bg-emerald-950/60 text-emerald-300 border border-emerald-800 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                            >
+                              <span>فك الحظر</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCustomer(c.id, c.name)}
+                          className="p-1.5 bg-slate-800 hover:bg-rose-950/50 text-slate-500 hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                          title="حذف العميل نهائياً من قاعدة البيانات"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 3: INCOMING MESSAGES & SUPPORT (رسائل واستفسارات المنصة) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'MESSAGES' && (
+          <div className="space-y-6">
+            {/* Header info */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-black text-white flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-emerald-400" />
+                  <span>مركز استقبال رسائل واستفسارات الدعم الفني</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  جميع الرسائل الواردة من «الزر الذكي العائم» ومن المستخدمين والتجار تظهر هنا مع إمكانية الرد الفوري.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={loadNotifications}
+                className="px-3.5 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-750 text-slate-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                <span>تحديث الرسائل</span>
+              </button>
+            </div>
+
+            {/* Messages Cards */}
+            {notifications.length === 0 ? (
+              <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-12 text-center">
+                <MessageSquare className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <h4 className="font-bold text-slate-300 text-sm">لا توجد رسائل أو استفسارات واردة حتى الآن</h4>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  عندما يرسل أي عميل أو تاجر أو سائق رسالة عبر «الزر الذكي العائم»، ستظهر فوراً في هذا المكان مع كامل تفاصيل مرسلها.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3.5">
+                {notifications.map((notif) => {
+                  const cleanPhone = notif.senderPhone ? notif.senderPhone.replace(/\D/g, '') : '';
+                  const intlPhone = cleanPhone.startsWith('0') ? `966${cleanPhone.slice(1)}` : cleanPhone;
+
+                  return (
+                    <div
+                      key={notif.id}
+                      className={`p-5 rounded-2xl border transition-all ${
+                        !notif.isRead
+                          ? 'bg-emerald-950/20 border-emerald-500/40 shadow-lg shadow-emerald-950/20'
+                          : 'bg-slate-900/80 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                                notif.type === 'TECH_SUPPORT'
+                                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                  : notif.type === 'NEW_CUSTOMER'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              }`}
+                            >
+                              {notif.type === 'TECH_SUPPORT'
+                                ? 'دعم فني / رسالة مباشرة 🛠️'
+                                : notif.type === 'NEW_CUSTOMER'
+                                ? 'تسجيل عميل 👤'
+                                : 'طلب تاجر 🏪'}
+                            </span>
+
+                            {!notif.isRead && (
+                              <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold animate-pulse">
+                                غير مقروء 📩
+                              </span>
+                            )}
+
+                            <h4 className="text-sm font-black text-white">{notif.title}</h4>
+                          </div>
+
+                          {/* Message Body */}
+                          <p className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/90 mt-2">
+                            {notif.message}
+                          </p>
+
+                          {/* Sender details and time */}
+                          <div className="flex items-center gap-3 text-[11px] text-slate-400 pt-1 flex-wrap">
+                            <span>
+                              المرسل: <strong className="text-white">{notif.senderName}</strong>
+                            </span>
+                            {notif.senderPhone && (
+                              <span>
+                                الجوال: <strong className="text-cyan-400 font-mono">{notif.senderPhone}</strong>
+                              </span>
+                            )}
+                            <div className="flex items-center gap-1 text-slate-500">
+                              <Clock className="w-3 h-3" />
+                              <span>{new Date(notif.timestamp).toLocaleString('ar-EG')}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Quick action buttons for the developer */}
+                        <div className="flex md:flex-col items-center gap-2 shrink-0 pt-2 md:pt-0">
+                          {notif.senderPhone && (
+                            <a
+                              href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(
+                                `السلام عليكم أخي الكريم ${notif.senderName}، بخصوص رسالتك إلى إدارة ومطور منصة قريتي الرقمية: "${notif.title}"`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="py-2 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors cursor-pointer w-full md:w-auto shadow-sm"
+                              title="رد مباشر عبر واتساب"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              <span>رد واتساب</span>
+                            </a>
+                          )}
+
+                          {notif.senderPhone && (
+                            <a
+                              href={`tel:${cleanPhone}`}
+                              className="py-2 px-3.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer w-full md:w-auto"
+                              title="اتصال هاتفي بالمرسل"
+                            >
+                              <Phone className="w-3.5 h-3.5" />
+                              <span>اتصال</span>
+                            </a>
+                          )}
+
+                          {!notif.isRead && (
+                            <button
+                              type="button"
+                              onClick={() => handleMarkNotifRead(notif.id)}
+                              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer w-full md:w-auto"
+                              title="تحديد كمقروء"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>مقروء</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 4: SYSTEM PORTALS (مداخل وبوابات النظام الست) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'PORTALS' && (
+          <div className="space-y-4">
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-white flex items-center gap-2">
+                  <LayoutGrid className="w-4 h-4 text-indigo-400" />
+                  <span>مداخل وبوابات المنظومة الرقمية الست</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  انقر على أي بوابة للانتقال المباشر وتجربتها بصفة المستخدم، التاجر، السائق، أو المدير.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {portalTools.map((tool) => (
+                <button
+                  key={tool.mode}
+                  type="button"
+                  onClick={() => onNavigate(tool.mode as any)}
+                  className="flex flex-col items-start justify-between p-5 rounded-2xl border border-slate-800 bg-slate-900/60 hover:bg-slate-850 hover:border-slate-700 text-right transition-all group cursor-pointer space-y-4"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <div className={`p-3 rounded-2xl ${tool.bgColor} transition-colors group-hover:scale-105 duration-200`}>
+                      <tool.icon className={`w-6 h-6 ${tool.color}`} />
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-white transition-colors" />
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-black text-white group-hover:text-amber-400 transition-colors">
+                      {tool.label}
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                      {tool.sublabel}
+                    </p>
+                  </div>
+
+                  <span className="text-[10px] font-bold text-cyan-400 font-mono">
+                    دخول فوري ←
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 5: ACCESS & SECURITY LOGS (سجل الأمان والعمليات) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'LOGS' && (
+          <div className="space-y-4">
+            {/* Logs Toolbar */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
+                  <History className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">
+                    سجل محاولات الدخول وحماية الجلسات
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    رصد حي ومباشر لكافة محاولات الوصول والتحقق من الصلاحيات.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Filter buttons */}
+                <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setLogFilterStatus('ALL')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                      logFilterStatus === 'ALL' ? 'bg-slate-800 text-white' : 'text-slate-400'
+                    }`}
+                  >
+                    الكل ({logs.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLogFilterStatus('SUCCESS')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                      logFilterStatus === 'SUCCESS' ? 'bg-emerald-950 text-emerald-300' : 'text-slate-400'
+                    }`}
+                  >
+                    ناجح
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLogFilterStatus('FAILURE')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                      logFilterStatus === 'FAILURE' ? 'bg-rose-950 text-rose-300' : 'text-slate-400'
+                    }`}
+                  >
+                    فاشل
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadLogs}
+                  className="p-2 bg-slate-950 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  title="تحديث السجل"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearLogs}
+                  disabled={logs.length === 0}
+                  className="p-2 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/30 text-rose-300 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-40"
+                  title="مسح السجل بالكامل"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Logs List */}
+            <div className="max-h-[500px] overflow-y-auto space-y-2.5 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+              {filteredLogs.length === 0 ? (
+                <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-12 text-center">
+                  <Lock className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                  <h4 className="font-bold text-slate-400 text-sm">لا توجد سجلات دخول مطابقة حالياً</h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    سيتم رصد وتسجيل أي عملية محاولة دخول فاشلة أو ناجحة لبوابات التطبيق فوراً هنا.
+                  </p>
+                </div>
+              ) : (
+                filteredLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className={`border rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-right transition-all ${
+                      log.status === 'SUCCESS'
+                        ? 'bg-emerald-950/10 border-emerald-500/20 hover:border-emerald-500/30'
+                        : 'bg-rose-950/10 border-rose-500/20 hover:border-rose-500/30'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2.5 rounded-xl mt-0.5 shrink-0 ${
+                        log.status === 'SUCCESS' 
+                          ? 'bg-emerald-500/10 text-emerald-400' 
+                          : 'bg-rose-500/10 text-rose-400'
+                      }`}>
+                        {log.status === 'SUCCESS' ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <strong className="text-xs font-black text-white">
+                            {getPortalLabel(log.portal)}
+                          </strong>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                            log.status === 'SUCCESS'
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-rose-500/20 text-rose-300'
+                          }`}>
+                            {log.status === 'SUCCESS' ? 'دخول ناجح ✅' : 'محاولة فاشلة ❌'}
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-slate-400">
+                          معرف الحساب / الرقم: <strong className="text-slate-200 font-mono">{log.usernameOrPhone}</strong>
+                        </div>
+
+                        {log.reason && (
+                          <div className="text-[10px] text-rose-400 bg-rose-500/[0.04] px-2 py-0.5 rounded border border-rose-500/10 inline-block">
+                            السبب: {log.reason}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 border-slate-800/60 pt-2 sm:pt-0 shrink-0 font-mono text-[11px] text-slate-500 gap-2">
+                      <div className="text-right sm:text-left">
+                        <div>{new Date(log.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+                        <div className="mt-0.5">{new Date(log.timestamp).toLocaleDateString('ar-EG', { year: 'numeric', month: 'numeric', day: 'numeric' })}</div>
+                        {log.ipAddress && <div className="text-[9px] text-slate-600 mt-0.5">IP: {log.ipAddress}</div>}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSingleLog(log.id)}
+                        className="p-1.5 bg-slate-900 hover:bg-rose-950/60 text-slate-500 hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                        title="حذف هذا السجل"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* ========================================================= */}
+      {/* MODAL: CREATE CELEBRATORY OPENING AD (إنشاء إعلان احتفالي) */}
+      {/* ========================================================= */}
+      {showCreateAdModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                  <PartyPopper className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white">
+                    إنشاء إعلان افتتاح واحتفال متحرك 🎉
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    سيظهر البنر فوراً في ترويسة المتجر مع مؤثر تساقط أوراق الزينة والبريق الذهبي.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateAdModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form onSubmit={handleCreateCelebratoryAd} className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+              {/* Theme Choice */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1.5">1. طابع ومؤثر البنر البصري:</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdFormTheme('CELEBRATION');
+                      setAdFormBadge('افتتاح رسمي مبارك 🎉');
+                    }}
+                    className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                      adFormTheme === 'CELEBRATION'
+                        ? 'bg-amber-500/20 border-amber-400 text-amber-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    <PartyPopper className="w-4 h-4 mx-auto mb-1 text-amber-400" />
+                    <span>افتتاح واحتفال 🎊</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdFormTheme('HOT_DEAL');
+                      setAdFormBadge('عروض الافتتاح الكبرى 🔥');
+                    }}
+                    className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                      adFormTheme === 'HOT_DEAL'
+                        ? 'bg-rose-500/20 border-rose-400 text-rose-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    <Flame className="w-4 h-4 mx-auto mb-1 text-rose-400" />
+                    <span>عروض نارية 🔥</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdFormTheme('OFFICIAL');
+                      setAdFormBadge('إعلان رسمي للقرية 📢');
+                    }}
+                    className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                      adFormTheme === 'OFFICIAL'
+                        ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    <Megaphone className="w-4 h-4 mx-auto mb-1 text-cyan-400" />
+                    <span>إعلان عام 📢</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Village & Store name */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1">القرية المستهدفة:</label>
+                  <select
+                    value={adFormVillage}
+                    onChange={(e) => setAdFormVillage(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer font-bold"
+                  >
+                    {FIXED_VILLAGES_LIST.map((v) => (
+                      <option key={v.name} value={v.name}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1">اسم البقالة / المتجر:</label>
+                  <input
+                    type="text"
+                    required
+                    value={adFormStoreName}
+                    onChange={(e) => setAdFormStoreName(e.target.value)}
+                    placeholder="مثال: بقالة النور الحديثة"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              {/* Title */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1">عنوان الإعلان الرئيسي:</label>
+                <input
+                  type="text"
+                  required
+                  value={adFormTitle}
+                  onChange={(e) => setAdFormTitle(e.target.value)}
+                  placeholder="مثال: 🎉 تم افتتاح بقالة النور في قرية بني عيسى مع هدايا وخصومات كبرى!"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1">تفاصيل ونص الإعلان الترويجي:</label>
+                <textarea
+                  rows={2}
+                  value={adFormDesc}
+                  onChange={(e) => setAdFormDesc(e.target.value)}
+                  placeholder="أهلاً بكم في فرعنا الجديد، يسعدنا استقبالكم بأحدث المنتجات الطازجة مع توصيل فوري لمنازل القرية 🚚✨"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 resize-none"
+                />
+              </div>
+
+              {/* Action button text */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1">نص زر الإجراء (CTA):</label>
+                  <input
+                    type="text"
+                    value={adFormAction}
+                    onChange={(e) => setAdFormAction(e.target.value)}
+                    placeholder="مثال: تسوق من البقالة الآن 🛒"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1">رابط صورة البنر (اختياري):</label>
+                  <input
+                    type="url"
+                    value={adFormImage}
+                    onChange={(e) => setAdFormImage(e.target.value)}
+                    placeholder="https://images.unsplash.com/..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateAdModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs cursor-pointer shadow-lg shadow-amber-500/30 flex items-center gap-1.5"
+                >
+                  <PartyPopper className="w-4 h-4" />
+                  <span>نشر الإعلان فوراً 🎉</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
+
+      {/* ========================================================= */}
+      {/* MODAL: LOGOUT / EXIT CONFIRMATION DIALOG (تأكيد تسجيل الخروج) */}
+      {/* ========================================================= */}
+      {showLogoutConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-5 text-center animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 mx-auto flex items-center justify-center text-2xl shadow-inner">
+              <LogOut className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-base font-black text-white">
+                تأكيد تسجيل الخروج من لوحة المطور
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                هل أنت متأكد من رغبتك في تسجيل الخروج وإنهاء جلسة المطور بأمان والعودة إلى الشاشة الرئيسية؟
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirmModal(false)}
+                className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+              >
+                إلغاء والرجوع
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirmModal(false);
+                  onClose();
+                }}
+                className="py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black transition-all cursor-pointer shadow-lg shadow-rose-950/50 flex items-center justify-center gap-1.5 active:scale-95"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>نعم، تسجيل الخروج</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

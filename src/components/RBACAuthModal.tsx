@@ -31,6 +31,7 @@ import {
 import { setDeveloperRemembered } from '../services/platformSettingsService';
 import { OTPPasswordResetModal } from './OTPPasswordResetModal';
 import { useAuth } from '../context/AuthContext';
+import { registerCustomerAccount } from '../services/supabaseQaryatiService';
 
 export type RBACRoleTab = 'MERCHANT' | 'DRIVER' | 'CUSTOMER' | 'DEVELOPER';
 
@@ -250,21 +251,39 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
     }
 
     setLoading(true);
+    const chosenVillage = customerVillage.trim() || FIXED_VILLAGES[0];
+    const cleanName = customerName.trim();
+    const cleanPhone = customerPhone.trim();
+    const cleanNationalId = customerNationalId.trim();
+
+    // 1. Save local session
+    saveCustomerSession({
+      name: cleanName,
+      phone: cleanPhone,
+      nationalId: cleanNationalId,
+      village: chosenVillage,
+      status: 'NEW',
+      savedAt: new Date().toISOString(),
+    });
+
+    // 2. Cloud Registration in Supabase (not just local!)
+    registerCustomerAccount({
+      name: cleanName,
+      phone: cleanPhone,
+      nationalId: cleanNationalId,
+      villageName: chosenVillage,
+    }).catch((err) => {
+      console.warn('Customer Supabase registration background error:', err);
+    });
+
     setTimeout(() => {
-      saveCustomerSession({
-        name: customerName.trim(),
-        phone: customerPhone.trim(),
-        nationalId: customerNationalId.trim(),
-        village: customerVillage.trim() || FIXED_VILLAGES[0],
-        savedAt: new Date().toISOString(),
-      });
       setLoading(false);
       onClose();
       handleSuccess('CUSTOMER', {
-        name: customerName.trim(),
-        phone: customerPhone.trim(),
-        nationalId: customerNationalId.trim(),
-        village: customerVillage.trim(),
+        name: cleanName,
+        phone: cleanPhone,
+        nationalId: cleanNationalId,
+        village: chosenVillage,
       });
     }, 200);
   };

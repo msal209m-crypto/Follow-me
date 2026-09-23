@@ -176,7 +176,7 @@ export function registerMerchant(params: {
     photo: params.photo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    isApproved: true,
+    isApproved: false, // Strict Admin Gatekeeping: false = pending developer approval
   };
 
   merchants.unshift(newMerchant);
@@ -184,14 +184,14 @@ export function registerMerchant(params: {
 
   addDeveloperNotification({
     type: 'NEW_MERCHANT',
-    title: 'تسجيل متجر جديد 🏪',
-    message: `تم تسجيل متجر جديد باسم "${newMerchant.storeName}" للتاجر ${newMerchant.name} في ${newMerchant.village}`,
+    title: 'طلب اعتماد متجر جديد معلق ⏳',
+    message: `سجل التاجر "${newMerchant.name}" (هوية: ${newMerchant.nationalId}) متجر جديد باسم "${newMerchant.storeName}" في ${newMerchant.village}. الحساب معلق بانتظار اعتماد المطور لحماية أهل القرية.`,
     senderName: newMerchant.name,
     senderPhone: newMerchant.phone,
     merchantId: newMerchant.id
   });
 
-  // Sync to stores directory under merchant's unique ID
+  // Sync to stores directory under merchant's unique ID with isApproved = false
   const stores = getStoresDirectory();
   if (!stores.some((s) => s.phone === cleanPhone || s.id === merchantId)) {
     const newStoreRecord: StoreDirectoryRecord = {
@@ -210,14 +210,11 @@ export function registerMerchant(params: {
       rating: 5.0,
       ratingCount: 0,
     };
+    (newStoreRecord as any).isApproved = false;
     saveStoresDirectory([newStoreRecord, ...stores]);
   }
 
-  // Also sync to local users so AuthContext and AppContext seamlessly authenticate this merchant
-  setActiveSessionRole('MERCHANT');
-  syncMerchantToAuth(newMerchant);
-
-  // Sync to Supabase table 'merchants' (id, store_name, village_name)
+  // Sync to Supabase table 'merchants'
   try {
     supabase.from('merchants').insert({
       id: merchantId,
@@ -225,6 +222,8 @@ export function registerMerchant(params: {
       village_name: newMerchant.village,
       name: newMerchant.name,
       phone: newMerchant.phone,
+      national_id: newMerchant.nationalId,
+      is_approved: false, // Strict Gatekeeping
       created_at: newMerchant.createdAt,
     }).then(({ error }: any) => {
       if (error) {
@@ -235,13 +234,17 @@ export function registerMerchant(params: {
     console.warn('Supabase merchants insert exception:', err);
   }
 
-  return { success: true, message: 'تم تسجيل حساب التاجر بنجاح وحفظ البيانات في جدول التجار بـ Supabase!', merchant: newMerchant };
+  return { 
+    success: true, 
+    message: 'تم استلام طلب تسجيل التاجر بنجاح! حسابك حالياً بحالة (معلق ⏳) بانتظار اعتماد المطور لحماية أهل القرية من الحسابات الوهمية. سيظهر متجرك في القرية فور اعتماده من الإدارة.', 
+    merchant: newMerchant 
+  };
 }
 
 export function loginMerchant(
   identifier: string, // phone or national ID or name
   passwordInput: string
-): { success: boolean; message: string; merchant?: MerchantAccountRecord } {
+): { success: boolean; message: string; merchant?: MerchantAccountRecord; isPending?: boolean } {
   const cleanId = identifier.trim().replace(/\s+/g, '');
   const merchants = getMerchants();
 
@@ -260,6 +263,17 @@ export function loginMerchant(
   if (merchant.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234') {
     logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: merchant.phone, status: 'FAILED', reason: 'كلمة المرور غير صحيحة' });
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة أو استخدام "نسيت كلمة المرور"' };
+  }
+
+  // Strict Admin Gatekeeping Check
+  if (merchant.isApproved === false) {
+    logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: merchant.phone, status: 'FAILED', reason: 'الحساب معلق بانتظار اعتماد المطور' });
+    return {
+      success: false,
+      isPending: true,
+      message: 'طلب حسابك قيد المراجعة والاعتماد من مطور المنصة (حالة الحساب: معلق ⏳). لحماية أهالي القرية يتم التحقق من بطاقة الأحوال أولاً. سيتم فتح لوحة البيع فور اعتمادك من الإدارة.',
+      merchant
+    };
   }
 
   // Set active role
@@ -371,36 +385,51 @@ export function registerDriver(params: {
     vehiclePlate: params.vehiclePlate,
     zone: params.zone || 'القرية',
     createdAt: new Date().toISOString(),
-    isApproved: true,
+    isApproved: false, // Strict Admin Gatekeeping: false = pending developer approval
   };
 
   drivers.unshift(newDriver);
   saveDrivers(drivers);
 
-  // Sync to driver active profile
-  const profile: DriverProfile = {
-    id: newDriver.id,
-    name: newDriver.name,
-    phone: newDriver.phone,
-    photo: newDriver.photo,
-    vehicleType: newDriver.vehicleType,
-    vehiclePlate: newDriver.vehiclePlate,
-    zone: newDriver.zone,
-    isOnline: true,
-    completedOrdersCount: 0,
-    totalDelivered: 0,
-    registeredAt: newDriver.createdAt,
-  };
-  saveDriverProfile(profile);
-  setActiveSessionRole('DRIVER');
+  addDeveloperNotification({
+    type: 'NEW_MERCHANT',
+    title: 'طلب اعتماد مندوب توصيل جديد 🛵⏳',
+    message: `سجل المندوب "${newDriver.name}" (هوية: ${newDriver.nationalId}) لتوصيل الطلبات في "${newDriver.zone}". الحساب معلق بانتظار اعتماد المطور.`,
+    senderName: newDriver.name,
+    senderPhone: newDriver.phone,
+  });
 
-  return { success: true, message: 'تم تسجيل السائق بنجاح!', driver: newDriver };
+  // Sync to Supabase drivers table
+  try {
+    supabase.from('drivers').insert({
+      id: newDriver.id,
+      name: newDriver.name,
+      phone: newDriver.phone,
+      national_id: newDriver.nationalId,
+      vehicle_type: newDriver.vehicleType,
+      vehicle_plate: newDriver.vehiclePlate || null,
+      zone: newDriver.zone,
+      is_approved: false, // Strict Gatekeeping
+      created_at: newDriver.createdAt,
+    }).then(({ error }: any) => {
+      if (error) console.warn('Supabase driver insert note:', error);
+    });
+  } catch (err) {
+    console.warn('Supabase driver insert exception:', err);
+  }
+
+  return { 
+    success: true, 
+    message: 'تم استلام طلب تسجيل السائق بنجاح! حسابك حالياً (معلق ⏳) بانتظار موافقة واعتماد المطور لضمان سلامة التوصيل لأهالي القرية.', 
+    driver: newDriver 
+  };
 }
 
 export function loginDriver(phoneInput: string, passwordInput: string): {
   success: boolean;
   message: string;
   driver?: DriverAccountRecord;
+  isPending?: boolean;
 } {
   const cleanPhone = phoneInput.trim().replace(/\s+/g, '');
   const drivers = getDrivers();
@@ -414,6 +443,17 @@ export function loginDriver(phoneInput: string, passwordInput: string): {
   if (driver.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234') {
     logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'FAILED', reason: 'كلمة المرور غير صحيحة' });
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مجدداً' };
+  }
+
+  // Strict Admin Gatekeeping Check
+  if (driver.isApproved === false) {
+    logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'FAILED', reason: 'حساب السائق معلق بانتظار الاعتماد' });
+    return {
+      success: false,
+      isPending: true,
+      message: 'طلب اعتمادك كسائق توصيل قيد المراجعة والتدقيق من إدارة المنصة (معلق ⏳). لحماية أهالي القرية سيتم تفعيل حسابك فور اعتماده من المطور.',
+      driver
+    };
   }
 
   // Set active
@@ -433,6 +473,74 @@ export function loginDriver(phoneInput: string, passwordInput: string): {
 
   logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'SUCCESS' });
   return { success: true, message: `أهلاً بك يا ${driver.name}`, driver };
+}
+
+export function approveMerchantAccount(merchantId: string): void {
+  const merchants = getMerchants();
+  const idx = merchants.findIndex((m) => m.id === merchantId || m.phone === merchantId);
+  if (idx !== -1) {
+    merchants[idx].isApproved = true;
+    merchants[idx].updatedAt = new Date().toISOString();
+    saveMerchants(merchants);
+  }
+  const stores = getStoresDirectory();
+  const storeIdx = stores.findIndex((s) => s.id === merchantId || (s as any).merchantId === merchantId);
+  if (storeIdx !== -1) {
+    (stores[storeIdx] as any).isApproved = true;
+    stores[storeIdx].status = 'ACTIVE';
+    saveStoresDirectory(stores);
+  }
+  try {
+    supabase.from('merchants').update({ is_approved: true }).eq('id', merchantId);
+  } catch {}
+  window.dispatchEvent(new CustomEvent('qaryati:merchant-approval-changed', { detail: { merchantId, isApproved: true } }));
+}
+
+export function rejectMerchantAccount(merchantId: string): void {
+  const merchants = getMerchants();
+  const idx = merchants.findIndex((m) => m.id === merchantId || m.phone === merchantId);
+  if (idx !== -1) {
+    merchants[idx].isApproved = false;
+    merchants[idx].updatedAt = new Date().toISOString();
+    saveMerchants(merchants);
+  }
+  const stores = getStoresDirectory();
+  const storeIdx = stores.findIndex((s) => s.id === merchantId || (s as any).merchantId === merchantId);
+  if (storeIdx !== -1) {
+    (stores[storeIdx] as any).isApproved = false;
+    stores[storeIdx].status = 'SUSPENDED';
+    saveStoresDirectory(stores);
+  }
+  try {
+    supabase.from('merchants').update({ is_approved: false }).eq('id', merchantId);
+  } catch {}
+  window.dispatchEvent(new CustomEvent('qaryati:merchant-approval-changed', { detail: { merchantId, isApproved: false } }));
+}
+
+export function approveDriverAccount(driverId: string): void {
+  const drivers = getDrivers();
+  const idx = drivers.findIndex((d) => d.id === driverId || d.phone === driverId);
+  if (idx !== -1) {
+    drivers[idx].isApproved = true;
+    saveDrivers(drivers);
+  }
+  try {
+    supabase.from('drivers').update({ is_approved: true }).eq('id', driverId);
+  } catch {}
+  window.dispatchEvent(new CustomEvent('qaryati:driver-approval-changed', { detail: { driverId, isApproved: true } }));
+}
+
+export function rejectDriverAccount(driverId: string): void {
+  const drivers = getDrivers();
+  const idx = drivers.findIndex((d) => d.id === driverId || d.phone === driverId);
+  if (idx !== -1) {
+    drivers[idx].isApproved = false;
+    saveDrivers(drivers);
+  }
+  try {
+    supabase.from('drivers').update({ is_approved: false }).eq('id', driverId);
+  } catch {}
+  window.dispatchEvent(new CustomEvent('qaryati:driver-approval-changed', { detail: { driverId, isApproved: false } }));
 }
 
 // ----------------------------------------------------
@@ -723,7 +831,7 @@ function getMockAccessLogs(): AccessLogEntry[] {
 
 export interface DeveloperNotification {
   id: string;
-  type: 'NEW_MERCHANT' | 'TECH_SUPPORT';
+  type: 'NEW_MERCHANT' | 'TECH_SUPPORT' | 'NEW_CUSTOMER';
   title: string;
   message: string;
   senderName: string;
@@ -821,12 +929,13 @@ export function submitMerchantSupport(params: {
 export function getAccessLogs(): AccessLogEntry[] {
   try {
     const raw = localStorage.getItem('qaryati_access_logs');
-    if (!raw) {
+    if (raw === null) {
       const mock = getMockAccessLogs();
       localStorage.setItem('qaryati_access_logs', JSON.stringify(mock));
       return mock;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -842,7 +951,78 @@ export function logAccessAttempt(entry: Omit<AccessLogEntry, 'id' | 'timestamp'>
     };
     logs.unshift(newEntry);
     localStorage.setItem('qaryati_access_logs', JSON.stringify(logs.slice(0, 100)));
+    window.dispatchEvent(new CustomEvent('qaryati:logs-updated', { detail: logs }));
   } catch (e) {
     console.warn('Failed to save access log attempt:', e);
+  }
+}
+
+export function clearAccessLogs(): void {
+  try {
+    localStorage.setItem('qaryati_access_logs', JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent('qaryati:logs-updated', { detail: [] }));
+  } catch (e) {
+    console.warn('Failed to clear access logs:', e);
+  }
+}
+
+export function deleteAccessLog(id: string): void {
+  try {
+    const logs = getAccessLogs();
+    const filtered = logs.filter((l) => l.id !== id);
+    localStorage.setItem('qaryati_access_logs', JSON.stringify(filtered));
+    window.dispatchEvent(new CustomEvent('qaryati:logs-updated', { detail: filtered }));
+  } catch (e) {
+    console.warn('Failed to delete access log:', e);
+  }
+}
+
+export function deleteMerchantAccount(id: string): void {
+  try {
+    const list = getMerchants();
+    const filtered = list.filter((m) => m.id !== id);
+    localStorage.setItem('qaryati_merchants', JSON.stringify(filtered));
+    window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
+  } catch (e) {
+    console.warn('Failed to delete merchant:', e);
+  }
+}
+
+export function deleteDriverAccount(id: string): void {
+  try {
+    const list = getDrivers();
+    const filtered = list.filter((d) => d.id !== id);
+    localStorage.setItem('qaryati_drivers', JSON.stringify(filtered));
+    window.dispatchEvent(new CustomEvent('qaryati:drivers-updated'));
+  } catch (e) {
+    console.warn('Failed to delete driver:', e);
+  }
+}
+
+export function toggleMerchantStatus(id: string, isApproved: boolean): void {
+  try {
+    const list = getMerchants();
+    const item = list.find((m) => m.id === id);
+    if (item) {
+      item.isApproved = isApproved;
+      localStorage.setItem('qaryati_merchants', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
+    }
+  } catch (e) {
+    console.warn('Failed to toggle merchant status:', e);
+  }
+}
+
+export function toggleDriverStatus(id: string, isApproved: boolean): void {
+  try {
+    const list = getDrivers();
+    const item = list.find((d) => d.id === id);
+    if (item) {
+      item.isApproved = isApproved;
+      localStorage.setItem('qaryati_drivers', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('qaryati:drivers-updated'));
+    }
+  } catch (e) {
+    console.warn('Failed to toggle driver status:', e);
   }
 }

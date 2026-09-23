@@ -30,6 +30,7 @@ import {
   UserCheck,
   RotateCcw,
   Upload,
+  Globe,
   X
 } from 'lucide-react';
 import { StoreSettings } from '../types';
@@ -55,6 +56,10 @@ import { VillageBulletinView } from './VillageBulletinView';
 import { DeveloperAuthModal } from './DeveloperAuthModal';
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
 import { OTPPasswordResetModal } from './OTPPasswordResetModal';
+import { AdBannerWidget } from './AdBannerWidget';
+import { GlobalSettingsModal } from './GlobalSettingsModal';
+import { VillageMapPickerModal } from './VillageMapPickerModal';
+import { getGlobalPreferences } from '../services/globalizationService';
 
 interface PortalLandingScreenProps {
   settings: StoreSettings;
@@ -100,6 +105,9 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   const [showBulletinModal, setShowBulletinModal] = useState(false);
   const [showAdminPinModal, setShowAdminPinModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [isGlobalModalOpen, setIsGlobalModalOpen] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+  const [globalPrefs, setGlobalPrefs] = useState(() => getGlobalPreferences());
   const [resetRole, setResetRole] = useState<'MERCHANT' | 'DRIVER' | 'DEVELOPER'>('MERCHANT');
 
   // Unified Auth form states
@@ -115,7 +123,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   const [regPhone, setRegPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regNationalId, setRegNationalId] = useState('');
-  const [regVillage, setRegVillage] = useState(FIXED_VILLAGES[0]);
+  const [regVillage, setRegVillage] = useState(() => getGlobalPreferences().customVillageName || 'قريتي المحددة');
   const [regRole, setRegRole] = useState<'CUSTOMER' | 'MERCHANT' | 'DRIVER'>('CUSTOMER');
   const [regStoreName, setRegStoreName] = useState('');
   const [regPassword, setRegPassword] = useState('');
@@ -274,7 +282,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
           }, 1000);
 
         } else if (regRole === 'MERCHANT') {
-          // Register Merchant Account
+          // Register Merchant Account with Admin Gatekeeping
           const res = registerMerchant({
             name: regName.trim(),
             phone: regPhone.trim(),
@@ -286,18 +294,22 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
           });
 
           if (res.success) {
-            setAuthSuccess('تم تسجيل متجرك بنجاح! جاري الانتقال إلى لوحة التاجر...');
+            setAuthSuccess(
+              '🎉 تم استلام طلب تسجيل المتجر بنجاح! حسابك حالياً بحالة (معلق ⏳ بانتظار اعتماد المطور). لحماية أهالي القرية يتم تدقيق الهوية أولاً. سيظهر متجرك في القرية وتُتاح لك لوحة التحكم فور اعتماده.'
+            );
             setTimeout(() => {
               setAuthLoading(false);
-              onEnterMerchant();
-            }, 1000);
+              // Switch to login tab so they see their state
+              setAuthTab('login');
+              setLoginIdentifier(regPhone.trim());
+            }, 3000);
           } else {
             setAuthError(res.message);
             setAuthLoading(false);
           }
 
         } else if (regRole === 'DRIVER') {
-          // Register Driver Account
+          // Register Driver Account with Admin Gatekeeping
           const res = registerDriver({
             name: regName.trim(),
             phone: regPhone.trim(),
@@ -309,11 +321,14 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
           });
 
           if (res.success) {
-            setAuthSuccess('تم تسجيل حسابك كمناديب بنجاح! جاري الانتقال لبوابة السائق...');
+            setAuthSuccess(
+              '🛵 تم استلام طلب تسجيل السائق بنجاح! حسابك حالياً بحالة (معلق ⏳ بانتظار اعتماد المطور). سيتم تفعيل حسابك وإشعارك فور اعتماده لضمان أمان القرية.'
+            );
             setTimeout(() => {
               setAuthLoading(false);
-              onEnterDriver?.();
-            }, 1000);
+              setAuthTab('login');
+              setLoginIdentifier(regPhone.trim());
+            }, 3000);
           } else {
             setAuthError(res.message);
             setAuthLoading(false);
@@ -462,7 +477,25 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
+          {/* Global Hub 🌍 Country, Currency & Language Switcher */}
+          <button
+            type="button"
+            onClick={() => setIsGlobalModalOpen(true)}
+            className={`p-2 px-2.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+              isDarkMode
+                ? 'bg-slate-900 hover:bg-slate-800 border-indigo-500/30 text-indigo-300 hover:border-indigo-400/50'
+                : 'bg-white hover:bg-slate-50 border-indigo-200 text-indigo-700 shadow-sm'
+            }`}
+            title="إعدادات الدولة، العملة، واللغة ومواقيت الأذان العالمية"
+          >
+            <Globe className="w-4 h-4 text-indigo-400 shrink-0" />
+            <span className="hidden sm:inline font-bold">العالمية</span>
+            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1 rounded font-mono">
+              {globalPrefs.currencyCode}
+            </span>
+          </button>
+
           {/* Dark / Light Mode Toggle Button */}
           <button
             type="button"
@@ -511,6 +544,11 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
 
           {/* Adhan & Prayer Times Village Bar */}
           <AdhanTopBarWidget isDarkMode={isDarkMode} isRTL={isRTL} compact={false} className="w-full py-2.5 px-4" />
+
+          {/* Festive Grand Openings & Promoted Ads Banner */}
+          <div className="w-full mt-2">
+            <AdBannerWidget currentVillage="ALL" isDarkMode={isDarkMode} isRTL={isRTL} />
+          </div>
         </div>
 
         {/* Intro with Developer Managed Ad Banners */}
@@ -752,21 +790,34 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
                   </div>
                 </div>
 
-                {/* 4. Dropdown for active villages */}
+                {/* 4. Free Open Village Name & Map Pinning */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">منطقتك أو قريتك بالمنصة:</label>
-                  <div className="relative">
-                    <select
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-emerald-400" />
+                      <span>اسم قريتك أو منطقتك (حر وغير مقيد):</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowMapPicker(true)}
+                      className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      تحديد بالخريطة والـ GPS 🗺️
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
                       value={regVillage}
                       onChange={(e) => setRegVillage(e.target.value)}
-                      className={`w-full text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-emerald-500 border appearance-none ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white focus:border-emerald-500' : 'bg-slate-50 border-slate-200 text-slate-950 focus:border-emerald-500'}`}
-                    >
-                      {FIXED_VILLAGES.map((v) => (
-                        <option key={v} value={v}>
-                          📍 {v}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="✍️ اكتب اسم قريتك أو حيك بحرية (مثلاً: قرية بقعة، وادي ظهر...)"
+                      className={`w-full text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-emerald-500 border ${
+                        isDarkMode
+                          ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-600 focus:border-emerald-500'
+                          : 'bg-slate-50 border-slate-200 text-slate-950 placeholder-slate-400 focus:border-emerald-500'
+                      }`}
+                    />
                   </div>
                 </div>
 
@@ -1032,6 +1083,30 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         onClose={() => setShowResetModal(false)}
         targetRole={resetRole}
         isRTL={isRTL}
+      />
+
+      {/* Global Country, Currency & Language Modal */}
+      <GlobalSettingsModal
+        isOpen={isGlobalModalOpen}
+        onClose={() => {
+          setIsGlobalModalOpen(false);
+          setGlobalPrefs(getGlobalPreferences());
+        }}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Interactive Map & Village Picker Modal */}
+      <VillageMapPickerModal
+        isOpen={showMapPicker}
+        onClose={() => {
+          setShowMapPicker(false);
+          const prefs = getGlobalPreferences();
+          setGlobalPrefs(prefs);
+          if (prefs.customVillageName) {
+            setRegVillage(prefs.customVillageName);
+          }
+        }}
+        isDarkMode={isDarkMode}
       />
     </div>
   );

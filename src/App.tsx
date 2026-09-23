@@ -21,7 +21,7 @@ import { MerchantAdsView } from './components/MerchantAdsView';
 import { OrderGoodsView } from './components/OrderGoodsView';
 import { PrintReceiptModal } from './components/PrintReceiptModal';
 import { QuickItemModal } from './components/QuickItemModal';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsModal, SettingsTabType } from './components/SettingsModal';
 import { OrderGoodsModal } from './components/OrderGoodsModal';
 import { AuthModal } from './components/AuthModal';
 import { RBACAuthModal } from './components/RBACAuthModal';
@@ -39,6 +39,7 @@ import { MerchantManagementScreen } from './components/MerchantManagementScreen'
 import { DriverManagementScreen } from './components/DriverManagementScreen';
 import { MerchantOrdersModal } from './components/MerchantOrdersModal';
 import { MerchantOrderAlertPopup } from './components/MerchantOrderAlertPopup';
+import { SmartDeveloperContactWidget } from './components/SmartDeveloperContactWidget';
 import { useAuth } from './context/AuthContext';
 import { Item, Transaction, DebtRecord, DebtPaymentHistoryItem } from './types';
 import { getPlatformDeveloperSettings } from './services/platformSettingsService';
@@ -90,7 +91,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
   const [itemToEdit, setItemToEdit] = useState<Item | null>(null);
   const [initialBarcodeForNewItem, setInitialBarcodeForNewItem] = useState<string | undefined>(undefined);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'GENERAL' | 'CURRENCY' | 'BACKUPS'>('GENERAL');
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabType>('GENERAL');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showMerchantOrdersModal, setShowMerchantOrdersModal] = useState(false);
@@ -181,7 +182,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
       <Sidebar
         onOpenAddItem={handleOpenAddItem}
         onOpenOrderGoods={() => handleOpenOrderGoods(undefined, 'CASH')}
-        onOpenSettings={(tab?: 'GENERAL' | 'CURRENCY' | 'BACKUPS') => {
+        onOpenSettings={(tab?: SettingsTabType) => {
           setSettingsInitialTab(tab || 'GENERAL');
           setShowSettingsModal(true);
         }}
@@ -209,7 +210,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
           onOpenSettings={
             isCashierMode
               ? () => {}
-              : (tab?: 'GENERAL' | 'CURRENCY' | 'BACKUPS') => {
+              : (tab?: SettingsTabType) => {
                   setSettingsInitialTab(tab || 'GENERAL');
                   setShowSettingsModal(true);
                 }
@@ -633,6 +634,10 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
         <SettingsModal
           initialTab={settingsInitialTab}
           onClose={() => setShowSettingsModal(false)}
+          onOpenShareModal={() => {
+            setShowSettingsModal(false);
+            setShowShareModal(true);
+          }}
         />
       )}
 
@@ -785,6 +790,13 @@ const PortalRouter: React.FC = () => {
   };
 
   const handleSwitchToMerchant = (storeInfo?: { name?: string; village?: string; isPro?: boolean; merchantPin?: string }) => {
+    const activeRole = getActiveSessionRole();
+    if (activeRole !== 'MERCHANT' && activeRole !== 'DEVELOPER' && !currentUser) {
+      setRbacInitialRole('MERCHANT');
+      setShowRBACAuthModal(true);
+      return;
+    }
+
     if (storeInfo?.name) {
       updateSettings({
         storeName: storeInfo.name,
@@ -945,6 +957,7 @@ const PortalRouter: React.FC = () => {
             isRTL={isRTL}
           />
         )}
+        <SmartDeveloperContactWidget portalMode="landing" />
       </>
     );
   }
@@ -977,6 +990,7 @@ const PortalRouter: React.FC = () => {
             isRTL={isRTL}
           />
         )}
+        <SmartDeveloperContactWidget portalMode="driver" />
       </>
     );
   }
@@ -1005,7 +1019,10 @@ const PortalRouter: React.FC = () => {
                 handleSwitchToAdmin();
               }
             }}
-            onClose={() => {}}
+            onClose={() => {
+              clearAllSystemSessions();
+              handleSwitchToLanding();
+            }}
             isDarkMode={true}
           />
         )}
@@ -1043,6 +1060,7 @@ const PortalRouter: React.FC = () => {
             isRTL={isRTL}
           />
         )}
+        <SmartDeveloperContactWidget portalMode="admin" />
       </>
     );
   }
@@ -1104,6 +1122,7 @@ const PortalRouter: React.FC = () => {
           isRTL={isRTL}
         />
       )}
+      <SmartDeveloperContactWidget portalMode={portalMode} />
     </>
   );
 };
