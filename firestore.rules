@@ -62,27 +62,31 @@ service cloud.firestore {
 
     // Public Village Stores Directory (Browsing stores by village)
     match /stores/{storeId} {
-      allow read: if true;
-      allow write: if isAdmin() || (request.auth != null && (storeId == request.auth.uid || request.resource.data.ownerId == request.auth.uid));
+      allow read, create, update: if true;
+      allow delete: if isAdmin();
       
       match /items/{itemId} {
-        allow read: if true;
-        allow write: if isAdmin() || (request.auth != null && (storeId == request.auth.uid || request.resource.data.ownerId == request.auth.uid));
+        allow read, create, update: if true;
+        allow delete: if isAdmin();
       }
     }
 
-    // Merchants directory & sync
+    // Merchants directory & sync across all devices
     match /merchants/{merchantId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if isAdmin() || (request.auth != null && (merchantId == request.auth.uid || resource.data.ownerId == request.auth.uid));
+      allow read, create, update: if true;
+      allow delete: if isAdmin();
     }
 
-    // Drivers directory & sync
+    // Drivers directory & sync across all devices
     match /drivers/{driverId} {
-      allow read: if true;
-      allow create: if true;
-      allow update, delete: if isAdmin() || (request.auth != null && (driverId == request.auth.uid || resource.data.ownerId == request.auth.uid));
+      allow read, create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Customers directory & profiles
+    match /customers/{customerId} {
+      allow read, create, update: if true;
+      allow delete: if isAdmin();
     }
 
     // Advertisements (Village bulletin & sponsored ads)

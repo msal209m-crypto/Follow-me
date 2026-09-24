@@ -4,6 +4,14 @@ import { getPlatformDeveloperSettings, verifyDeveloperCredentials, isAuthorizedD
 import { supabase } from '../lib/supabase';
 import { db } from '../lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
+import {
+  syncSaveStore,
+  syncDeleteStore,
+  syncSaveMerchant,
+  syncDeleteMerchant,
+  syncSaveDriver,
+  syncDeleteDriver,
+} from './crossDeviceSyncService';
 
 const MERCHANTS_STORE_KEY = 'flowapp_rbac_merchants_v1';
 const DRIVERS_STORE_KEY = 'flowapp_rbac_drivers_v1';
@@ -176,7 +184,7 @@ export function registerMerchant(params: {
     photo: params.photo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    isApproved: false, // Strict Admin Gatekeeping: false = pending developer approval
+    isApproved: true, // Auto-activated for public multi-phone accessibility
   };
 
   merchants.unshift(newMerchant);
@@ -184,59 +192,48 @@ export function registerMerchant(params: {
 
   addDeveloperNotification({
     type: 'NEW_MERCHANT',
-    title: 'طلب اعتماد متجر جديد معلق ⏳',
-    message: `سجل التاجر "${newMerchant.name}" (هوية: ${newMerchant.nationalId}) متجر جديد باسم "${newMerchant.storeName}" في ${newMerchant.village}. الحساب معلق بانتظار اعتماد المطور لحماية أهل القرية.`,
+    title: 'انضمام متجر جديد للمنصة 🏪⚡',
+    message: `سجل التاجر "${newMerchant.name}" متجر جديد باسم "${newMerchant.storeName}" في ${newMerchant.village}. الحساب مفعل وظاهر للعامة.`,
     senderName: newMerchant.name,
     senderPhone: newMerchant.phone,
     merchantId: newMerchant.id
   });
 
-  // Sync to stores directory under merchant's unique ID with isApproved = false
+  // Sync to stores directory under merchant's unique ID with isApproved = true
   const stores = getStoresDirectory();
-  if (!stores.some((s) => s.phone === cleanPhone || s.id === merchantId)) {
-    const newStoreRecord: StoreDirectoryRecord = {
-      id: merchantId,
-      merchantId: merchantId,
-      name: newMerchant.storeName,
-      ownerName: newMerchant.name,
-      phone: newMerchant.phone,
-      cityOrVillage: newMerchant.village,
-      itemsCount: 0,
-      isPro: false,
-      planName: 'الباقة المجانية',
-      status: 'ACTIVE',
-      joinedAt: new Date().toISOString().split('T')[0],
-      merchantPin: params.password,
-      rating: 5.0,
-      ratingCount: 0,
-    };
-    (newStoreRecord as any).isApproved = false;
-    saveStoresDirectory([newStoreRecord, ...stores]);
-  }
+  const existingStoreIndex = stores.findIndex((s) => s.phone === cleanPhone || s.id === merchantId);
+  const newStoreRecord: StoreDirectoryRecord = {
+    id: merchantId,
+    merchantId: merchantId,
+    name: newMerchant.storeName,
+    ownerName: newMerchant.name,
+    phone: newMerchant.phone,
+    cityOrVillage: newMerchant.village,
+    itemsCount: 0,
+    isPro: false,
+    planName: 'الباقة المجانية',
+    status: 'ACTIVE',
+    joinedAt: new Date().toISOString().split('T')[0],
+    merchantPin: params.password,
+    rating: 5.0,
+    ratingCount: 0,
+  };
+  (newStoreRecord as any).isApproved = true;
 
-  // Sync to Supabase table 'merchants'
-  try {
-    supabase.from('merchants').insert({
-      id: merchantId,
-      store_name: newMerchant.storeName,
-      village_name: newMerchant.village,
-      name: newMerchant.name,
-      phone: newMerchant.phone,
-      national_id: newMerchant.nationalId,
-      is_approved: false, // Strict Gatekeeping
-      created_at: newMerchant.createdAt,
-    }).then(({ error }: any) => {
-      if (error) {
-        console.warn('Supabase merchants insert note:', error);
-      }
-    });
-  } catch (err) {
-    console.warn('Supabase merchants insert exception:', err);
+  if (existingStoreIndex >= 0) {
+    stores[existingStoreIndex] = newStoreRecord;
+  } else {
+    stores.unshift(newStoreRecord);
   }
+  saveStoresDirectory(stores);
+
+  // Sync cross-device to Firestore and Supabase
+  syncSaveMerchant(newMerchant).catch(console.warn);
+  syncSaveStore(newStoreRecord).catch(console.warn);
 
   return { 
     success: true, 
-    message: 'تم استلام طلب تسجيل التاجر بنجاح! حسابك حالياً بحالة (معلق ⏳) بانتظار اعتماد المطور لحماية أهل القرية من الحسابات الوهمية. سيظهر متجرك في القرية فور اعتماده من الإدارة.', 
+    message: 'تم تسجيل متجرك بنجاح وتفعيله! متجرك الآن ظاهر لجميع أهالي القرية في التطبيق ويمكنهم الشراء فوراً.', 
     merchant: newMerchant 
   };
 }
@@ -385,7 +382,7 @@ export function registerDriver(params: {
     vehiclePlate: params.vehiclePlate,
     zone: params.zone || 'القرية',
     createdAt: new Date().toISOString(),
-    isApproved: false, // Strict Admin Gatekeeping: false = pending developer approval
+    isApproved: true, // Auto-activated for public accessibility
   };
 
   drivers.unshift(newDriver);
@@ -393,34 +390,21 @@ export function registerDriver(params: {
 
   addDeveloperNotification({
     type: 'NEW_MERCHANT',
-    title: 'طلب اعتماد مندوب توصيل جديد 🛵⏳',
-    message: `سجل المندوب "${newDriver.name}" (هوية: ${newDriver.nationalId}) لتوصيل الطلبات في "${newDriver.zone}". الحساب معلق بانتظار اعتماد المطور.`,
+    title: 'انضمام مندوب توصيل جديد 🛵⚡',
+    message: `سجل المندوب "${newDriver.name}" لتوصيل الطلبات في "${newDriver.zone}". حسابه نشط وجاهز للتوصيل.`,
     senderName: newDriver.name,
     senderPhone: newDriver.phone,
   });
 
-  // Sync to Supabase drivers table
-  try {
-    supabase.from('drivers').insert({
-      id: newDriver.id,
-      name: newDriver.name,
-      phone: newDriver.phone,
-      national_id: newDriver.nationalId,
-      vehicle_type: newDriver.vehicleType,
-      vehicle_plate: newDriver.vehiclePlate || null,
-      zone: newDriver.zone,
-      is_approved: false, // Strict Gatekeeping
-      created_at: newDriver.createdAt,
-    }).then(({ error }: any) => {
-      if (error) console.warn('Supabase driver insert note:', error);
-    });
-  } catch (err) {
-    console.warn('Supabase driver insert exception:', err);
-  }
+  // Sync to Firestore & Supabase via crossDeviceSyncService
+  syncSaveDriver({
+    ...newDriver,
+    isOnline: true
+  }).catch(console.warn);
 
   return { 
     success: true, 
-    message: 'تم استلام طلب تسجيل السائق بنجاح! حسابك حالياً (معلق ⏳) بانتظار موافقة واعتماد المطور لضمان سلامة التوصيل لأهالي القرية.', 
+    message: 'تم تسجيلك وتفعيل حسابك كمندوب توصيل بنجاح! حسابك نشط وجاهز لاستقبال طلبات القرية فوراً.', 
     driver: newDriver 
   };
 }
@@ -482,6 +466,7 @@ export function approveMerchantAccount(merchantId: string): void {
     merchants[idx].isApproved = true;
     merchants[idx].updatedAt = new Date().toISOString();
     saveMerchants(merchants);
+    syncSaveMerchant(merchants[idx]).catch(console.warn);
   }
   const stores = getStoresDirectory();
   const storeIdx = stores.findIndex((s) => s.id === merchantId || (s as any).merchantId === merchantId);
@@ -489,6 +474,7 @@ export function approveMerchantAccount(merchantId: string): void {
     (stores[storeIdx] as any).isApproved = true;
     stores[storeIdx].status = 'ACTIVE';
     saveStoresDirectory(stores);
+    syncSaveStore(stores[storeIdx]).catch(console.warn);
   }
   try {
     supabase.from('merchants').update({ is_approved: true }).eq('id', merchantId);
@@ -503,6 +489,7 @@ export function rejectMerchantAccount(merchantId: string): void {
     merchants[idx].isApproved = false;
     merchants[idx].updatedAt = new Date().toISOString();
     saveMerchants(merchants);
+    syncSaveMerchant(merchants[idx]).catch(console.warn);
   }
   const stores = getStoresDirectory();
   const storeIdx = stores.findIndex((s) => s.id === merchantId || (s as any).merchantId === merchantId);
@@ -510,6 +497,7 @@ export function rejectMerchantAccount(merchantId: string): void {
     (stores[storeIdx] as any).isApproved = false;
     stores[storeIdx].status = 'SUSPENDED';
     saveStoresDirectory(stores);
+    syncSaveStore(stores[storeIdx]).catch(console.warn);
   }
   try {
     supabase.from('merchants').update({ is_approved: false }).eq('id', merchantId);
@@ -523,6 +511,7 @@ export function approveDriverAccount(driverId: string): void {
   if (idx !== -1) {
     drivers[idx].isApproved = true;
     saveDrivers(drivers);
+    syncSaveDriver(drivers[idx]).catch(console.warn);
   }
   try {
     supabase.from('drivers').update({ is_approved: true }).eq('id', driverId);
@@ -536,6 +525,7 @@ export function rejectDriverAccount(driverId: string): void {
   if (idx !== -1) {
     drivers[idx].isApproved = false;
     saveDrivers(drivers);
+    syncSaveDriver(drivers[idx]).catch(console.warn);
   }
   try {
     supabase.from('drivers').update({ is_approved: false }).eq('id', driverId);
@@ -983,6 +973,9 @@ export function deleteMerchantAccount(id: string): void {
     const filtered = list.filter((m) => m.id !== id);
     localStorage.setItem('qaryati_merchants', JSON.stringify(filtered));
     window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
+    // Cross-device sync deletion from Firestore and Supabase
+    syncDeleteMerchant(id).catch(console.warn);
+    syncDeleteStore(id).catch(console.warn);
   } catch (e) {
     console.warn('Failed to delete merchant:', e);
   }
@@ -994,6 +987,8 @@ export function deleteDriverAccount(id: string): void {
     const filtered = list.filter((d) => d.id !== id);
     localStorage.setItem('qaryati_drivers', JSON.stringify(filtered));
     window.dispatchEvent(new CustomEvent('qaryati:drivers-updated'));
+    // Cross-device sync deletion from Firestore and Supabase
+    syncDeleteDriver(id).catch(console.warn);
   } catch (e) {
     console.warn('Failed to delete driver:', e);
   }
@@ -1005,8 +1000,10 @@ export function toggleMerchantStatus(id: string, isApproved: boolean): void {
     const item = list.find((m) => m.id === id);
     if (item) {
       item.isApproved = isApproved;
+      item.updatedAt = new Date().toISOString();
       localStorage.setItem('qaryati_merchants', JSON.stringify(list));
       window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
+      syncSaveMerchant(item).catch(console.warn);
     }
   } catch (e) {
     console.warn('Failed to toggle merchant status:', e);
@@ -1021,6 +1018,7 @@ export function toggleDriverStatus(id: string, isApproved: boolean): void {
       item.isApproved = isApproved;
       localStorage.setItem('qaryati_drivers', JSON.stringify(list));
       window.dispatchEvent(new CustomEvent('qaryati:drivers-updated'));
+      syncSaveDriver(item).catch(console.warn);
     }
   } catch (e) {
     console.warn('Failed to toggle driver status:', e);

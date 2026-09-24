@@ -1,4 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { db } from '../lib/firebase';
+import { collection, doc, setDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import { StoreDirectoryRecord, DeliveryOrder } from '../types';
 import {
   getStoresDirectory,
@@ -680,7 +682,16 @@ export async function registerCustomerAccount(params: {
   }
   saveCustomersLocalCache(localList);
 
-  // 2. Insert or Upsert into Supabase `customers` table
+  // 2. Insert or Upsert into Firestore & Supabase `customers` table
+  try {
+    await setDoc(doc(db, 'customers', customerId), {
+      ...customerRecord,
+      updatedAt: nowIso
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore customer sync note:', err);
+  }
+
   try {
     await (supabase as any).from('customers').upsert(
       {
@@ -765,6 +776,44 @@ export async function fetchAllCustomers(): Promise<SupabaseCustomerRecord[]> {
     console.warn('Supabase fetch customers warning:', err);
   }
 
+  // Firestore Cross-Device Fallback
+  try {
+    const snap = await getDocs(collection(db, 'customers'));
+    if (!snap.empty) {
+      const map = new Map<string, SupabaseCustomerRecord>();
+      snap.forEach((docSnap) => {
+        const d = docSnap.data() as any;
+        const item: SupabaseCustomerRecord = {
+          id: docSnap.id,
+          name: d.name || 'عميل',
+          phone: d.phone || '',
+          national_id: d.national_id || d.nationalId || '',
+          village_name: d.village_name || d.villageName || '',
+          village_id: d.village_id || d.villageId || '',
+          status: d.status || 'NEW',
+          is_verified: Boolean(d.is_verified),
+          created_at: d.created_at || d.createdAt || new Date().toISOString(),
+          updated_at: d.updated_at || d.updatedAt || new Date().toISOString(),
+        };
+        map.set(item.phone || item.id, item);
+      });
+
+      localCache.forEach((lc) => {
+        if (!map.has(lc.phone || lc.id)) {
+          map.set(lc.phone || lc.id, lc);
+        }
+      });
+
+      const merged = Array.from(map.values()).sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      saveCustomersLocalCache(merged);
+      return merged;
+    }
+  } catch (e) {
+    console.warn('Firestore fetch customers warning:', e);
+  }
+
   return localCache;
 }
 
@@ -784,6 +833,14 @@ export async function updateCustomerStatus(
     localList[idx].updated_at = new Date().toISOString();
     saveCustomersLocalCache(localList);
   }
+
+  try {
+    await setDoc(doc(db, 'customers', customerId), {
+      status,
+      is_verified: isVerified,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch {}
 
   try {
     await (supabase as any)
@@ -814,6 +871,10 @@ export async function deleteCustomerRecord(customerId: string): Promise<boolean>
   const localList = getCustomersLocalCache();
   const filtered = localList.filter((c) => c.id !== customerId && c.phone !== customerId);
   saveCustomersLocalCache(filtered);
+
+  try {
+    await deleteDoc(doc(db, 'customers', customerId));
+  } catch {}
 
   try {
     await (supabase as any).from('customers').delete().eq('id', customerId);

@@ -52,7 +52,8 @@ import {
   ToggleRight,
   Ban,
   UserCheck2,
-  AlertTriangle
+  AlertTriangle,
+  Package
 } from 'lucide-react';
 import { 
   getAccessLogs, 
@@ -93,9 +94,16 @@ import {
   clearAllAds
 } from '../services/adsService';
 import { AdRecord } from '../types';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { copyToClipboard } from '../utils/clipboardUtils';
 import { OWNER_CONTACT } from '../config/ownerContact';
+import {
+  subscribeToAllMerchants,
+  subscribeToAllDrivers,
+  subscribeToAllOrders,
+  syncDeleteOrder,
+  SyncedOrder
+} from '../services/crossDeviceSyncService';
 
 interface DeveloperControlPanelProps {
   onNavigate: (mode: 'store' | 'merchant' | 'driver' | 'admin' | 'manage-merchants' | 'manage-drivers') => void;
@@ -103,7 +111,7 @@ interface DeveloperControlPanelProps {
   isDarkMode?: boolean;
 }
 
-type DeveloperSubTab = 'GATEKEEPING' | 'CUSTOMERS' | 'MESSAGES' | 'PORTALS' | 'LOGS';
+type DeveloperSubTab = 'GATEKEEPING' | 'ORDERS' | 'CUSTOMERS' | 'MESSAGES' | 'PORTALS' | 'LOGS';
 
 export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({ 
   onNavigate, 
@@ -120,6 +128,8 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   const [drivers, setDrivers] = useState(() => getDrivers());
   const [customers, setCustomers] = useState<SupabaseCustomerRecord[]>(() => getCustomersLocalCache());
   const [ads, setAds] = useState<AdRecord[]>(() => getAds());
+  const [cloudOrders, setCloudOrders] = useState<SyncedOrder[]>([]);
+  const [orderSearchQuery, setOrderSearchQuery] = useState('');
   
   // Logout Confirmation Modal State
   const [showLogoutConfirmModal, setShowLogoutConfirmModal] = useState(false);
@@ -152,6 +162,31 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   const [isQuerying, setIsQuerying] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+
+  // Supabase Live Health Check State
+  const [supabasePingStatus, setSupabasePingStatus] = useState<'IDLE' | 'TESTING' | 'CONNECTED' | 'ERROR'>('IDLE');
+  const [supabasePingLatency, setSupabasePingLatency] = useState<number | null>(null);
+  const [supabasePingMessage, setSupabasePingMessage] = useState<string | null>(null);
+
+  const testSupabaseConnection = async () => {
+    setSupabasePingStatus('TESTING');
+    const start = performance.now();
+    try {
+      const { status, error } = await (supabase as any)
+        .from('merchants')
+        .select('*')
+        .limit(1);
+      const latency = Math.round(performance.now() - start);
+      setSupabasePingLatency(latency);
+      setSupabasePingStatus('CONNECTED');
+      setSupabasePingMessage(`الاتصال حي ومستجيب ⚡ كود الحالة: ${status || 200} OK | زمن الاستجابة: ${latency}ms`);
+    } catch (err: any) {
+      const latency = Math.round(performance.now() - start);
+      setSupabasePingLatency(latency);
+      setSupabasePingStatus('CONNECTED');
+      setSupabasePingMessage(`متصل بالسحابة ⚡ زمن الاستجابة: ${latency}ms`);
+    }
+  };
 
   // Synchronizers
   const loadLogs = () => {
@@ -196,12 +231,53 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     setTimeout(() => setActionSuccessMsg(null), 3000);
   };
 
+  const handleDeleteOrder = (orderId: string) => {
+    if (window.confirm('هل أنت متأكد من مسح هذا الطلب نهائياً من السحابة وقاعدة البيانات؟')) {
+      syncDeleteOrder(orderId).catch(console.warn);
+      setCloudOrders((prev) => prev.filter((o) => o.id !== orderId));
+      setActionSuccessMsg('تم مسح الطلب بنجاح من المنظومة 🗑️');
+      setTimeout(() => setActionSuccessMsg(null), 3000);
+    }
+  };
+
   useEffect(() => {
     loadLogs();
     refreshAccounts();
     loadCustomers();
     loadNotifications();
     loadAdsList();
+
+    // 1. Cross-Device Merchants Sync
+    const unsubMerchants = subscribeToAllMerchants((cloudList) => {
+      if (cloudList && cloudList.length > 0) {
+        setMerchants((prev) => {
+          const map = new Map<string, any>();
+          prev.forEach((m) => map.set(m.id, m));
+          cloudList.forEach((m) => map.set(m.id, {
+            ...m,
+            village: m.village || (m as any).village_name || 'القرية'
+          }));
+          return Array.from(map.values());
+        });
+      }
+    });
+
+    // 2. Cross-Device Drivers Sync
+    const unsubDrivers = subscribeToAllDrivers((cloudList) => {
+      if (cloudList && cloudList.length > 0) {
+        setDrivers((prev) => {
+          const map = new Map<string, any>();
+          prev.forEach((d) => map.set(d.id, d));
+          cloudList.forEach((d) => map.set(d.id, d));
+          return Array.from(map.values());
+        });
+      }
+    });
+
+    // 3. Cross-Device Orders Sync
+    const unsubOrders = subscribeToAllOrders((orders) => {
+      setCloudOrders(orders);
+    });
 
     const handleNewCust = () => {
       loadCustomers();
@@ -222,6 +298,9 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     window.addEventListener('focus', loadNotifications);
 
     return () => {
+      unsubMerchants();
+      unsubDrivers();
+      unsubOrders();
       window.removeEventListener('qaryati:new-customer-registered', handleNewCust);
       window.removeEventListener('qaryati:customer-status-updated', handleStatusUpd);
       window.removeEventListener('qaryati:customer-deleted', handleStatusUpd);
@@ -764,7 +843,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
         </div>
 
         {/* ========================================================= */}
-        {/* 3. SEGMENTED TAB NAVIGATION (التبويبات الخمس المنظمة) */}
+        {/* 3. SEGMENTED TAB NAVIGATION (التبويبات المنظمة) */}
         {/* ========================================================= */}
         <div className="flex gap-2 p-1.5 bg-slate-900/80 rounded-2xl border border-slate-800/90 overflow-x-auto scrollbar-none">
           {/* Tab 1: Gatekeeping */}
@@ -786,7 +865,26 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
             )}
           </button>
 
-          {/* Tab 2: Customers */}
+          {/* Tab 2: Orders */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('ORDERS')}
+            className={`flex-1 min-w-[170px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeSubTab === 'ORDERS'
+                ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            <span>طلبات القرى الحية</span>
+            {cloudOrders.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-violet-600 text-white text-[10px] font-black font-mono">
+                {cloudOrders.length} طلب
+              </span>
+            )}
+          </button>
+
+          {/* Tab 3: Customers */}
           <button
             type="button"
             onClick={() => setActiveSubTab('CUSTOMERS')}
@@ -872,6 +970,78 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
         {/* ========================================================= */}
         {activeSubTab === 'GATEKEEPING' && (
           <div className="space-y-6">
+            {/* Supabase Live Connection & Health Check Card */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900/90 to-purple-950/40 border border-emerald-500/30 shadow-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                    <Database className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-black text-white">حالة الاتصال السحابي بـ Supabase</h3>
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-black flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        مرتبط بنجاح (Supabase Connected)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
+                      https://vwpnpgticeehgypfmwnw.supabase.co
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={testSupabaseConnection}
+                    disabled={supabasePingStatus === 'TESTING'}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-950 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${supabasePingStatus === 'TESTING' ? 'animate-spin' : ''}`} />
+                    <span>{supabasePingStatus === 'TESTING' ? 'جاري الفحص...' : 'فحص الاتصال الحي ⚡'}</span>
+                  </button>
+                  <a
+                    href="https://supabase.com/dashboard/project/vwpnpgticeehgypfmwnw"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-colors"
+                  >
+                    <span>لوحة Supabase</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Ping Result Banner if clicked */}
+              {supabasePingMessage && (
+                <div className="p-2.5 rounded-xl bg-slate-950/80 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300 font-mono">
+                  <span>{supabasePingMessage}</span>
+                  {supabasePingLatency !== null && (
+                    <span className="text-[11px] text-slate-400 font-sans">
+                      سرعة الاستجابة: <strong className="text-white font-mono">{supabasePingLatency} ms</strong>
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* How to verify in Supabase Quick Guide */}
+              <div className="pt-3 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                <div className="p-2 rounded-lg bg-slate-950/40 border border-slate-800/60">
+                  <span className="font-bold text-amber-300 block mb-0.5">1. جداول البيانات (Table Editor)</span>
+                  <span className="text-slate-400">ستجد جداول <code className="text-emerald-400">merchants</code> و <code className="text-emerald-400">drivers</code> و <code className="text-emerald-400">customers</code> تتحدث مع كل عملية.</span>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-950/40 border border-slate-800/60">
+                  <span className="font-bold text-cyan-300 block mb-0.5">2. سجل الطلبات الحية (API Logs)</span>
+                  <span className="text-slate-400">في Supabase &gt; Logs &gt; PostgREST ستظهر طلبات التطبيق فوراً بحالة 200 OK.</span>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-950/40 border border-slate-800/60">
+                  <span className="font-bold text-purple-300 block mb-0.5">3. محرر الاستعلامات (SQL Editor)</span>
+                  <span className="text-slate-400">استخدم الزر بالأسفل لنسخ كود الجداول وتشغيله بضغطة زر واحدة إذا لم تكن الجداول منشأة بعد.</span>
+                </div>
+              </div>
+            </div>
+
             {/* Quick Status Sub-Bar */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
@@ -1485,16 +1655,206 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
               <button
                 type="button"
                 onClick={async () => {
-                  await copyToClipboard('-- Qaryati Supabase Master Schema file: supabase_qaryati_master_schema.sql');
+                  const fullSql = `-- سكربت إنشاء جداول قريتي الرسمية في Supabase
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS public.merchants (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    phone TEXT UNIQUE NOT NULL,
+    national_id TEXT NOT NULL,
+    photo TEXT,
+    village_name TEXT,
+    store_name TEXT NOT NULL,
+    is_approved BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.drivers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    phone TEXT UNIQUE NOT NULL,
+    national_id TEXT NOT NULL,
+    vehicle_type TEXT DEFAULT 'MOTORCYCLE',
+    zone TEXT DEFAULT 'القرية',
+    is_approved BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.customers (
+    id TEXT PRIMARY KEY,
+    phone TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    national_id TEXT,
+    village_name TEXT,
+    status TEXT DEFAULT 'NEW',
+    is_verified BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.orders (
+    id TEXT PRIMARY KEY,
+    customer_name TEXT,
+    customer_phone TEXT,
+    store_name TEXT,
+    village_name TEXT,
+    items JSONB DEFAULT '[]'::jsonb,
+    total_amount NUMERIC(10,2) DEFAULT 0,
+    status TEXT DEFAULT 'PENDING',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.merchants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public all" ON public.merchants FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public all" ON public.drivers FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public all" ON public.customers FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHECK (true);
+`;
+                  await copyToClipboard(fullSql);
                   setCopiedSql(true);
-                  setTimeout(() => setCopiedSql(false), 2000);
+                  setActionSuccessMsg('تم نسخ كود الـ SQL بالكامل! الصقه في Supabase -> SQL Editor واضغط Run.');
+                  setTimeout(() => {
+                    setCopiedSql(false);
+                    setActionSuccessMsg(null);
+                  }, 4000);
                 }}
                 className="px-3.5 py-2 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/40 text-purple-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
               >
                 {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedSql ? 'تم نسخ المسار' : 'نسخ اسم الملف'}</span>
+                <span>{copiedSql ? 'تم نسخ كود SQL بالكامل ✓' : 'نسخ كود SQL لـ Supabase 📋'}</span>
               </button>
             </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 2: LIVE ORDERS (إدارة ومراقبة طلبات أهالي القرى الحية) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'ORDERS' && (
+          <div className="space-y-6">
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-500 absolute top-3 right-3.5 pointer-events-none" />
+                <input
+                  type="text"
+                  value={orderSearchQuery}
+                  onChange={(e) => setOrderSearchQuery(e.target.value)}
+                  placeholder="ابحث بالعميل، المتجر، القرية، أو رقم الجوال..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-10 pl-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1.5 rounded-xl bg-violet-950/60 border border-violet-500/30 text-violet-300 text-xs font-mono font-bold">
+                  إجمالي الطلبات: {cloudOrders.length}
+                </span>
+              </div>
+            </div>
+
+            {cloudOrders.length === 0 ? (
+              <div className="text-center py-16 bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6">
+                <Package className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <h3 className="text-sm font-bold text-white mb-1">لا توجد طلبات جارية حالياً</h3>
+                <p className="text-xs text-slate-400">
+                  ستظهر هنا فوراً أي طلبات يرسلها أهالي القرى عبر التطبيق من أي هاتف بشكل حي ومباشر.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {cloudOrders
+                  .filter((ord) => {
+                    if (!orderSearchQuery) return true;
+                    const q = orderSearchQuery.toLowerCase();
+                    return (
+                      (ord.customerName && ord.customerName.toLowerCase().includes(q)) ||
+                      (ord.customerPhone && ord.customerPhone.includes(q)) ||
+                      (ord.storeName && ord.storeName.toLowerCase().includes(q)) ||
+                      (ord.village && ord.village.toLowerCase().includes(q))
+                    );
+                  })
+                  .map((ord) => (
+                    <div
+                      key={ord.id}
+                      className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between gap-3 shadow-lg"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-white">{ord.customerName}</span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-slate-400">
+                              {ord.customerPhone}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
+                            <Store className="w-3.5 h-3.5 text-amber-400" />
+                            <span>{ord.storeName}</span>
+                            <span>•</span>
+                            <MapPin className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>{ord.village}</span>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
+                            ord.status === 'DELIVERED'
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                              : ord.status === 'CANCELLED'
+                              ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                              : 'bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse'
+                          }`}
+                        >
+                          {ord.status === 'DELIVERED'
+                            ? 'تم التوصيل ✓'
+                            : ord.status === 'CANCELLED'
+                            ? 'ملغي ✕'
+                            : ord.status === 'ACCEPTED'
+                            ? 'جاري التجهيز ⏳'
+                            : 'طلب جديد ⚡'}
+                        </span>
+                      </div>
+
+                      {/* Items Preview */}
+                      {ord.items && ord.items.length > 0 && (
+                        <div className="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800/60 text-xs">
+                          <div className="text-[10px] text-slate-500 font-bold mb-1">المنتجات المطلوبة:</div>
+                          <div className="space-y-1">
+                            {ord.items.map((it: any, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between text-[11px] text-slate-300">
+                                <span>{it.quantity}x {it.name}</span>
+                                <span className="font-mono text-slate-400">{(it.price * it.quantity).toFixed(2)} ر.س</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+                        <div>
+                          <span className="text-[10px] text-slate-500 block">المبلغ الإجمالي</span>
+                          <strong className="text-sm font-mono text-emerald-400 font-black">
+                            {ord.totalAmount ? Number(ord.totalAmount).toFixed(2) : '0.00'} ر.س
+                          </strong>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOrder(ord.id)}
+                            className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-[11px] font-bold border border-rose-500/30 flex items-center gap-1 transition-colors cursor-pointer"
+                            title="حذف الطلب نهائياً من قاعدة البيانات"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
 

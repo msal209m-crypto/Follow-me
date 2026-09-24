@@ -76,6 +76,7 @@ import {
   FIXED_VILLAGES_LIST,
   registerCustomerAccount
 } from '../services/supabaseQaryatiService';
+import { subscribeToVillageStores } from '../services/crossDeviceSyncService';
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
 import { StorePrayerClosedBanner } from './StorePrayerClosedBanner';
 import { AdBannerWidget } from './AdBannerWidget';
@@ -189,7 +190,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     }
   }, [activeCustomer]);
 
-  // Village & Store Selection - Strictly Gatekept
+  // Village & Store Selection - Live Cloud Sync across all devices
   const [allStores, setAllStores] = useState<StoreDirectoryRecord[]>(() =>
     getStoresDirectory().filter((s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false)
   );
@@ -204,6 +205,23 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     window.addEventListener('qaryati:order-rated', handleStoresRefresh);
     window.addEventListener('qaryati:merchant-approval-changed', handleStoresRefresh);
 
+    // Real-time Cloud listener across all phones & devices
+    const unsubCloudStores = subscribeToVillageStores(
+      selectedVillage === 'ALL' ? '' : selectedVillage,
+      (cloudStores) => {
+        if (cloudStores && cloudStores.length > 0) {
+          setAllStores((prev) => {
+            const map = new Map<string, StoreDirectoryRecord>();
+            prev.forEach((st) => map.set(st.id, st));
+            cloudStores.forEach((st) => map.set(st.id, st));
+            return Array.from(map.values()).filter(
+              (s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false
+            );
+          });
+        }
+      }
+    );
+
     // Supabase Realtime master sync
     const unsubRealtime = initSupabaseRealtime({
       onMerchantApprovalChanged: () => {
@@ -215,9 +233,10 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       window.removeEventListener('qaryati:stores-updated', handleStoresRefresh);
       window.removeEventListener('qaryati:order-rated', handleStoresRefresh);
       window.removeEventListener('qaryati:merchant-approval-changed', handleStoresRefresh);
+      if (unsubCloudStores) unsubCloudStores();
       if (unsubRealtime) unsubRealtime();
     };
-  }, []);
+  }, [selectedVillage]);
 
   // Sync Supabase merchants dynamically when a village is chosen (Village-First Query)
   useEffect(() => {

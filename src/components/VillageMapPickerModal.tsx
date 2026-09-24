@@ -6,6 +6,8 @@ import {
   Check,
   X,
   Clock,
+  Layers,
+  Sparkles,
 } from 'lucide-react';
 import L from 'leaflet';
 import {
@@ -19,6 +21,10 @@ import {
   getGlobalPreferences,
   saveGlobalPreferences
 } from '../services/globalizationService';
+import {
+  googleReverseGeocode,
+  googleSearchAddress
+} from '../services/googleMapsService';
 
 export interface VillageMapPickerModalProps {
   isOpen: boolean;
@@ -48,9 +54,11 @@ export const VillageMapPickerModal: React.FC<VillageMapPickerModalProps> = ({
   const [isLocatingGPS, setIsLocatingGPS] = useState(false);
   const [reverseGeocodedName, setReverseGeocodedName] = useState<string | null>(null);
   const [previewPrayerData, setPreviewPrayerData] = useState<PrayerTimesDay | null>(null);
+  const [mapType, setMapType] = useState<'roadmap' | 'satellite'>('roadmap');
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
 
   // Recalculate live preview prayer times when coordinates change
@@ -63,11 +71,21 @@ export const VillageMapPickerModal: React.FC<VillageMapPickerModalProps> = ({
     setPreviewPrayerData(calculateVillagePrayerTimes(new Date(), previewSettings));
   }, [coords, villageName, adhanSettings]);
 
-  // Reverse geocode when coordinates change
+  // Google Maps Reverse geocode when coordinates change
   useEffect(() => {
     let isMounted = true;
     const fetchLocationName = async () => {
       try {
+        const googleName = await googleReverseGeocode(coords.lat, coords.lng);
+        if (isMounted && googleName) {
+          setReverseGeocodedName(googleName);
+          if (!villageName.trim()) {
+            setVillageName(googleName);
+          }
+          return;
+        }
+
+        // Fallback
         const res = await fetch(
           `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lng}&accept-language=ar,en`
         );
@@ -96,45 +114,70 @@ export const VillageMapPickerModal: React.FC<VillageMapPickerModalProps> = ({
       }
     };
 
-    const timer = setTimeout(fetchLocationName, 600);
+    const timer = setTimeout(fetchLocationName, 400);
     return () => {
       isMounted = false;
       clearTimeout(timer);
     };
   }, [coords]);
 
-  // Initialize Leaflet Map
+  // Dynamic Google Maps Tile Switcher
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    if (tileLayerRef.current) {
+      tileLayerRef.current.remove();
+    }
+
+    const tileUrl =
+      mapType === 'satellite'
+        ? 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&hl=ar'
+        : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=ar';
+
+    const newTileLayer = L.tileLayer(tileUrl, {
+      attribution: '&copy; Google Maps Platform',
+      maxZoom: 20,
+    }).addTo(mapInstanceRef.current);
+
+    tileLayerRef.current = newTileLayer;
+  }, [mapType]);
+
+  // Initialize Google Maps Tiles Layer
   useEffect(() => {
     if (!isOpen || !mapContainerRef.current) return;
 
-    // Fix leaflet default icon issue
     const customIcon = L.divIcon({
       className: 'custom-map-pin',
       html: `
-        <div style="transform: translate(-50%, -100%);" class="flex flex-col items-center">
-          <div style="background: linear-gradient(135deg, #10b981, #047857); width: 38px; height: 38px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 2.5px solid #ffffff; display: flex; align-items: center; justify-content: center;">
-            <span style="transform: rotate(45deg); font-size: 16px;">🕌</span>
+        <div style="transform: translate(-50%, -100%);" class="flex flex-col items-center animate-bounce">
+          <div style="background: linear-gradient(135deg, #10b981, #047857); width: 40px; height: 40px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 2.5px solid #ffffff; display: flex; align-items: center; justify-content: center;">
+            <span style="transform: rotate(45deg); font-size: 18px;">📍</span>
           </div>
           <div style="width: 10px; height: 10px; background: rgba(0,0,0,0.4); border-radius: 50%; filter: blur(2px); margin-top: 2px;"></div>
         </div>
       `,
-      iconSize: [38, 48],
-      iconAnchor: [19, 48],
+      iconSize: [40, 50],
+      iconAnchor: [20, 50],
     });
 
     if (!mapInstanceRef.current) {
       const map = L.map(mapContainerRef.current, {
         center: [coords.lat, coords.lng],
-        zoom: 12,
+        zoom: 13,
         zoomControl: true,
       });
 
-      // CartoDB Voyager Tile Layer (Clean, crisp, multilingual)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-        maxZoom: 19,
-        subdomains: 'abcd',
+      const tileUrl =
+        mapType === 'satellite'
+          ? 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&hl=ar'
+          : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=ar';
+
+      const tileLayer = L.tileLayer(tileUrl, {
+        attribution: '&copy; Google Maps Platform',
+        maxZoom: 20,
       }).addTo(map);
+
+      tileLayerRef.current = tileLayer;
 
       const marker = L.marker([coords.lat, coords.lng], {
         icon: customIcon,
@@ -163,10 +206,10 @@ export const VillageMapPickerModal: React.FC<VillageMapPickerModalProps> = ({
     }
 
     return () => {
-      // Clean up map when modal unmounts
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+        tileLayerRef.current = null;
         markerRef.current = null;
       }
     };
@@ -361,13 +404,46 @@ export const VillageMapPickerModal: React.FC<VillageMapPickerModalProps> = ({
             </button>
           </div>
 
-          {/* Interactive Leaflet Map View */}
+          {/* Interactive Google Maps View */}
           <div className="relative w-full h-64 sm:h-72 rounded-2xl overflow-hidden border-2 border-emerald-500/40 shadow-lg">
             <div ref={mapContainerRef} className="w-full h-full z-0" />
             
-            {/* Map overlay hint */}
-            <div className="absolute top-2 right-2 z-10 px-3 py-1.5 rounded-xl bg-slate-950/85 border border-slate-700 text-[11px] text-emerald-300 font-bold shadow-md backdrop-blur-sm pointer-events-none flex items-center gap-1.5">
-              <span>🖱️ انقر أو اسحب الدبوس لتحديد قريتك بدقة</span>
+            {/* Google Maps Layer Switcher & Branding Overlay */}
+            <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5">
+              <div className="px-2.5 py-1.5 rounded-xl bg-slate-950/90 border border-emerald-500/40 text-[11px] text-emerald-300 font-bold shadow-md backdrop-blur-md flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Google Maps Platform 🗺️</span>
+              </div>
+
+              <div className="flex bg-slate-900/90 border border-slate-700 rounded-xl p-0.5 shadow-md backdrop-blur-md text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setMapType('roadmap')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    mapType === 'roadmap'
+                      ? 'bg-emerald-600 text-white font-black'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  قياسي
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMapType('satellite')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    mapType === 'satellite'
+                      ? 'bg-emerald-600 text-white font-black'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  أقمار صناعية
+                </button>
+              </div>
+            </div>
+
+            {/* Hint */}
+            <div className="absolute bottom-2 right-2 z-10 px-2.5 py-1 rounded-lg bg-slate-950/80 text-[10px] text-slate-300 font-medium border border-slate-800 backdrop-blur-sm pointer-events-none">
+              🖱️ انقر أو اسحب الدبوس لتحديد قريتك بدقة
             </div>
 
             {/* Coordinates Badge */}

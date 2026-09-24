@@ -94,8 +94,10 @@ export const LiveDriverTrackerModal: React.FC<LiveDriverTrackerModalProps> = ({
         zoomControl: true,
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      // Google Maps Roadmap Layer
+      L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=ar', {
+        attribution: '&copy; Google Maps Platform',
+        maxZoom: 20,
       }).addTo(map);
 
       // Add House Marker

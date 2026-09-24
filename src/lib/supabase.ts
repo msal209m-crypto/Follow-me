@@ -1,7 +1,14 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+// Resolve configured Supabase URL & Key from environment or active project credentials
+const savedUrl = typeof window !== 'undefined' ? localStorage.getItem('custom_supabase_url') : null;
+const savedKey = typeof window !== 'undefined' ? localStorage.getItem('custom_supabase_key') : null;
+
+const defaultUrl = 'https://vwpnpgticeehgypfmwnw.supabase.co';
+const defaultKey = 'sb_publishable_1dW3yCQhJnbLoBvMt5GghQ_UapielpI';
+
+const supabaseUrl = (savedUrl || import.meta.env.VITE_SUPABASE_URL || defaultUrl).trim();
+const supabaseAnonKey = (savedKey || import.meta.env.VITE_SUPABASE_ANON_KEY || defaultKey).trim();
 
 // Verify if URL is a valid HTTP/HTTPS URL
 function isValidUrl(urlString: string): boolean {
