@@ -269,22 +269,27 @@ export const InventoryAuditReportView: React.FC = () => {
         };
       });
 
-      exportInventoryAuditToPDF({
-        storeName,
-        ownerName,
-        phone: storePhone,
-        taxNumber,
-        currency: currencySymbol,
-        periodLabel: periodLabelText,
-        generatedDate: new Date().toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US'),
-        totalItemTypes: auditSummary.totalItemTypes,
-        totalUnitsCount: auditSummary.totalUnitsCount,
-        totalCostValuation: auditSummary.totalCostValuation,
-        totalSaleValuation: auditSummary.totalSaleValuation,
-        expectedProfit: auditSummary.expectedProfit,
-        profitMargin: auditSummary.profitMargin,
-        items: pdfItems,
-      });
+      exportInventoryAuditToPDF(
+        {
+          storeName,
+          ownerName,
+          phone: storePhone,
+          taxNumber,
+          currency: currencySymbol,
+          periodLabel: periodLabelText,
+          generatedDate: new Date().toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US'),
+          totalItemTypes: auditSummary.totalItemTypes,
+          totalUnitsCount: auditSummary.totalUnitsCount,
+          totalCostValuation: auditSummary.totalCostValuation,
+          totalSaleValuation: auditSummary.totalSaleValuation,
+          expectedProfit: auditSummary.expectedProfit,
+          profitMargin: auditSummary.profitMargin,
+          language,
+          items: pdfItems,
+        },
+        'inventory_audit_report',
+        language
+      );
 
       showNotification(
         language === 'ar'
@@ -300,20 +305,24 @@ export const InventoryAuditReportView: React.FC = () => {
 
   const handleShare = async () => {
     try {
-      const res = await shareInventoryAuditSummary({
-        storeName,
-        ownerName,
-        currency: currencySymbol,
-        periodLabel: periodLabelText,
-        generatedDate: new Date().toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US'),
-        totalItemTypes: auditSummary.totalItemTypes,
-        totalUnitsCount: auditSummary.totalUnitsCount,
-        totalCostValuation: auditSummary.totalCostValuation,
-        totalSaleValuation: auditSummary.totalSaleValuation,
-        expectedProfit: auditSummary.expectedProfit,
-        profitMargin: auditSummary.profitMargin,
-        items: [],
-      });
+      const res = await shareInventoryAuditSummary(
+        {
+          storeName,
+          ownerName,
+          currency: currencySymbol,
+          periodLabel: periodLabelText,
+          generatedDate: new Date().toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US'),
+          totalItemTypes: auditSummary.totalItemTypes,
+          totalUnitsCount: auditSummary.totalUnitsCount,
+          totalCostValuation: auditSummary.totalCostValuation,
+          totalSaleValuation: auditSummary.totalSaleValuation,
+          expectedProfit: auditSummary.expectedProfit,
+          profitMargin: auditSummary.profitMargin,
+          language,
+          items: [],
+        },
+        language
+      );
 
       if (res.success) {
         showNotification(
