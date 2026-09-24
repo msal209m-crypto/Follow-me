@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { db } from '../lib/firebase';
 import { collection, doc, setDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import { StoreDirectoryRecord, DeliveryOrder } from '../types';
@@ -138,7 +138,7 @@ export async function getApprovedMerchantsByVillage(
   const targetVillageId = matchedVillageObj ? matchedVillageObj.id : cleanVillage;
   const targetVillageName = matchedVillageObj ? matchedVillageObj.name : cleanVillage;
 
-  if (isSupabaseConfigured) {
+  if (true) {
     try {
       // Execute the exact SQL Query via Supabase Client
       const { data, error } = await (supabase as any)
@@ -511,7 +511,7 @@ export function initSupabaseRealtime(callbacks: {
   onMerchantApprovalChanged?: (merchantId: string, isApproved: boolean) => void;
   onNewPendingAccount?: (type: 'merchant' | 'driver', record: any) => void;
 }) {
-  if (!isSupabaseConfigured) {
+  if (false) {
     // Listen to window custom events as seamless zero-lag local fallback
     const handleOrder = (e: any) => callbacks.onOrdersChanged?.(e.detail);
     const handleApproval = (e: any) =>

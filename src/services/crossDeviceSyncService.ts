@@ -10,7 +10,7 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { StoreDirectoryRecord } from '../types';
 
 export interface SyncedMerchant {
@@ -105,7 +105,7 @@ export async function syncSaveStore(store: StoreDirectoryRecord): Promise<void> 
   }
 
   // 3. Supabase SQL Sync
-  if (isSupabaseConfigured) {
+  if (true) {
     try {
       await (supabase as any).from('stores').upsert({
         id: store.id,
@@ -141,7 +141,7 @@ export async function syncDeleteStore(storeId: string): Promise<void> {
   }
 
   // Supabase
-  if (isSupabaseConfigured) {
+  if (true) {
     try {
       await (supabase as any).from('stores').delete().eq('id', storeId);
     } catch {}
@@ -214,7 +214,7 @@ export async function syncSaveMerchant(merchant: SyncedMerchant): Promise<void> 
   }
 
   // Supabase
-  if (isSupabaseConfigured) {
+  if (true) {
     try {
       await (supabase as any).from('merchants').upsert({
         id: merchant.id,
@@ -250,7 +250,7 @@ export async function syncDeleteMerchant(merchantId: string): Promise<void> {
   }
 
   // Supabase
-  if (isSupabaseConfigured) {
+  if (true) {
     try {
       await (supabase as any).from('merchants').delete().eq('id', merchantId);
     } catch {}
@@ -302,7 +302,7 @@ export async function syncSaveDriver(driver: SyncedDriver): Promise<void> {
   }
 
   // Supabase
-  if (isSupabaseConfigured) {
+  if (true) {
     try {
       await (supabase as any).from('drivers').upsert({
         id: driver.id,
@@ -337,7 +337,7 @@ export async function syncDeleteDriver(driverId: string): Promise<void> {
   }
 
   // Supabase
-  if (isSupabaseConfigured) {
+  if (true) {
     try {
       await (supabase as any).from('drivers').delete().eq('id', driverId);
     } catch {}
@@ -389,7 +389,7 @@ export async function syncSaveOrder(order: SyncedOrder): Promise<void> {
   }
 
   // Supabase
-  if (isSupabaseConfigured) {
+  if (true) {
     try {
       await (supabase as any).from('orders').upsert({
         id: order.id,
@@ -424,7 +424,7 @@ export async function syncDeleteOrder(orderId: string): Promise<void> {
   }
 
   // Supabase
-  if (isSupabaseConfigured) {
+  if (true) {
     try {
       await (supabase as any).from('orders').delete().eq('id', orderId);
     } catch {}

@@ -254,21 +254,17 @@ export function getMerchants(): MerchantAccountRecord[] {
   }
 }
 
-export function saveMerchants(merchants: MerchantAccountRecord[]): void {
+export async function saveMerchants(merchants: MerchantAccountRecord[]): Promise<void> {
   try {
     localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify(merchants));
     // Sync to Firestore in background
-    merchants.forEach((m) => {
-      try {
-        setDoc(doc(db, 'merchants', m.id), m, { merge: true }).catch((e) => console.warn('Firestore merchant sync error:', e));
-      } catch (e) {
-        console.warn('Firestore merchant sync error:', e);
-      }
-    });
-  } catch {}
+    await Promise.all(merchants.map((m) => syncSaveMerchant(m).catch((e) => console.warn('Sync error:', e))));
+  } catch (e) {
+    console.error('Failed to save merchants:', e);
+  }
 }
 
-export function registerMerchant(params: {
+export async function registerMerchant(params: {
   name: string;
   phone: string;
   nationalId: string;
@@ -277,7 +273,7 @@ export function registerMerchant(params: {
   village: string;
   photo?: string;
   idVerificationPhoto?: string;
-}): { success: boolean; message: string; merchant?: MerchantAccountRecord } {
+}): Promise<{ success: boolean; message: string; merchant?: MerchantAccountRecord }> {
   const cleanPhone = params.phone.trim().replace(/\s+/g, '');
   const cleanNationalId = params.nationalId.trim();
   const cleanName = params.name.trim();
@@ -288,7 +284,6 @@ export function registerMerchant(params: {
   if (!params.password || params.password.length < 4) return { success: false, message: 'كلمة المرور يجب ألا تقل عن 4 خانات' };
 
   const merchants = getMerchants();
-  // Check if phone or national ID already registered
   const existing = merchants.find((m) => m.phone === cleanPhone || m.nationalId === cleanNationalId);
   if (existing) {
     return {
@@ -311,24 +306,14 @@ export function registerMerchant(params: {
     idVerificationPhoto: params.idVerificationPhoto,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    isApproved: false, // Strict Security: Requires admin/developer approval first
+    isApproved: false,
   };
 
   merchants.unshift(newMerchant);
-  saveMerchants(merchants);
-
-  addDeveloperNotification({
-    type: 'NEW_MERCHANT',
-    title: 'طلب تسجيل تاجر جديد بانتظار الاعتماد الأمني 🏪⏳',
-    message: `سجل التاجر "${newMerchant.name}" متجر جديد باسم "${newMerchant.storeName}" في ${newMerchant.village}. الحساب معلق بانتظار المراجعة والاعتماد من المطور (محمد الطويل).`,
-    senderName: newMerchant.name,
-    senderPhone: newMerchant.phone,
-    merchantId: newMerchant.id
-  });
-
-  // Sync to stores directory under merchant's unique ID with isApproved = false
+  await saveMerchants(merchants);
+  
+  // Also sync store record
   const stores = getStoresDirectory();
-  const existingStoreIndex = stores.findIndex((s) => s.phone === cleanPhone || s.id === merchantId);
   const newStoreRecord: StoreDirectoryRecord = {
     id: merchantId,
     merchantId: merchantId,
@@ -346,21 +331,14 @@ export function registerMerchant(params: {
     ratingCount: 0,
   };
   (newStoreRecord as any).isApproved = false;
-
-  if (existingStoreIndex >= 0) {
-    stores[existingStoreIndex] = newStoreRecord;
-  } else {
-    stores.unshift(newStoreRecord);
-  }
+  
+  stores.unshift(newStoreRecord);
   saveStoresDirectory(stores);
-
-  // Sync cross-device to Firestore and Supabase
-  syncSaveMerchant(newMerchant).catch(console.warn);
-  syncSaveStore(newStoreRecord).catch(console.warn);
+  await syncSaveStore(newStoreRecord);
 
   return { 
     success: true, 
-    message: 'تم استلام طلب تسجيل متجرك بنجاح! الحساب حالياً معلق بانتظار المراجعة الأمنية واعتماد بطاقة الأحوال من إدارة المنصة والمطور (محمد الطويل). سيتم تفعيل ظهور متجرك فور الاعتماد.', 
+    message: 'تم استلام طلب تسجيل متجرك بنجاح! الحساب حالياً معلق بانتظار المراجعة الأمنية.', 
     merchant: newMerchant 
   };
 }
