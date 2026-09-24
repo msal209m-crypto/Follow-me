@@ -945,8 +945,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         title={language === 'ar' ? 'الرئيسية - لوحة التحكم' : 'Main Dashboard'}
       >
         {/* Store Emblem */}
-        <div className="w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-emerald-400 border border-emerald-400/40 flex items-center justify-center text-white shadow-md shadow-emerald-950/40 shrink-0 ring-1 ring-white/20">
-          <Store className="w-4 h-4 xs:w-5 xs:h-5 text-white" />
+        <div className="w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-emerald-400/40 shadow-md shadow-emerald-950/40 shrink-0 ring-1 ring-white/20 bg-slate-900">
+          <img
+            src="/icon.png"
+            alt="شعار قريتي"
+            className="w-full h-full object-cover"
+          />
         </div>
 
         {/* Store Name & Meta */}

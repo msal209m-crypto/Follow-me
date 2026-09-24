@@ -18,6 +18,9 @@ import {
   MessageSquare,
   Navigation,
   LogOut,
+  Edit3,
+  Save,
+  X
 } from 'lucide-react';
 import { DeliveryOrder, DriverProfile, StoreSettings } from '../types';
 import {
@@ -57,6 +60,12 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
   const [driverPhone, setDriverPhone] = useState('');
   const [vehicleType, setVehicleType] = useState<'CAR' | 'MOTORCYCLE' | 'BICYCLE'>('MOTORCYCLE');
   const [authError, setAuthError] = useState('');
+
+  // Driver Edit Profile Modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editVehicle, setEditVehicle] = useState<'CAR' | 'MOTORCYCLE' | 'BICYCLE'>('MOTORCYCLE');
 
   // Refresh orders from local storage or events
   const refreshData = () => {
@@ -132,6 +141,29 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
     };
     saveDriverProfile(updated);
     setProfile(updated);
+  };
+
+  const openEditModal = () => {
+    if (!profile) return;
+    setEditName(profile.name);
+    setEditPhone(profile.phone);
+    setEditVehicle(profile.vehicleType || 'MOTORCYCLE');
+    setShowEditModal(true);
+  };
+
+  const handleSaveProfileEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile) return;
+    if (!editName.trim() || !editPhone.trim()) return;
+    const updated: DriverProfile = {
+      ...profile,
+      name: editName.trim(),
+      phone: editPhone.trim(),
+      vehicleType: editVehicle,
+    };
+    saveDriverProfile(updated);
+    setProfile(updated);
+    setShowEditModal(false);
   };
 
   const handleLogout = () => {
@@ -396,6 +428,16 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openEditModal}
+              className="p-2 px-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="تعديل بيانات السائق ومركبة التوصيل"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">تعديل بياناتي</span>
+            </button>
+
             <button
               type="button"
               onClick={handleToggleOnlineStatus}
@@ -922,6 +964,117 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
                 </div>
               ))
             )}
+          </div>
+        )}
+        {/* Driver Profile Edit Modal */}
+        {showEditModal && profile && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                    <Edit3 className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-sm text-white">تعديل بيانات السائق ومركبة التوصيل</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveProfileEdit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">اسم السائق / المندوب</label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-slate-500 absolute top-1/2 -translate-y-1/2 right-3" />
+                    <input
+                      type="text"
+                      required
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">رقم هاتف التواصل والواتساب</label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-slate-500 absolute top-1/2 -translate-y-1/2 right-3" />
+                    <input
+                      type="tel"
+                      required
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 text-left font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">نوع مركبة التوصيل</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditVehicle('MOTORCYCLE')}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                        editVehicle === 'MOTORCYCLE'
+                          ? 'border-amber-500 bg-amber-500/20 text-amber-300'
+                          : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Bike className="w-5 h-5" />
+                      <span className="text-[11px] font-bold">دراجة نارية</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditVehicle('CAR')}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                        editVehicle === 'CAR'
+                          ? 'border-amber-500 bg-amber-500/20 text-amber-300'
+                          : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Truck className="w-5 h-5" />
+                      <span className="text-[11px] font-bold">سيارة</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditVehicle('BICYCLE')}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                        editVehicle === 'BICYCLE'
+                          ? 'border-amber-500 bg-amber-500/20 text-amber-300'
+                          : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Bike className="w-5 h-5" />
+                      <span className="text-[11px] font-bold">سيكل / هوائية</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>حفظ التعديلات ✅</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </main>

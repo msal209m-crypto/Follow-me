@@ -458,10 +458,14 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         <div className="flex items-center gap-2.5">
           <div
             onClick={handleLogoSecretTap}
-            title="شعار المنصة (5 نقرات متتالية لفتح لوحة المطور)"
-            className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-950/30 cursor-pointer active:scale-90 transition-transform"
+            title="شعار قريتي (5 نقرات متتالية لفتح لوحة المطور)"
+            className="w-10 h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-lg shadow-emerald-950/30 cursor-pointer active:scale-90 transition-transform shrink-0 bg-slate-900"
           >
-            <Store className="w-5 h-5" />
+            <img
+              src="/icon.png"
+              alt="قريتي"
+              className="w-full h-full object-cover"
+            />
           </div>
           <div>
             <h1 className={`font-extrabold text-base sm:text-lg ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>

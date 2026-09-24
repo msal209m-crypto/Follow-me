@@ -221,8 +221,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`flex items-center gap-2.5 sm:gap-3 min-w-0 ${isRTL ? 'text-right' : 'text-left'} cursor-pointer group hover:opacity-90 transition-opacity`}
             title={t.navDashboard}
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 group-hover:from-emerald-500 group-hover:to-teal-300 flex items-center justify-center shadow-md shadow-emerald-950 text-white font-black text-lg sm:text-xl shrink-0 transition-transform group-hover:scale-105 border border-emerald-400/40">
-              {language === 'ar' ? 'قر' : 'Q'}
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-emerald-400/40 shadow-md shadow-emerald-950 shrink-0 transition-transform group-hover:scale-105 bg-slate-900">
+              <img
+                src="/icon.png"
+                alt="شعار قريتي"
+                className="w-full h-full object-cover"
+              />
             </div>
             {!isCollapsed && (
               <div className="min-w-0">

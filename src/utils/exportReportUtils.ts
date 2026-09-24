@@ -1,8 +1,32 @@
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable, { applyPlugin } from 'jspdf-autotable';
 import { Transaction, StoreSettings } from '../types';
 import { copyToClipboard } from './clipboardUtils';
+
+// Explicitly register autoTable plugin on jsPDF constructor for modern bundlers
+try {
+  if (typeof applyPlugin === 'function') {
+    applyPlugin(jsPDF);
+  }
+} catch {
+  // Ignored if already applied or unavailable
+}
+
+/**
+ * Universal safe execution of autoTable supporting both prototype attachment and direct invocation
+ */
+function runAutoTable(doc: jsPDF, options: any) {
+  if (typeof (doc as any).autoTable === 'function') {
+    (doc as any).autoTable(options);
+  } else if (typeof autoTable === 'function') {
+    autoTable(doc, options);
+  } else if (typeof (autoTable as any)?.default === 'function') {
+    (autoTable as any).default(doc, options);
+  } else {
+    throw new Error('autoTable plugin could not be initialized');
+  }
+}
 
 export interface DailyReportSummaryData {
   periodType: 'DAY' | 'MONTH' | 'CUSTOM';
@@ -239,7 +263,7 @@ export const exportReportToPDF = (data: DailyReportSummaryData, settings: StoreS
     `${fmtNum(c.totalSales)} ${currencySymbol}`,
   ]);
 
-  (doc as any).autoTable({
+  runAutoTable(doc, {
     startY: y,
     head: [['Cashier', 'Invoices', 'Cash', 'Transfer', 'Card/POS', 'Credit', 'Total Sales']],
     body: cashierBody.length > 0 ? cashierBody : [['No cashier sales recorded', '-', '-', '-', '-', '-', '-']],
@@ -250,7 +274,7 @@ export const exportReportToPDF = (data: DailyReportSummaryData, settings: StoreS
     margin: { left: 14, right: 14 },
   });
 
-  y = (doc as any).lastAutoTable.finalY + 10;
+  y = ((doc as any).lastAutoTable?.finalY ?? y + 40) + 10;
 
   // Section 2: Invoices Log Table (First 35 transactions to keep concise)
   doc.setFontSize(10);
@@ -268,7 +292,7 @@ export const exportReportToPDF = (data: DailyReportSummaryData, settings: StoreS
     `${fmtNum(tx.totalAmount)} ${currencySymbol}`,
   ]);
 
-  (doc as any).autoTable({
+  runAutoTable(doc, {
     startY: y,
     head: [['Invoice #', 'Time', 'Customer', 'Cashier', 'Method', 'Type', 'Amount']],
     body: txBody.length > 0 ? txBody : [['No transactions found', '-', '-', '-', '-', '-', '-']],
@@ -497,7 +521,7 @@ export const exportInventoryAuditToPDF = (
     it.status,
   ]);
 
-  (doc as any).autoTable({
+  runAutoTable(doc, {
     startY: y,
     head: [['#', 'Barcode', 'Item Name', 'Category', 'Stock Qty', 'Cost', 'Sale', 'Total Cost', 'Total Sale', 'Status']],
     body: tableBody.length > 0 ? tableBody : [['No items found', '-', '-', '-', '-', '-', '-', '-', '-', '-']],

@@ -53,7 +53,12 @@ import {
   Ban,
   UserCheck2,
   AlertTriangle,
-  Package
+  Package,
+  Key,
+  RotateCcw,
+  Edit3,
+  Save,
+  X
 } from 'lucide-react';
 import { 
   getAccessLogs, 
@@ -102,8 +107,20 @@ import {
   subscribeToAllDrivers,
   subscribeToAllOrders,
   syncDeleteOrder,
+  syncSaveMerchant,
+  syncSaveDriver,
+  syncDeleteMerchant,
+  syncDeleteDriver,
   SyncedOrder
 } from '../services/crossDeviceSyncService';
+import {
+  createLicenseKey,
+  fetchAllLicenseKeys,
+  deleteLicenseKey,
+  generateBatchLicenseKeys,
+  PLAN_CONFIGS
+} from '../services/licenseKeyService';
+import { LicenseKeyRecord } from '../types';
 
 interface DeveloperControlPanelProps {
   onNavigate: (mode: 'store' | 'merchant' | 'driver' | 'admin' | 'manage-merchants' | 'manage-drivers') => void;
@@ -111,7 +128,7 @@ interface DeveloperControlPanelProps {
   isDarkMode?: boolean;
 }
 
-type DeveloperSubTab = 'GATEKEEPING' | 'ORDERS' | 'CUSTOMERS' | 'MESSAGES' | 'PORTALS' | 'LOGS';
+type DeveloperSubTab = 'GATEKEEPING' | 'ORDERS' | 'CUSTOMERS' | 'LICENSES' | 'MESSAGES' | 'PORTALS' | 'LOGS';
 
 export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({ 
   onNavigate, 
@@ -162,6 +179,37 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   const [isQuerying, setIsQuerying] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+
+  // Edit Merchant Modal State
+  const [editingMerchant, setEditingMerchant] = useState<any | null>(null);
+  const [editMerchantForm, setEditMerchantForm] = useState({
+    storeName: '',
+    name: '',
+    phone: '',
+    village: FIXED_VILLAGES_LIST[0].name,
+    nationalId: '',
+    isApproved: true,
+  });
+
+  // Edit Driver Modal State
+  const [editingDriver, setEditingDriver] = useState<any | null>(null);
+  const [editDriverForm, setEditDriverForm] = useState({
+    name: '',
+    phone: '',
+    vehicleType: 'MOTORCYCLE',
+    zone: FIXED_VILLAGES_LIST[0].name,
+    nationalId: '',
+    isApproved: true,
+  });
+
+  // License Keys & System Reset State
+  const [licenseKeysList, setLicenseKeysList] = useState<LicenseKeyRecord[]>([]);
+  const [isLoadingLicenses, setIsLoadingLicenses] = useState(false);
+  const [newKeyPlan, setNewKeyPlan] = useState<LicenseKeyRecord['plan']>('1Y');
+  const [newKeyNotes, setNewKeyNotes] = useState('');
+  const [keySuccessMsg, setKeySuccessMsg] = useState<string | null>(null);
+  const [masterResetConfirmText, setMasterResetConfirmText] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
 
   // Supabase Live Health Check State
   const [supabasePingStatus, setSupabasePingStatus] = useState<'IDLE' | 'TESTING' | 'CONNECTED' | 'ERROR'>('IDLE');
@@ -478,13 +526,46 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
-  const handleDeleteMerchant = (id: string, name: string) => {
+  const handleDeleteMerchant = async (id: string, name: string) => {
     if (window.confirm(`هل أنت متأكد من حذف حساب التاجر (${name}) ومتجره نهائياً؟`)) {
       deleteMerchantAccount(id);
+      await syncDeleteMerchant(id);
       refreshAccounts();
-      setActionSuccessMsg(`تم حذف حساب التاجر (${name}) نهائياً 🗑️`);
+      setActionSuccessMsg(`تم حذف حساب التاجر (${name}) نهائياً من النظام والسحابة 🗑️`);
       setTimeout(() => setActionSuccessMsg(null), 3500);
     }
+  };
+
+  const openEditMerchantModal = (merchant: any) => {
+    setEditingMerchant(merchant);
+    setEditMerchantForm({
+      storeName: merchant.storeName || '',
+      name: merchant.name || '',
+      phone: merchant.phone || '',
+      village: merchant.village || FIXED_VILLAGES_LIST[0].name,
+      nationalId: merchant.nationalId || '',
+      isApproved: merchant.isApproved !== false,
+    });
+  };
+
+  const handleSaveMerchantEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMerchant) return;
+    const updated = {
+      ...editingMerchant,
+      storeName: editMerchantForm.storeName.trim() || editingMerchant.storeName,
+      name: editMerchantForm.name.trim() || editingMerchant.name,
+      phone: editMerchantForm.phone.trim() || editingMerchant.phone,
+      village: editMerchantForm.village || editingMerchant.village,
+      nationalId: editMerchantForm.nationalId.trim() || editingMerchant.nationalId,
+      isApproved: editMerchantForm.isApproved,
+      updatedAt: new Date().toISOString(),
+    };
+    await syncSaveMerchant(updated as any);
+    refreshAccounts();
+    setEditingMerchant(null);
+    setActionSuccessMsg(`تم تعديل وحفظ بيانات متجر (${updated.storeName}) بنجاح! ✏️✅`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
   const handleApproveDriver = (id: string, name: string) => {
@@ -512,12 +593,133 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
-  const handleDeleteDriver = (id: string, name: string) => {
+  const handleDeleteDriver = async (id: string, name: string) => {
     if (window.confirm(`هل أنت متأكد من حذف حساب السائق (${name}) نهائياً؟`)) {
       deleteDriverAccount(id);
+      await syncDeleteDriver(id);
       refreshAccounts();
-      setActionSuccessMsg(`تم حذف حساب السائق (${name}) نهائياً 🗑️`);
+      setActionSuccessMsg(`تم حذف حساب السائق (${name}) نهائياً من السحابة 🗑️`);
       setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
+  };
+
+  const openEditDriverModal = (driver: any) => {
+    setEditingDriver(driver);
+    setEditDriverForm({
+      name: driver.name || '',
+      phone: driver.phone || '',
+      vehicleType: driver.vehicleType || 'MOTORCYCLE',
+      zone: driver.zone || FIXED_VILLAGES_LIST[0].name,
+      nationalId: driver.nationalId || '',
+      isApproved: driver.isApproved !== false,
+    });
+  };
+
+  const handleSaveDriverEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDriver) return;
+    const updated = {
+      ...editingDriver,
+      name: editDriverForm.name.trim() || editingDriver.name,
+      phone: editDriverForm.phone.trim() || editingDriver.phone,
+      vehicleType: editDriverForm.vehicleType || editingDriver.vehicleType,
+      zone: editDriverForm.zone || editingDriver.zone,
+      nationalId: editDriverForm.nationalId.trim() || editingDriver.nationalId,
+      isApproved: editDriverForm.isApproved,
+    };
+    await syncSaveDriver(updated as any);
+    refreshAccounts();
+    setEditingDriver(null);
+    setActionSuccessMsg(`تم تعديل وحفظ بيانات السائق (${updated.name}) بنجاح! 🛵✅`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  // License Keys & System Reset Handlers
+  const loadLicenseKeys = async () => {
+    setIsLoadingLicenses(true);
+    try {
+      const keys = await fetchAllLicenseKeys();
+      setLicenseKeysList(keys);
+    } catch (e) {
+      console.warn('License keys load note:', e);
+    } finally {
+      setIsLoadingLicenses(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'LICENSES') {
+      loadLicenseKeys();
+    }
+  }, [activeSubTab]);
+
+  const handleGenerateLicenseKey = async () => {
+    const res = await createLicenseKey(newKeyPlan, newKeyNotes, 'Platform Developer');
+    if (res.success && res.record) {
+      setNewKeyNotes('');
+      await loadLicenseKeys();
+      setKeySuccessMsg(`تم إصدار مفتاح ترخيص جديد: ${res.record.key} (${res.record.plan}) بنجاح! 🔑`);
+      setTimeout(() => setKeySuccessMsg(null), 5000);
+    }
+  };
+
+  const handleGenerateBatchKeys = async () => {
+    await generateBatchLicenseKeys(5, '1Y', 'حزمة تراخيص المطور للمتاجر الرسمية');
+    await loadLicenseKeys();
+    setKeySuccessMsg(`تم إصدار دفعة من 5 مفاتيح ترخيص سنوية جاهزة للتوزيع! 🔑✨`);
+    setTimeout(() => setKeySuccessMsg(null), 5000);
+  };
+
+  const handleDeleteLicenseKey = async (keyString: string) => {
+    if (window.confirm(`هل أنت متأكد من حذف وإلغاء مفتاح الترخيص (${keyString}) نهائياً؟`)) {
+      await deleteLicenseKey(keyString);
+      await loadLicenseKeys();
+      setKeySuccessMsg(`تم حذف مفتاح الترخيص (${keyString}) 🗑️`);
+      setTimeout(() => setKeySuccessMsg(null), 3500);
+    }
+  };
+
+  const handlePurgeDemoOrders = () => {
+    if (!window.confirm('هل تريد مسح وتطهير جميع الطلبات التجريبية وتصفير سجل التوصيل؟')) return;
+    try {
+      localStorage.setItem('village_delivery_orders', JSON.stringify([]));
+      setCloudOrders([]);
+      window.dispatchEvent(new CustomEvent('qaryati:orders-updated'));
+      setActionSuccessMsg('تم تطهير وحذف كافة الطلبات التجريبية بنجاح 🧹');
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    } catch {}
+  };
+
+  const handleMasterFactoryReset = async () => {
+    if (masterResetConfirmText.trim() !== 'تأكيد' && masterResetConfirmText.trim() !== 'RESET') {
+      alert('يرجى كتابة كلمة "تأكيد" في الصندوق للمتابعة وتأكيد إعادة الضبط الشاملة.');
+      return;
+    }
+    setIsResetting(true);
+    try {
+      // 1. Purge orders
+      localStorage.setItem('village_delivery_orders', JSON.stringify([]));
+      setCloudOrders([]);
+      
+      // 2. Reset logs
+      clearAccessLogs();
+      setLogs([]);
+
+      // 3. Clear demo ads
+      clearAllAds();
+      setAds([]);
+
+      // 4. Generate 5 fresh official license keys
+      await generateBatchLicenseKeys(5, '1Y', 'حزمة تراخيص رسمية بعد إعادة الضبط');
+      await loadLicenseKeys();
+
+      setMasterResetConfirmText('');
+      setActionSuccessMsg('تمت إعادة ضبط المنظومة وتطهير السجلات التجريبية وتوليد 5 مفاتيح ترخيص جديدة! المنظومة جاهزة للإنتاج والاستخدام العام 🚀✅');
+      setTimeout(() => setActionSuccessMsg(null), 6000);
+    } catch (e) {
+      console.error('Reset error:', e);
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -907,7 +1109,24 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
             )}
           </button>
 
-          {/* Tab 3: Messages */}
+          {/* Tab 4: Licenses & Reset */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('LICENSES')}
+            className={`flex-1 min-w-[170px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activeSubTab === 'LICENSES'
+                ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            }`}
+          >
+            <Key className="w-4 h-4" />
+            <span>مفاتيح الترخيص وضبط النظام</span>
+            <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+              🔑
+            </span>
+          </button>
+
+          {/* Tab 5: Messages */}
           <button
             type="button"
             onClick={() => setActiveSubTab('MESSAGES')}
@@ -1133,6 +1352,15 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                       <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
                         <button
                           type="button"
+                          onClick={() => openEditMerchantModal(m)}
+                          className="px-3 py-2 rounded-xl bg-sky-950/60 hover:bg-sky-900 border border-sky-700/50 text-sky-300 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer"
+                          title="تعديل بيانات المتجر والتاجر"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>تعديل</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleApproveMerchant(m.id, m.name)}
                           className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-950"
                         >
@@ -1204,6 +1432,15 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => openEditMerchantModal(m)}
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-sky-950/60 hover:bg-sky-900 border border-sky-700/50 text-sky-300 flex items-center gap-1 cursor-pointer transition-colors"
+                              title="تعديل بيانات المتجر والتاجر"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>تعديل ✏️</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleToggleMerchant(m.id, m.name, isApproved)}
@@ -1294,6 +1531,15 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                       <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
                         <button
                           type="button"
+                          onClick={() => openEditDriverModal(d)}
+                          className="px-3 py-2 rounded-xl bg-sky-950/60 hover:bg-sky-900 border border-sky-700/50 text-sky-300 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer"
+                          title="تعديل بيانات السائق والمركبة"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>تعديل</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleApproveDriver(d.id, d.name)}
                           className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-950"
                         >
@@ -1365,6 +1611,15 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => openEditDriverModal(d)}
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-sky-950/60 hover:bg-sky-900 border border-sky-700/50 text-sky-300 flex items-center gap-1 cursor-pointer transition-colors"
+                              title="تعديل بيانات السائق والمركبة"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>تعديل ✏️</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleToggleDriver(d.id, d.name, isApproved)}
@@ -2160,6 +2415,255 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
         )}
 
         {/* ========================================================= */}
+        {/* TAB: LICENSES & SYSTEM RESET (مفاتيح الترخيص وضبط النظام) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'LICENSES' && (
+          <div className="space-y-6">
+            {/* Feedback Message */}
+            {keySuccessMsg && (
+              <div className="p-3.5 rounded-2xl bg-amber-950/80 border border-amber-500/40 text-amber-200 text-xs font-bold flex items-center justify-between gap-2 shadow-lg">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>{keySuccessMsg}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setKeySuccessMsg(null)}
+                  className="text-amber-400 hover:text-white text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* License Key Generator Card */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                    <Key className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">إصدار وتوليد مفاتيح الترخيص الرسمية</h3>
+                    <p className="text-[11px] text-slate-400">
+                      مفاتيح حصرية ومحمية لتفعيل اشتراكات متاجر القرية وصلاحيات Pro عبر السحابة.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGenerateBatchKeys}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>توليد دفعة (5 مفاتيح سنوية) ⚡</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2">
+                {(['1M', '3M', '6M', '1Y', 'LIFE'] as const).map((plan) => {
+                  const cfg = PLAN_CONFIGS[plan];
+                  const isSelected = newKeyPlan === plan;
+                  return (
+                    <button
+                      key={plan}
+                      type="button"
+                      onClick={() => setNewKeyPlan(plan)}
+                      className={`p-3 rounded-2xl border text-right transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-amber-500/20 border-amber-500 text-white shadow-md shadow-amber-950/40'
+                          : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-black">{cfg.nameAr}</div>
+                      <div className="text-[10px] text-amber-400 mt-1 font-mono">{cfg.durationDays < 3000 ? `${cfg.durationDays} يوم` : 'دائم'}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <input
+                  type="text"
+                  value={newKeyNotes}
+                  onChange={(e) => setNewKeyNotes(e.target.value)}
+                  placeholder="ملاحظة أو اسم التاجر / المتجر المخصص له المفتاح (اختياري)..."
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleGenerateLicenseKey}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-amber-950/40 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>إصدار المفتاح الفردي 🔑</span>
+                </button>
+              </div>
+            </div>
+
+            {/* License Keys Inventory Table */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-black text-white">سجل مفاتيح التراخيص الصادرة ({licenseKeysList.length} مفتاح)</h4>
+                  {isLoadingLicenses && <span className="text-[10px] text-cyan-400 animate-pulse">جاري المزامنة...</span>}
+                </div>
+                <button
+                  type="button"
+                  onClick={loadLicenseKeys}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>تحديث القائمة</span>
+                </button>
+              </div>
+
+              {licenseKeysList.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-2xl">
+                  لا توجد مفاتيح ترخيص حالياً. يمكنك إصدار مفتاح جديد من النموذج أعلاه.
+                </div>
+              ) : (
+                <div className="space-y-2 overflow-x-auto">
+                  {licenseKeysList.map((lic) => {
+                    const isRedeemed = lic.status === 'REDEEMED';
+                    return (
+                      <div
+                        key={lic.key}
+                        className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-850 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-right"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-xs font-bold text-amber-400 tracking-wider bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800">
+                              {lic.key}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300">
+                              {PLAN_CONFIGS[lic.plan]?.nameAr || lic.plan}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isRedeemed
+                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}>
+                              {isRedeemed ? 'تم التفعيل والاستخدام ✓' : 'متاح للتفعيل 🟢'}
+                            </span>
+                          </div>
+                          {lic.notes && (
+                            <p className="text-[11px] text-slate-400">
+                              📝 {lic.notes}
+                            </p>
+                          )}
+                          {isRedeemed && lic.redeemedByEmail && (
+                            <p className="text-[10px] text-slate-500 font-mono">
+                              مفعل بواسطة: {lic.redeemedByEmail} • {lic.redeemedAt ? new Date(lic.redeemedAt).toLocaleDateString('ar-SA') : ''}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              copyToClipboard(lic.key);
+                              setKeySuccessMsg(`تم نسخ المفتاح (${lic.key}) إلى الحافظة 📋`);
+                              setTimeout(() => setKeySuccessMsg(null), 3000);
+                            }}
+                            className="p-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                            title="نسخ المفتاح"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>نسخ</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLicenseKey(lic.key)}
+                            className="p-1.5 px-2.5 rounded-lg bg-rose-950/40 hover:bg-rose-900 border border-rose-800/40 text-rose-300 text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                            title="حذف المفتاح نهائياً"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Master System Reset & Demo Purge Section */}
+            <div className="bg-rose-950/20 border border-rose-500/30 rounded-3xl p-5 sm:p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-rose-300">إعادة ضبط المنظومة وتطهير البيانات التجريبية</h3>
+                  <p className="text-[11px] text-slate-400">
+                    أدوات المطور لتطهير طلبات الاختبار وتصفير العدادات قبل تسليم التطبيق للأهالي والتجار.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                {/* Purge Test Orders Only */}
+                <div className="bg-slate-950/70 border border-slate-850 rounded-2xl p-4 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>تطهير الطلبات التجريبية فقط</span>
+                      <span className="text-[10px] text-amber-400">(خفيف وآمن)</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      يمسح كافة طلبات التوصيل الوهمية ويصفر عدادات السائقين مع الحفاظ التام على المتاجر وحسابات المشتركين.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handlePurgeDemoOrders}
+                    className="w-full mt-3 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>مسح وتطهير الطلبات التجريبية</span>
+                  </button>
+                </div>
+
+                {/* Master Factory Reset */}
+                <div className="bg-rose-950/40 border border-rose-500/30 rounded-2xl p-4 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
+                      <span>إعادة ضبط المصنع وتجهيز الإنتاج العام</span>
+                      <span className="text-[10px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded">شامل</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-300 mt-1">
+                      يطهر سجلات الأمان، ويزيل الإعلانات التجريبية، ويولد حزمة تراخيص جديدة مع حماية هيكل التطبيق وقرى المملكة.
+                    </p>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    <input
+                      type="text"
+                      value={masterResetConfirmText}
+                      onChange={(e) => setMasterResetConfirmText(e.target.value)}
+                      placeholder='اكتب كلمة "تأكيد" للبدء...'
+                      className="w-full bg-slate-950 border border-rose-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-400 text-center font-bold"
+                    />
+                    <button
+                      type="button"
+                      disabled={isResetting || (masterResetConfirmText.trim() !== 'تأكيد' && masterResetConfirmText.trim() !== 'RESET')}
+                      onClick={handleMasterFactoryReset}
+                      className="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                    >
+                      <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+                      <span>{isResetting ? 'جاري إعادة الضبط...' : 'تنفيذ إعادة الضبط الشاملة ⚠️'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
         {/* TAB 3: INCOMING MESSAGES & SUPPORT (رسائل واستفسارات المنصة) */}
         {/* ========================================================= */}
         {activeSubTab === 'MESSAGES' && (
@@ -2692,6 +3196,252 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                 >
                   <PartyPopper className="w-4 h-4" />
                   <span>نشر الإعلان فوراً 🎉</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: EDIT MERCHANT DETAILS (تعديل بيانات المتجر والتاجر) */}
+      {/* ========================================================= */}
+      {editingMerchant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-sky-500/40 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-sky-500/20 text-sky-400">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">تعديل بيانات المتجر والتاجر</h3>
+                  <p className="text-[11px] text-slate-400">تحكم حصري للمطور في بيانات المشترك والمحل</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingMerchant(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMerchantEdit} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">اسم المتجر / المحل</label>
+                  <input
+                    type="text"
+                    required
+                    value={editMerchantForm.storeName}
+                    onChange={(e) => setEditMerchantForm({ ...editMerchantForm, storeName: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">اسم مالك المتجر / التاجر</label>
+                  <input
+                    type="text"
+                    required
+                    value={editMerchantForm.name}
+                    onChange={(e) => setEditMerchantForm({ ...editMerchantForm, name: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">رقم الهاتف والواتساب</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editMerchantForm.phone}
+                    onChange={(e) => setEditMerchantForm({ ...editMerchantForm, phone: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 text-left font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">القرية التابع لها</label>
+                  <select
+                    value={editMerchantForm.village}
+                    onChange={(e) => setEditMerchantForm({ ...editMerchantForm, village: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
+                  >
+                    {FIXED_VILLAGES_LIST.map((v) => (
+                      <option key={v.id} value={v.name}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">رقم الهوية الوطنية / السجل</label>
+                <input
+                  type="text"
+                  value={editMerchantForm.nationalId}
+                  onChange={(e) => setEditMerchantForm({ ...editMerchantForm, nationalId: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 font-mono"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
+                <span className="text-xs font-bold text-slate-300">حالة الاعتماد والتفعيل</span>
+                <button
+                  type="button"
+                  onClick={() => setEditMerchantForm({ ...editMerchantForm, isApproved: !editMerchantForm.isApproved })}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                    editMerchantForm.isApproved
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                  }`}
+                >
+                  {editMerchantForm.isApproved ? 'معتمد ومفعل ✓' : 'موقوف / معلق ⏸️'}
+                </button>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingMerchant(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs cursor-pointer shadow-lg shadow-sky-950/50 flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>حفظ التعديلات بالسحابة ✅</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: EDIT DRIVER DETAILS (تعديل بيانات السائق والمندوب) */}
+      {/* ========================================================= */}
+      {editingDriver && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-sky-500/40 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-sky-500/20 text-sky-400">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">تعديل بيانات السائق / المندوب</h3>
+                  <p className="text-[11px] text-slate-400">تحكم حصري للمطور في مركبة ونطاق المندوب</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingDriver(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDriverEdit} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">اسم السائق / المندوب</label>
+                  <input
+                    type="text"
+                    required
+                    value={editDriverForm.name}
+                    onChange={(e) => setEditDriverForm({ ...editDriverForm, name: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">رقم الهاتف والواتساب</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editDriverForm.phone}
+                    onChange={(e) => setEditDriverForm({ ...editDriverForm, phone: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 text-left font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">نوع مركبة التوصيل</label>
+                  <select
+                    value={editDriverForm.vehicleType}
+                    onChange={(e) => setEditDriverForm({ ...editDriverForm, vehicleType: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
+                  >
+                    <option value="MOTORCYCLE">دراجة نارية 🛵</option>
+                    <option value="CAR">سيارة 🚗</option>
+                    <option value="BICYCLE">سيكل / هوائية 🚲</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">نطاق قرية التوصيل</label>
+                  <select
+                    value={editDriverForm.zone}
+                    onChange={(e) => setEditDriverForm({ ...editDriverForm, zone: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
+                  >
+                    {FIXED_VILLAGES_LIST.map((v) => (
+                      <option key={v.id} value={v.name}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">رقم الهوية الوطنية / الإقامة</label>
+                <input
+                  type="text"
+                  value={editDriverForm.nationalId}
+                  onChange={(e) => setEditDriverForm({ ...editDriverForm, nationalId: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 font-mono"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
+                <span className="text-xs font-bold text-slate-300">حالة الاعتماد والتفعيل</span>
+                <button
+                  type="button"
+                  onClick={() => setEditDriverForm({ ...editDriverForm, isApproved: !editDriverForm.isApproved })}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                    editDriverForm.isApproved
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                  }`}
+                >
+                  {editDriverForm.isApproved ? 'معتمد ومفعل ✓' : 'موقوف / معلق ⏸️'}
+                </button>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingDriver(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs cursor-pointer shadow-lg shadow-sky-950/50 flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>حفظ التعديلات بالسحابة ✅</span>
                 </button>
               </div>
             </form>

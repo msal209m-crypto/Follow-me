@@ -163,6 +163,8 @@ export async function batchCreateLicenseKeys(
   return generated;
 }
 
+export const generateBatchLicenseKeys = batchCreateLicenseKeys;
+
 /**
  * Admin Function: Fetch all license keys from Firestore with local cache merge
  */

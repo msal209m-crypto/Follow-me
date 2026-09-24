@@ -777,10 +777,14 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             <div className="flex items-center gap-2">
               <div
                 onClick={handleLogoSecretTap}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-900/30 cursor-pointer active:scale-95 transition-transform"
-                title="شعار المتجر (النقر 5 مرات يفتح خيارات المطور)"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-emerald-500/40 shadow-lg shadow-emerald-950/40 cursor-pointer active:scale-95 transition-transform shrink-0 bg-slate-900"
+                title="شعار قريتي الأصيل (النقر 5 مرات يفتح خيارات المطور)"
               >
-                <Store className="w-5 h-5" />
+                <img
+                  src="/icon.png"
+                  alt="شعار قريتي"
+                  className="w-full h-full object-cover"
+                />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
