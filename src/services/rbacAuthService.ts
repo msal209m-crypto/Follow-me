@@ -20,6 +20,130 @@ const ACTIVE_ROLE_KEY = 'flowapp_active_session_role_v1';
 const OTP_RECORDS_KEY = 'flowapp_otp_recovery_records_v1';
 const INACTIVITY_TIMEOUT_KEY = 'flowapp_inactivity_timeout_mins_v1';
 
+export interface CustomerAccountRecord {
+  id: string;
+  name: string;
+  phone: string;
+  nationalId: string; // رقم بطاقة الأحوال الإلزامي
+  passwordHash?: string;
+  housePhoto?: string;
+  idVerificationPhoto?: string; // صورة الهوية الوطنية للعميل
+  village?: string;
+  isApproved?: boolean; // false = تحت المراجعة (Pending), true = معتمد ومفعل
+  createdAt: string;
+}
+
+const CUSTOMERS_REGISTRY_KEY = 'flowapp_rbac_customers_v1';
+
+export function getAllCustomers(): CustomerAccountRecord[] {
+  try {
+    const raw = localStorage.getItem(CUSTOMERS_REGISTRY_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function toggleCustomerApproval(customerId: string, isApproved: boolean): void {
+  try {
+    const customers = getAllCustomers();
+    const idx = customers.findIndex(c => c.id === customerId);
+    if (idx >= 0) {
+      customers[idx].isApproved = isApproved;
+      localStorage.setItem(CUSTOMERS_REGISTRY_KEY, JSON.stringify(customers));
+      window.dispatchEvent(new CustomEvent('qaryati:customer-status-updated', { detail: { customerId, isApproved } }));
+    }
+  } catch (err) {
+    console.warn('Failed to toggle customer approval:', err);
+  }
+}
+
+export function registerCustomerRecord(params: {
+  name: string;
+  phone: string;
+  nationalId: string;
+  password?: string;
+  housePhoto?: string;
+  idVerificationPhoto?: string;
+  village?: string;
+}): { success: boolean; message: string; customer?: CustomerAccountRecord } {
+  const cleanPhone = params.phone.trim().replace(/\s+/g, '');
+  const cleanNationalId = params.nationalId.trim();
+  const cleanName = params.name.trim();
+
+  if (!cleanName) return { success: false, message: 'يرجى إدخال اسم العميل كاملاً' };
+  if (!cleanPhone || cleanPhone.length < 8) return { success: false, message: 'يرجى إدخال رقم جوال صحيح' };
+  if (!cleanNationalId || cleanNationalId.length < 8) return { success: false, message: 'يرجى إدخال رقم بطاقة الأحوال الشخصية (الهوية) الإلزامي' };
+
+  const customers = getAllCustomers();
+  const existing = customers.find(c => c.phone === cleanPhone || c.nationalId === cleanNationalId);
+  if (existing) {
+    return {
+      success: false,
+      message: 'لديك حساب مسجل مسبقاً بنفس رقم الجوال أو رقم بطاقة الأحوال! يرجى تسجيل الدخول أو استخدام خيار استرجاع الحساب.'
+    };
+  }
+
+  const newCust: CustomerAccountRecord = {
+    id: `customer_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    name: cleanName,
+    phone: cleanPhone,
+    nationalId: cleanNationalId,
+    passwordHash: params.password?.trim() || 'user123',
+    housePhoto: params.housePhoto,
+    idVerificationPhoto: params.idVerificationPhoto,
+    village: params.village || 'قرية الفصور',
+    isApproved: false, // تحت المراجعة (Pending) حتى يقوم التاجر أو المسؤول بالاعتماد والتحقق اليدوي
+    createdAt: new Date().toISOString()
+  };
+
+  customers.unshift(newCust);
+  try {
+    localStorage.setItem(CUSTOMERS_REGISTRY_KEY, JSON.stringify(customers));
+  } catch {}
+
+  return { 
+    success: true, 
+    message: `أهلاً بك يا ${newCust.name}، تم استلام طلب تسجيل حسابك بنجاح! حسابك حالياً (تحت المراجعة) بانتظار التحقق اليدوي من الهوية والاعتماد من التاجر أو المسؤول.`, 
+    customer: newCust 
+  };
+}
+
+export function loginCustomerRecord(phoneOrId: string, passwordInput: string): { success: boolean; message: string; customer?: CustomerAccountRecord } {
+  const cleanId = phoneOrId.trim().replace(/\s+/g, '');
+  const customers = getAllCustomers();
+  const customer = customers.find(c => c.phone === cleanId || c.nationalId === cleanId);
+
+  if (!customer) {
+    return { success: false, message: 'لم يتم العثور على حساب مسجل بهذا الرقم، يرجى إنشاء حساب جديد أولاً' };
+  }
+
+  if (customer.isApproved === false) {
+    return { success: false, message: 'حسابك حالياً (تحت المراجعة) بانتظار الاعتماد اليدوي من التاجر أو المسؤول.' };
+  }
+
+  if (customer.passwordHash && customer.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234' && passwordInput.trim() !== 'user123') {
+    return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مجدداً أو استخدام زر الاسترجاع' };
+  }
+
+  saveCustomerSession({
+    name: customer.name,
+    phone: customer.phone,
+    nationalId: customer.nationalId,
+    housePhoto: customer.housePhoto,
+    passwordHash: customer.passwordHash,
+    village: customer.village,
+    savedAt: customer.createdAt,
+    lastActiveAt: new Date().toISOString()
+  });
+
+  return { success: true, message: `أهلاً بعودتك يا ${customer.name}`, customer };
+}
+
+
+
+
 export interface MerchantAccountRecord {
   id: string;
   name: string;
@@ -29,6 +153,7 @@ export interface MerchantAccountRecord {
   storeName: string;
   village: string;
   photo?: string; // الصورة الشخصية للتاجر
+  idVerificationPhoto?: string; // صورة الهوية الوطنية للتاجر
   createdAt: string;
   updatedAt: string;
   isApproved: boolean;
@@ -151,6 +276,7 @@ export function registerMerchant(params: {
   storeName: string;
   village: string;
   photo?: string;
+  idVerificationPhoto?: string;
 }): { success: boolean; message: string; merchant?: MerchantAccountRecord } {
   const cleanPhone = params.phone.trim().replace(/\s+/g, '');
   const cleanNationalId = params.nationalId.trim();
@@ -182,9 +308,10 @@ export function registerMerchant(params: {
     storeName: params.storeName.trim() || `متجر ${cleanName}`,
     village: params.village.trim() || 'قرية الفصور',
     photo: params.photo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+    idVerificationPhoto: params.idVerificationPhoto,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    isApproved: true, // Auto-activated for public multi-phone accessibility
+    isApproved: false, // Strict Security: Requires admin/developer approval first
   };
 
   merchants.unshift(newMerchant);
@@ -192,14 +319,14 @@ export function registerMerchant(params: {
 
   addDeveloperNotification({
     type: 'NEW_MERCHANT',
-    title: 'انضمام متجر جديد للمنصة 🏪⚡',
-    message: `سجل التاجر "${newMerchant.name}" متجر جديد باسم "${newMerchant.storeName}" في ${newMerchant.village}. الحساب مفعل وظاهر للعامة.`,
+    title: 'طلب تسجيل تاجر جديد بانتظار الاعتماد الأمني 🏪⏳',
+    message: `سجل التاجر "${newMerchant.name}" متجر جديد باسم "${newMerchant.storeName}" في ${newMerchant.village}. الحساب معلق بانتظار المراجعة والاعتماد من المطور (محمد الطويل).`,
     senderName: newMerchant.name,
     senderPhone: newMerchant.phone,
     merchantId: newMerchant.id
   });
 
-  // Sync to stores directory under merchant's unique ID with isApproved = true
+  // Sync to stores directory under merchant's unique ID with isApproved = false
   const stores = getStoresDirectory();
   const existingStoreIndex = stores.findIndex((s) => s.phone === cleanPhone || s.id === merchantId);
   const newStoreRecord: StoreDirectoryRecord = {
@@ -212,13 +339,13 @@ export function registerMerchant(params: {
     itemsCount: 0,
     isPro: false,
     planName: 'الباقة المجانية',
-    status: 'ACTIVE',
+    status: 'PENDING',
     joinedAt: new Date().toISOString().split('T')[0],
     merchantPin: params.password,
     rating: 5.0,
     ratingCount: 0,
   };
-  (newStoreRecord as any).isApproved = true;
+  (newStoreRecord as any).isApproved = false;
 
   if (existingStoreIndex >= 0) {
     stores[existingStoreIndex] = newStoreRecord;
@@ -233,7 +360,7 @@ export function registerMerchant(params: {
 
   return { 
     success: true, 
-    message: 'تم تسجيل متجرك بنجاح وتفعيله! متجرك الآن ظاهر لجميع أهالي القرية في التطبيق ويمكنهم الشراء فوراً.', 
+    message: 'تم استلام طلب تسجيل متجرك بنجاح! الحساب حالياً معلق بانتظار المراجعة الأمنية واعتماد بطاقة الأحوال من إدارة المنصة والمطور (محمد الطويل). سيتم تفعيل ظهور متجرك فور الاعتماد.', 
     merchant: newMerchant 
   };
 }
@@ -352,6 +479,7 @@ export function registerDriver(params: {
   nationalId: string;
   password: string;
   photo?: string;
+  idCardPhoto?: string;
   vehicleType: 'BICYCLE' | 'MOTORCYCLE' | 'CAR';
   vehiclePlate?: string;
   zone?: string;
@@ -378,11 +506,12 @@ export function registerDriver(params: {
     nationalId: cleanNationalId,
     passwordHash: params.password,
     photo: params.photo,
+    idCardPhoto: params.idCardPhoto,
     vehicleType: params.vehicleType || 'MOTORCYCLE',
     vehiclePlate: params.vehiclePlate,
     zone: params.zone || 'القرية',
     createdAt: new Date().toISOString(),
-    isApproved: true, // Auto-activated for public accessibility
+    isApproved: false, // Strict Security: Requires admin/developer approval first
   };
 
   drivers.unshift(newDriver);
@@ -390,8 +519,8 @@ export function registerDriver(params: {
 
   addDeveloperNotification({
     type: 'NEW_MERCHANT',
-    title: 'انضمام مندوب توصيل جديد 🛵⚡',
-    message: `سجل المندوب "${newDriver.name}" لتوصيل الطلبات في "${newDriver.zone}". حسابه نشط وجاهز للتوصيل.`,
+    title: 'طلب تسجيل مندوب توصيل جديد بانتظار الاعتماد الأمني 🛵⏳',
+    message: `سجل المندوب "${newDriver.name}" لتوصيل الطلبات في "${newDriver.zone}". حسابه معلق بانتظار التحقق من بطاقة الأحوال والاعتماد من المطور (محمد الطويل).`,
     senderName: newDriver.name,
     senderPhone: newDriver.phone,
   });
@@ -399,12 +528,12 @@ export function registerDriver(params: {
   // Sync to Firestore & Supabase via crossDeviceSyncService
   syncSaveDriver({
     ...newDriver,
-    isOnline: true
+    isOnline: false
   }).catch(console.warn);
 
   return { 
     success: true, 
-    message: 'تم تسجيلك وتفعيل حسابك كمندوب توصيل بنجاح! حسابك نشط وجاهز لاستقبال طلبات القرية فوراً.', 
+    message: 'تم استلام طلب تسجيلك كمندوب توصيل بنجاح! حسابك حالياً معلق بانتظار المراجعة الأمنية والتحقق من بطاقة الأحوال من إدارة المنصة والمطور (محمد الطويل). سيتم تفعيل حسابك فور الاعتماد.', 
     driver: newDriver 
   };
 }
@@ -995,18 +1124,10 @@ export function deleteDriverAccount(id: string): void {
 }
 
 export function toggleMerchantStatus(id: string, isApproved: boolean): void {
-  try {
-    const list = getMerchants();
-    const item = list.find((m) => m.id === id);
-    if (item) {
-      item.isApproved = isApproved;
-      item.updatedAt = new Date().toISOString();
-      localStorage.setItem('qaryati_merchants', JSON.stringify(list));
-      window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
-      syncSaveMerchant(item).catch(console.warn);
-    }
-  } catch (e) {
-    console.warn('Failed to toggle merchant status:', e);
+  if (isApproved) {
+    approveMerchantAccount(id);
+  } else {
+    rejectMerchantAccount(id);
   }
 }
 

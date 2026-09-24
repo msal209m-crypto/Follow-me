@@ -1,29 +1,16 @@
-import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
-import autoTable, { applyPlugin } from 'jspdf-autotable';
 import { Transaction, StoreSettings } from '../types';
 import { copyToClipboard } from './clipboardUtils';
-import { registerArabicFont, formatArabicPdfText } from './arabicPdfFont';
-
-// Explicitly register autoTable plugin on jsPDF constructor for modern bundlers
-try {
-  if (typeof applyPlugin === 'function') {
-    applyPlugin(jsPDF);
-  }
-} catch {
-  // Ignored if already applied or unavailable
-}
 
 /**
  * Universal safe execution of autoTable supporting both prototype attachment and direct invocation
  */
-function runAutoTable(doc: jsPDF, options: any) {
+function runAutoTable(doc: any, autoTableFn: any, options: any) {
   if (typeof (doc as any).autoTable === 'function') {
     (doc as any).autoTable(options);
-  } else if (typeof autoTable === 'function') {
-    autoTable(doc, options);
-  } else if (typeof (autoTable as any)?.default === 'function') {
-    (autoTable as any).default(doc, options);
+  } else if (typeof autoTableFn === 'function') {
+    autoTableFn(doc, options);
+  } else if (typeof (autoTableFn as any)?.default === 'function') {
+    (autoTableFn as any).default(doc, options);
   } else {
     throw new Error('autoTable plugin could not be initialized');
   }
@@ -82,12 +69,13 @@ const fmtNum = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits:
 /**
  * Export report to XLSX (Excel) workbook with bilingual support (Arabic / English)
  */
-export const exportReportToExcel = (
+export const exportReportToExcel = async (
   data: DailyReportSummaryData,
   settings: StoreSettings,
   filenamePrefix = 'report',
   customLanguage?: 'ar' | 'en'
 ) => {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   const lang = resolveReportLanguage(customLanguage, settings);
   const isAr = lang === 'ar';
@@ -222,12 +210,23 @@ export const exportReportToExcel = (
 /**
  * Generate and trigger download or share of a beautifully styled PDF report in Arabic or English
  */
-export const exportReportToPDF = (
+export const exportReportToPDF = async (
   data: DailyReportSummaryData,
   settings: StoreSettings,
   filenamePrefix = 'report',
   customLanguage?: 'ar' | 'en'
 ) => {
+  const { jsPDF } = await import('jspdf');
+  const atModule = await import('jspdf-autotable');
+  const autoTable = atModule.default || atModule;
+  const applyPlugin = (atModule as any).applyPlugin;
+  if (typeof applyPlugin === 'function') {
+    try {
+      applyPlugin(jsPDF);
+    } catch {}
+  }
+  const { registerArabicFont, formatArabicPdfText } = await import('./arabicPdfFont');
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -407,7 +406,7 @@ export const exportReportToPDF = (
 
   const noCashierText = isAr ? formatArabicPdfText(doc, 'لا توجد مبيعات مسجلة') : 'No cashier sales recorded';
 
-  runAutoTable(doc, {
+  runAutoTable(doc, autoTable, {
     startY: y,
     head: [cashierHeaders],
     body: cashierBody.length > 0 ? cashierBody : [[noCashierText, '-', '-', '-', '-', '-', '-']],
@@ -452,7 +451,7 @@ export const exportReportToPDF = (
 
   const noTxText = isAr ? formatArabicPdfText(doc, 'لا توجد فواتير') : 'No transactions found';
 
-  runAutoTable(doc, {
+  runAutoTable(doc, autoTable, {
     startY: y,
     head: [txHeaders],
     body: txBody.length > 0 ? txBody : [[noTxText, '-', '-', '-', '-', '-', '-']],
@@ -604,11 +603,22 @@ export interface InventoryAuditSummaryData {
 /**
  * Generate and trigger download of an official PDF inventory audit report in Arabic or English
  */
-export const exportInventoryAuditToPDF = (
+export const exportInventoryAuditToPDF = async (
   data: InventoryAuditSummaryData,
   filenamePrefix = 'inventory_audit_report',
   customLanguage?: 'ar' | 'en'
 ) => {
+  const { jsPDF } = await import('jspdf');
+  const atModule = await import('jspdf-autotable');
+  const autoTable = atModule.default || atModule;
+  const applyPlugin = (atModule as any).applyPlugin;
+  if (typeof applyPlugin === 'function') {
+    try {
+      applyPlugin(jsPDF);
+    } catch {}
+  }
+  const { registerArabicFont, formatArabicPdfText } = await import('./arabicPdfFont');
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -814,7 +824,7 @@ export const exportInventoryAuditToPDF = (
 
   const noItemsFoundText = isAr ? formatArabicPdfText(doc, 'لا توجد أصناف مسجلة') : 'No items found';
 
-  runAutoTable(doc, {
+  runAutoTable(doc, autoTable, {
     startY: y,
     head: [auditHeaders],
     body: tableBody.length > 0 ? tableBody : [[noItemsFoundText, '-', '-', '-', '-', '-', '-', '-', '-', '-']],

@@ -69,6 +69,7 @@ import {
   saveActiveCustomer,
   clearActiveCustomer,
   setActiveSessionRole,
+  registerCustomerRecord,
 } from '../services/rbacAuthService';
 import {
   getApprovedMerchantsByVillage,
@@ -142,6 +143,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   const [custModalHousePhoto, setCustModalHousePhoto] = useState(activeCustomer?.housePhoto || '');
   const [custModalPassword, setCustModalPassword] = useState(activeCustomer?.passwordHash || '');
   const [custModalVillage, setCustModalVillage] = useState(activeCustomer?.village || '');
+  const [custModalIdPhoto, setCustModalIdPhoto] = useState('');
 
   // Sync activeCustomer fields with cart inputs
   useEffect(() => {
@@ -2148,21 +2150,23 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                   alert('يرجى تعبئة الحقول الإلزامية: الاسم الكامل، رقم الجوال، ورقم بطاقة الأحوال');
                   return;
                 }
-                const customerData = {
+                const res = registerCustomerRecord({
                   name: custModalName.trim(),
                   phone: custModalPhone.trim(),
                   nationalId: custModalNationalId.trim(),
                   housePhoto: custModalHousePhoto.trim() || '',
-                  passwordHash: custModalPassword.trim() || 'user123',
+                  idVerificationPhoto: custModalIdPhoto,
+                  password: custModalPassword.trim() || 'user123',
                   village: custModalVillage.trim() || undefined,
-                };
-                saveActiveCustomer(customerData);
-                setActiveCustomer(customerData);
-                setCustomerName(customerData.name);
-                setCustomerPhone(customerData.phone);
-                if (customerData.village) setCustomerAddress(customerData.village);
+                });
+
+                if (!res.success) {
+                  alert(res.message);
+                  return;
+                }
+
+                alert(res.message); // "تم استلام طلب تسجيل حسابك بنجاح! حسابك حالياً (تحت المراجعة) بانتظار التحقق اليدوي من الهوية والاعتماد من التاجر أو المسؤول."
                 setShowCustomerAuthModal(false);
-                alert('✅ تم تسجيل بياناتك بنجاح! يمكنك الآن تصفح أسعار المتاجر واختيار بقالتك والطلب مباشرة.');
               }}
               className="space-y-2.5 max-h-[70vh] overflow-y-auto px-1"
             >
@@ -2197,11 +2201,37 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                   type="text"
                   required
                   dir="ltr"
-                  placeholder="مثال: 1088998877 (لمنع التلاعب وضمان الجدية)"
+                  placeholder="مثال: 1088998877"
                   value={custModalNationalId}
                   onChange={(e) => setCustModalNationalId(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500 font-mono text-right"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                  رفع صورة الهوية الوطنية (ID Card) *
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        setCustModalIdPhoto(ev.target?.result as string || '');
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-300 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-500/20 file:text-emerald-300 hover:file:bg-emerald-500/30 cursor-pointer"
+                />
+                {custModalIdPhoto && (
+                  <div className="mt-1 text-[10px] text-emerald-400 font-bold">
+                    ✓ تم إرفاق صورة الهوية الوطنية بنجاح
+                  </div>
+                )}
               </div>
 
               <div>

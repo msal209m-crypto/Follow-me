@@ -192,10 +192,10 @@ export const DailyReportsView: React.FC = () => {
     window.print();
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     try {
       const prefix = periodType === 'MONTH' ? 'monthly_sales_report' : 'daily_sales_report';
-      exportReportToExcel(reportSummary, settings, prefix, language);
+      await exportReportToExcel(reportSummary, settings, prefix, language);
       showNotification(language === 'ar' ? 'تم تصدير ملف Excel بنجاح!' : 'Excel report exported successfully!', 'success');
     } catch (err) {
       console.error('Export Excel failed:', err);
@@ -203,10 +203,10 @@ export const DailyReportsView: React.FC = () => {
     }
   };
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
     try {
       const prefix = periodType === 'MONTH' ? 'monthly_sales_report' : 'daily_sales_report';
-      exportReportToPDF(reportSummary, settings, prefix, language);
+      await exportReportToPDF(reportSummary, settings, prefix, language);
       showNotification(language === 'ar' ? 'تم تصدير تقرير PDF بنجاح!' : 'PDF report exported successfully!', 'success');
     } catch (err) {
       console.error('Export PDF failed:', err);

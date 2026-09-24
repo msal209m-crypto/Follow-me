@@ -87,6 +87,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
   const [merchantStoreName, setMerchantStoreName] = useState('');
   const [merchantVillage, setMerchantVillage] = useState(FIXED_VILLAGES[0]);
   const [merchantPhoto, setMerchantPhoto] = useState<string>('https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80');
+  const [merchantIdPhoto, setMerchantIdPhoto] = useState<string>('');
 
   // Driver Fields
   const [driverName, setDriverName] = useState('');
@@ -95,6 +96,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
   const [driverPassword, setDriverPassword] = useState('');
   const [driverVehicle, setDriverVehicle] = useState<'MOTORCYCLE' | 'CAR' | 'BICYCLE'>('MOTORCYCLE');
   const [driverPhoto, setDriverPhoto] = useState<string>('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80');
+  const [driverIdCardPhoto, setDriverIdCardPhoto] = useState<string>('');
 
   // Customer Fields
   const [customerName, setCustomerName] = useState('');
@@ -174,6 +176,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
           storeName: merchantStoreName,
           village: merchantVillage,
           photo: merchantPhoto,
+          idVerificationPhoto: merchantIdPhoto,
         });
         setLoading(false);
         if (res.success) {
@@ -215,6 +218,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
           nationalId: driverNationalId,
           password: driverPassword,
           photo: driverPhoto,
+          idCardPhoto: driverIdCardPhoto,
           vehicleType: driverVehicle,
           zone: 'منطقة التوصيل السريع',
         });
@@ -513,6 +517,35 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                         </div>
                       </div>
 
+                      {mode === 'REGISTER' && (
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1">
+                            رفع صورة الهوية الوطنية (ID Card) *
+                          </label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            required
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                  setMerchantIdPhoto(ev.target?.result as string || '');
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-500/20 file:text-emerald-300 hover:file:bg-emerald-500/30 cursor-pointer"
+                          />
+                          {merchantIdPhoto && (
+                            <div className="mt-1 text-[10px] text-emerald-400 font-bold">
+                              ✓ تم إرفاق صورة الهوية الوطنية بنجاح
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div>
                         <label className="block text-xs font-bold text-slate-300 mb-1">اسم المتجر / البقالة</label>
                         <div className="relative">
@@ -748,22 +781,51 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                   )}
 
                   {mode === 'REGISTER' && (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">رقم بطاقة الأحوال (الهوية الوطنية) الإلزامي</label>
-                      <div className="relative">
-                        <IdCard className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
-                        <input
-                          type="text"
-                          required
-                          value={driverNationalId}
-                          onChange={(e) => setDriverNationalId(e.target.value)}
-                          placeholder="رقم الهوية / بطاقة الأحوال (10 أرقام)"
-                          className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
-                            isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
-                          } py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono`}
-                        />
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">رقم بطاقة الأحوال (الهوية الوطنية) الإلزامي</label>
+                        <div className="relative">
+                          <IdCard className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                          <input
+                            type="text"
+                            required
+                            value={driverNationalId}
+                            onChange={(e) => setDriverNationalId(e.target.value)}
+                            placeholder="رقم الهوية / بطاقة الأحوال (10 أرقام)"
+                            className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
+                              isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                            } py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono`}
+                          />
+                        </div>
                       </div>
-                    </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">
+                          رفع صورة الهوية الوطنية (ID Card) *
+                        </label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          required
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                setDriverIdCardPhoto(ev.target?.result as string || '');
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-500/20 file:text-amber-300 hover:file:bg-amber-500/30 cursor-pointer"
+                        />
+                        {driverIdCardPhoto && (
+                          <div className="mt-1 text-[10px] text-amber-400 font-bold">
+                            ✓ تم إرفاق صورة الهوية الوطنية بنجاح
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
 
                   <div>
