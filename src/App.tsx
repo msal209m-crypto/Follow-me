@@ -39,7 +39,6 @@ import { MerchantManagementScreen } from './components/MerchantManagementScreen'
 import { DriverManagementScreen } from './components/DriverManagementScreen';
 import { MerchantOrdersModal } from './components/MerchantOrdersModal';
 import { MerchantOrderAlertPopup } from './components/MerchantOrderAlertPopup';
-import { SmartDeveloperContactWidget } from './components/SmartDeveloperContactWidget';
 import { useAuth } from './context/AuthContext';
 import { Item, Transaction, DebtRecord, DebtPaymentHistoryItem } from './types';
 import { getPlatformDeveloperSettings } from './services/platformSettingsService';
@@ -957,7 +956,6 @@ const PortalRouter: React.FC = () => {
             isRTL={isRTL}
           />
         )}
-        <SmartDeveloperContactWidget portalMode="landing" />
       </>
     );
   }
@@ -990,7 +988,6 @@ const PortalRouter: React.FC = () => {
             isRTL={isRTL}
           />
         )}
-        <SmartDeveloperContactWidget portalMode="driver" />
       </>
     );
   }
@@ -1060,7 +1057,6 @@ const PortalRouter: React.FC = () => {
             isRTL={isRTL}
           />
         )}
-        <SmartDeveloperContactWidget portalMode="admin" />
       </>
     );
   }
@@ -1122,7 +1118,6 @@ const PortalRouter: React.FC = () => {
           isRTL={isRTL}
         />
       )}
-      <SmartDeveloperContactWidget portalMode={portalMode} />
     </>
   );
 };

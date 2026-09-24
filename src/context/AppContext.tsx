@@ -857,7 +857,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       performedBy: currentCashier.name,
     });
     setSettings((prev) => {
-      const updated = { ...prev, ...newSettings };
+      const protectedNames = ['قريتي'];
+      const finalSettings = { ...newSettings };
+
+      if (protectedNames.includes(prev.storeName || '')) {
+        delete finalSettings.storeName;
+      }
+
+      const updated = { ...prev, ...finalSettings };
       if (canWriteToCloud && currentUser) {
         safeSetDoc(doc(db, 'users', currentUser.uid, 'settings', 'store_config'), updated, { merge: true }).catch(console.warn);
       }

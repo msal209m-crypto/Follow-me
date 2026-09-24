@@ -6,9 +6,10 @@ import {
   ShieldAlert, 
   Search,
   UserCheck,
-  UserX
+  UserX,
+  Trash2
 } from 'lucide-react';
-import { getMerchants, saveMerchants, MerchantAccountRecord } from '../services/rbacAuthService';
+import { getMerchants, saveMerchants, MerchantAccountRecord, deleteMerchantAccount } from '../services/rbacAuthService';
 
 export const MerchantManagementScreen: React.FC<{ onClose: () => void; isDarkMode?: boolean }> = ({ 
   onClose, 
@@ -34,7 +35,6 @@ export const MerchantManagementScreen: React.FC<{ onClose: () => void; isDarkMod
     );
     saveMerchants(updatedMerchants);
     setMerchants(updatedMerchants);
-    // Here you would trigger a system notification to the merchant
   };
 
   const filteredMerchants = merchants.filter(m => 
@@ -87,6 +87,13 @@ export const MerchantManagementScreen: React.FC<{ onClose: () => void; isDarkMod
                 title="حظر"
               >
                 <UserX className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={() => deleteMerchantAccount(merchant.id)}
+                className="p-2 rounded-xl bg-red-800 hover:bg-red-700 text-white"
+                title="حذف"
+              >
+                <Trash2 className="w-5 h-5" />
               </button>
             </div>
           </div>

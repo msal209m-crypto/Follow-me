@@ -769,18 +769,15 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             {/* Back to Portals Button */}
             <button
               onClick={onOpenLanding}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold border border-slate-700/80 shadow-xs cursor-pointer"
-              title="الرجوع إلى القائمة الرئيسية للبوابات وشاشات الدخول"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition-all flex items-center justify-center border border-slate-700/80 shadow-xs cursor-pointer"
+              title="الرجوع إلى القائمة الرئيسية"
             >
               {isRTL ? <ArrowRight className="w-4 h-4 text-emerald-400" /> : <ArrowLeft className="w-4 h-4 text-emerald-400" />}
-              <span className="text-[11px] sm:text-xs">البوابات</span>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               <div
-                onClick={handleLogoSecretTap}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-emerald-500/40 shadow-lg shadow-emerald-950/40 cursor-pointer active:scale-95 transition-transform shrink-0 bg-slate-900"
-                title="شعار قريتي الأصيل (النقر 5 مرات يفتح خيارات المطور)"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-emerald-500/40 shadow-lg shadow-emerald-950/40 shrink-0 bg-slate-900"
               >
                 <img
                   src="/icon.png"
@@ -788,18 +785,18 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                   className="w-full h-full object-cover"
                 />
               </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h1 className="font-bold text-sm sm:text-base text-white leading-tight">
+              <div className="flex flex-col justify-center gap-0.5 max-w-[150px] sm:max-w-xs">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h1 className="font-bold text-sm text-white leading-none truncate">
                     {settings.storeName || 'متجر قريتي'}
                   </h1>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    مفتوح للطلب
+                    مفتوح
                   </span>
                 </div>
-                <p className="text-[10px] sm:text-xs text-slate-400 truncate max-w-[130px] sm:max-w-xs">
-                  {settings.address || 'تسوق واطلب مباشرة عبر الواتساب'}
+                <p className="text-[10px] text-slate-400 truncate leading-none">
+                  {settings.address || 'تسوق واطلب مباشرة'}
                 </p>
               </div>
             </div>
@@ -2323,30 +2320,6 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             {settings.storeName || 'متجر قريتي'} © {new Date().getFullYear()} - منصة تصفح وطلب المنتجات
           </p>
           <div className="flex items-center gap-4">
-            {onOpenAuthModal && (
-              <button
-                type="button"
-                onClick={() => onOpenAuthModal('DEVELOPER')}
-                className="text-slate-400 hover:text-cyan-400 flex items-center gap-1 transition-colors cursor-pointer"
-                title="لوحة المطور وإدارة الصلاحيات"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span>إدارة الصلاحيات والمطور</span>
-              </button>
-            )}
-            <button
-              onClick={onOpenMerchantPortal}
-              className="text-slate-400 hover:text-emerald-400 flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>دخول التاجر والإدارة</span>
-            </button>
-            <button
-              onClick={onOpenLanding}
-              className="text-slate-400 hover:text-white transition-colors cursor-pointer"
-            >
-              شاشة البوابات
-            </button>
           </div>
         </div>
       </footer>

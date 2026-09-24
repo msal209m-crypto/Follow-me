@@ -209,17 +209,6 @@ export const SmartDeveloperContactWidget: React.FC<SmartDeveloperContactWidgetPr
           </span>
 
           <Headphones className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
-          
-          <span className="hidden sm:inline font-black tracking-wide">
-            تواصل مع المطور
-          </span>
-          <span className="sm:hidden font-black">
-            المطور
-          </span>
-
-          <span className="px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] font-mono font-bold hidden md:inline">
-            دعم فني
-          </span>
         </button>
       </div>
 

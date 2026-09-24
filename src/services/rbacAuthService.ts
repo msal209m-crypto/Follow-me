@@ -1100,7 +1100,7 @@ export function deleteMerchantAccount(id: string): void {
   try {
     const list = getMerchants();
     const filtered = list.filter((m) => m.id !== id);
-    localStorage.setItem('qaryati_merchants', JSON.stringify(filtered));
+    localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify(filtered));
     window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
     // Cross-device sync deletion from Firestore and Supabase
     syncDeleteMerchant(id).catch(console.warn);
