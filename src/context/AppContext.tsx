@@ -204,13 +204,13 @@ const STORAGE_KEYS = {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser, userProfile, isCloudConnected } = useAuth();
-  const canWriteToCloud = Boolean(isCloudConnected && currentUser?.uid && !currentUser.uid.startsWith('usr_'));
+  const activeMerchantId = currentUser?.uid || userProfile?.id || (localStorage.getItem('flowapp_v4_active_local_user') ? JSON.parse(localStorage.getItem('flowapp_v4_active_local_user')!).uid : 'guest');
+  const canWriteToCloud = Boolean(activeMerchantId && activeMerchantId !== 'guest');
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [selectedStickerItemId, setSelectedStickerItemId] = useState<string | null>(null);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>('offline');
 
   // Multi-Vendor Security Filter: User and Merchant isolated storage keys
-  const activeMerchantId = currentUser?.uid || userProfile?.id || 'guest';
   const userPrefix =
     activeMerchantId !== 'guest'
       ? activeMerchantId.startsWith('merchant_')
@@ -656,15 +656,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Real-time Cloud Firestore synchronization listeners (per-user multi-tenant isolation)
   useEffect(() => {
-    if (!canWriteToCloud || !currentUser) {
+    const targetUid = activeMerchantId !== 'guest' ? activeMerchantId : currentUser?.uid;
+    if (!targetUid) {
       setCloudSyncStatus('offline');
       return;
     }
 
     setCloudSyncStatus('syncing');
 
-    // Subscribe to user's isolated items
-    const itemsCol = collection(db, 'users', currentUser.uid, 'items');
+    // Subscribe to store's/user's items
+    const itemsCol = collection(db, 'stores', targetUid, 'items');
     const unsubItems = onSnapshot(
       itemsCol,
       (snapshot) => {
@@ -689,7 +690,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             const batch = writeBatch(db);
             for (const demoId of demoDocsToDelete) {
-              batch.delete(doc(db, 'users', currentUser.uid, 'items', demoId));
+              batch.delete(doc(db, 'stores', targetUid, 'items', demoId));
             }
             batch.commit().catch(console.warn);
           } catch (e) {
@@ -711,7 +712,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     // Subscribe to user's isolated transactions
-    const transCol = collection(db, 'users', currentUser.uid, 'transactions');
+    const transCol = collection(db, 'users', targetUid, 'transactions');
     const unsubTrans = onSnapshot(
       transCol,
       (snapshot) => {
@@ -731,7 +732,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             const batch = writeBatch(db);
             for (const demoId of demoDocsToDelete) {
-              batch.delete(doc(db, 'users', currentUser.uid, 'transactions', demoId));
+              batch.delete(doc(db, 'users', targetUid, 'transactions', demoId));
             }
             batch.commit().catch(console.warn);
           } catch (e) {
@@ -751,7 +752,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     // Subscribe to user's isolated debts
-    const debtsCol = collection(db, 'users', currentUser.uid, 'debts');
+    const debtsCol = collection(db, 'users', targetUid, 'debts');
     const unsubDebts = onSnapshot(
       debtsCol,
       (snapshot) => {
@@ -771,7 +772,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             const batch = writeBatch(db);
             for (const demoId of demoDocsToDelete) {
-              batch.delete(doc(db, 'users', currentUser.uid, 'debts', demoId));
+              batch.delete(doc(db, 'users', targetUid, 'debts', demoId));
             }
             batch.commit().catch(console.warn);
           } catch (e) {
@@ -789,7 +790,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     // Subscribe to user's isolated backups
-    const backupsCol = collection(db, 'users', currentUser.uid, 'backups');
+    const backupsCol = collection(db, 'users', targetUid, 'backups');
     const unsubBackups = onSnapshot(
       backupsCol,
       (snapshot) => {
@@ -815,7 +816,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubDebts();
       unsubBackups();
     };
-  }, [currentUser, canWriteToCloud]);
+  }, [currentUser, activeMerchantId, canWriteToCloud]);
 
   // Manual sync function to batch save all state to Firestore
   const syncToCloudNow = useCallback(async () => {
@@ -900,9 +901,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     // Save to Cloud in background
-    if (canWriteToCloud && currentUser) {
-      safeSetDoc(doc(db, 'users', currentUser.uid, 'items', newItem.id), newItem).catch(console.warn);
-      safeSetDoc(doc(db, 'stores', currentUser.uid, 'items', newItem.id), newItem).catch(console.warn);
+    if (activeMerchantId && activeMerchantId !== 'guest') {
+      safeSetDoc(doc(db, 'stores', activeMerchantId, 'items', newItem.id), newItem).catch(console.warn);
+      safeSetDoc(doc(db, 'users', activeMerchantId, 'items', newItem.id), newItem).catch(console.warn);
     }
 
     return newItem;
@@ -958,9 +959,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...sanitizedFields,
             updatedAt: new Date().toISOString(),
           };
-          if (canWriteToCloud && currentUser) {
-            safeSetDoc(doc(db, 'users', currentUser.uid, 'items', id), updated, { merge: true }).catch(console.warn);
-            safeSetDoc(doc(db, 'stores', currentUser.uid, 'items', id), updated, { merge: true }).catch(console.warn);
+          if (activeMerchantId && activeMerchantId !== 'guest') {
+            safeSetDoc(doc(db, 'stores', activeMerchantId, 'items', id), updated, { merge: true }).catch(console.warn);
+            safeSetDoc(doc(db, 'users', activeMerchantId, 'items', id), updated, { merge: true }).catch(console.warn);
           }
           return updated;
         }
@@ -983,9 +984,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
     setItems((prev) => prev.filter((item) => item.id !== id));
-    if (canWriteToCloud && currentUser) {
-      deleteDoc(doc(db, 'users', currentUser.uid, 'items', id)).catch(console.warn);
-      deleteDoc(doc(db, 'stores', currentUser.uid, 'items', id)).catch(console.warn);
+    if (activeMerchantId && activeMerchantId !== 'guest') {
+      deleteDoc(doc(db, 'stores', activeMerchantId, 'items', id)).catch(console.warn);
+      deleteDoc(doc(db, 'users', activeMerchantId, 'items', id)).catch(console.warn);
     }
   };
 

@@ -24,6 +24,7 @@ import {
   registerMerchant,
   loginDriver,
   registerDriver,
+  registerCustomerRecord,
   saveCustomerSession,
   verifyDeveloperAccess,
   verifyDeveloperFullCredentials,
@@ -154,9 +155,9 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
     resetFormFeedback();
     setLoading(true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       if (mode === 'LOGIN') {
-        const res = loginMerchant(merchantPhone, merchantPassword);
+        const res = await loginMerchant(merchantPhone, merchantPassword);
         setLoading(false);
         if (res.success) {
           setSuccessMessage(res.message);
@@ -168,7 +169,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
           setErrorMessage(res.message);
         }
       } else {
-        const res = registerMerchant({
+        const res = await registerMerchant({
           name: merchantName,
           phone: merchantPhone,
           nationalId: merchantNationalId,
@@ -198,9 +199,9 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
     resetFormFeedback();
     setLoading(true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       if (mode === 'LOGIN') {
-        const res = loginDriver(driverPhone, driverPassword);
+        const res = await loginDriver(driverPhone, driverPassword);
         setLoading(false);
         if (res.success) {
           setSuccessMessage(res.message);
@@ -212,7 +213,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
           setErrorMessage(res.message);
         }
       } else {
-        const res = registerDriver({
+        const res = await registerDriver({
           name: driverName,
           phone: driverPhone,
           nationalId: driverNationalId,
@@ -270,7 +271,15 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
       savedAt: new Date().toISOString(),
     });
 
-    // 2. Cloud Registration in Supabase (not just local!)
+    // 2. Register customer in Firestore Central Cloud
+    registerCustomerRecord({
+      name: cleanName,
+      phone: cleanPhone,
+      nationalId: cleanNationalId,
+      village: chosenVillage,
+    }).catch(console.warn);
+
+    // 3. Cloud Registration in Supabase as secondary
     registerCustomerAccount({
       name: cleanName,
       phone: cleanPhone,

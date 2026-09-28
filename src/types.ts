@@ -393,6 +393,7 @@ export interface StoreDirectoryRecord {
   cityOrVillage: string;
   itemsCount: number;
   isPro: boolean;
+  isApproved?: boolean;
   planName: string;
   status: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
   suspendReason?: string;

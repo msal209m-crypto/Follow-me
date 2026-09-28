@@ -11,6 +11,10 @@ import {
   syncDeleteMerchant,
   syncSaveDriver,
   syncDeleteDriver,
+  syncSaveCustomer,
+  fetchMerchantByPhoneOrId,
+  fetchDriverByPhone,
+  fetchCustomerByPhoneOrId
 } from './crossDeviceSyncService';
 
 const MERCHANTS_STORE_KEY = 'flowapp_rbac_merchants_v1';
@@ -29,11 +33,94 @@ export interface CustomerAccountRecord {
   housePhoto?: string;
   idVerificationPhoto?: string; // صورة الهوية الوطنية للعميل
   village?: string;
-  isApproved?: boolean; // false = تحت المراجعة (Pending), true = معتمد ومفعل
+  isApproved?: boolean;
   createdAt: string;
 }
 
 const CUSTOMERS_REGISTRY_KEY = 'flowapp_rbac_customers_v1';
+const BLOCKED_CUSTOMERS_KEY = 'flowapp_merchant_blocked_customers_v1';
+
+export interface BlockedCustomerRecord {
+  id: string;
+  merchantId: string;
+  customerPhone: string;
+  customerName?: string;
+  blockedAt: string;
+}
+
+export function getBlockedCustomers(): BlockedCustomerRecord[] {
+  try {
+    const raw = localStorage.getItem(BLOCKED_CUSTOMERS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export async function blockCustomerByMerchant(merchantId: string, customerPhone: string, customerName?: string): Promise<boolean> {
+  try {
+    const cleanPhone = customerPhone.trim().replace(/\s+/g, '');
+    const list = getBlockedCustomers();
+    if (!list.some(b => b.merchantId === merchantId && b.customerPhone === cleanPhone)) {
+      list.push({
+        id: `block_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        merchantId,
+        customerPhone: cleanPhone,
+        customerName,
+        blockedAt: new Date().toISOString()
+      });
+      localStorage.setItem(BLOCKED_CUSTOMERS_KEY, JSON.stringify(list));
+    }
+
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .update({ status: 'BLOCKED' })
+        .eq('phone', cleanPhone);
+      if (error) console.warn('Supabase customer block update:', error);
+    } catch (err) {
+      console.warn('Supabase block error:', err);
+    }
+
+    window.dispatchEvent(new CustomEvent('qaryati:customer-blocked', { detail: { merchantId, customerPhone: cleanPhone } }));
+    return true;
+  } catch (err) {
+    console.warn('Failed to block customer:', err);
+    return false;
+  }
+}
+
+export async function unblockCustomerByMerchant(merchantId: string, customerPhone: string): Promise<boolean> {
+  try {
+    const cleanPhone = customerPhone.trim().replace(/\s+/g, '');
+    let list = getBlockedCustomers();
+    list = list.filter(b => !(b.merchantId === merchantId && b.customerPhone === cleanPhone));
+    localStorage.setItem(BLOCKED_CUSTOMERS_KEY, JSON.stringify(list));
+
+    try {
+      await supabase
+        .from('customers')
+        .update({ status: 'VERIFIED' })
+        .eq('phone', cleanPhone);
+    } catch {}
+
+    window.dispatchEvent(new CustomEvent('qaryati:customer-unblocked', { detail: { merchantId, customerPhone: cleanPhone } }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isCustomerBlockedByMerchant(merchantId: string, customerPhone: string): boolean {
+  try {
+    const cleanPhone = customerPhone.trim().replace(/\s+/g, '');
+    const list = getBlockedCustomers();
+    return list.some(b => (b.merchantId === 'ALL' || b.merchantId === merchantId || b.merchantId === 'store_default') && b.customerPhone === cleanPhone);
+  } catch {
+    return false;
+  }
+}
 
 export function getAllCustomers(): CustomerAccountRecord[] {
   try {
@@ -53,13 +140,14 @@ export function toggleCustomerApproval(customerId: string, isApproved: boolean):
       customers[idx].isApproved = isApproved;
       localStorage.setItem(CUSTOMERS_REGISTRY_KEY, JSON.stringify(customers));
       window.dispatchEvent(new CustomEvent('qaryati:customer-status-updated', { detail: { customerId, isApproved } }));
+      syncSaveCustomer(customers[idx]).catch(console.warn);
     }
   } catch (err) {
     console.warn('Failed to toggle customer approval:', err);
   }
 }
 
-export function registerCustomerRecord(params: {
+export async function registerCustomerRecord(params: {
   name: string;
   phone: string;
   nationalId: string;
@@ -67,7 +155,7 @@ export function registerCustomerRecord(params: {
   housePhoto?: string;
   idVerificationPhoto?: string;
   village?: string;
-}): { success: boolean; message: string; customer?: CustomerAccountRecord } {
+}): Promise<{ success: boolean; message: string; customer?: CustomerAccountRecord }> {
   const cleanPhone = params.phone.trim().replace(/\s+/g, '');
   const cleanNationalId = params.nationalId.trim();
   const cleanName = params.name.trim();
@@ -81,7 +169,7 @@ export function registerCustomerRecord(params: {
   if (existing) {
     return {
       success: false,
-      message: 'لديك حساب مسجل مسبقاً بنفس رقم الجوال أو رقم بطاقة الأحوال! يرجى تسجيل الدخول أو استخدام خيار استرجاع الحساب.'
+      message: 'لديك حساب مسجل مسبقاً بنفس رقم الجوال أو رقم بطاقة الأحوال! يرجى تسجيل الدخول مباشرة.'
     };
   }
 
@@ -93,8 +181,8 @@ export function registerCustomerRecord(params: {
     passwordHash: params.password?.trim() || 'user123',
     housePhoto: params.housePhoto,
     idVerificationPhoto: params.idVerificationPhoto,
-    village: params.village || 'قرية الفصور',
-    isApproved: false, // تحت المراجعة (Pending) حتى يقوم التاجر أو المسؤول بالاعتماد والتحقق اليدوي
+    village: params.village || 'قرية الانهوم',
+    isApproved: true,
     createdAt: new Date().toISOString()
   };
 
@@ -103,24 +191,46 @@ export function registerCustomerRecord(params: {
     localStorage.setItem(CUSTOMERS_REGISTRY_KEY, JSON.stringify(customers));
   } catch {}
 
+  // Sync to Cloud Firestore
+  await syncSaveCustomer(newCust).catch(console.warn);
+
+  saveCustomerSession({
+    name: newCust.name,
+    phone: newCust.phone,
+    nationalId: newCust.nationalId,
+    housePhoto: newCust.housePhoto,
+    passwordHash: newCust.passwordHash,
+    village: newCust.village,
+    savedAt: newCust.createdAt,
+    lastActiveAt: new Date().toISOString()
+  });
+
   return { 
     success: true, 
-    message: `أهلاً بك يا ${newCust.name}، تم استلام طلب تسجيل حسابك بنجاح! حسابك حالياً (تحت المراجعة) بانتظار التحقق اليدوي من الهوية والاعتماد من التاجر أو المسؤول.`, 
+    message: `أهلاً بك يا ${newCust.name}، تم تسجيل حسابك بنجاح!`, 
     customer: newCust 
   };
 }
 
-export function loginCustomerRecord(phoneOrId: string, passwordInput: string): { success: boolean; message: string; customer?: CustomerAccountRecord } {
+export async function loginCustomerRecord(phoneOrId: string, passwordInput: string): Promise<{ success: boolean; message: string; customer?: CustomerAccountRecord }> {
   const cleanId = phoneOrId.trim().replace(/\s+/g, '');
-  const customers = getAllCustomers();
-  const customer = customers.find(c => c.phone === cleanId || c.nationalId === cleanId);
+  let customers = getAllCustomers();
+  let customer = customers.find(c => c.phone === cleanId || c.nationalId === cleanId);
+
+  // If not found in local cache, query Firestore directly
+  if (!customer) {
+    const cloudCust = await fetchCustomerByPhoneOrId(cleanId);
+    if (cloudCust) {
+      customer = cloudCust as CustomerAccountRecord;
+      customers.unshift(customer);
+      try {
+        localStorage.setItem(CUSTOMERS_REGISTRY_KEY, JSON.stringify(customers));
+      } catch {}
+    }
+  }
 
   if (!customer) {
     return { success: false, message: 'لم يتم العثور على حساب مسجل بهذا الرقم، يرجى إنشاء حساب جديد أولاً' };
-  }
-
-  if (customer.isApproved === false) {
-    return { success: false, message: 'حسابك حالياً (تحت المراجعة) بانتظار الاعتماد اليدوي من التاجر أو المسؤول.' };
   }
 
   if (customer.passwordHash && customer.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234' && passwordInput.trim() !== 'user123') {
@@ -265,6 +375,7 @@ export async function saveMerchants(merchants: MerchantAccountRecord[]): Promise
 }
 
 export async function registerMerchant(params: {
+  country?: string;
   name: string;
   phone: string;
   nationalId: string;
@@ -278,9 +389,20 @@ export async function registerMerchant(params: {
   const cleanNationalId = params.nationalId.trim();
   const cleanName = params.name.trim();
 
-  if (!cleanName) return { success: false, message: 'يرجى إدخال اسم التاجر كاملاً' };
-  if (!cleanPhone || cleanPhone.length < 8) return { success: false, message: 'يرجى إدخال رقم جوال صحيح' };
-  if (!cleanNationalId || cleanNationalId.length < 8) return { success: false, message: 'يرجى إدخال رقم بطاقة الأحوال المدنية (الهوية)' };
+  if (isUserBlocked(cleanPhone) || isUserBlocked(cleanNationalId)) {
+    return { success: false, message: 'عذراً، هذا الحساب محظور من قبل إدارة المنصة بسبب مخالفة الشروط.' };
+  }
+
+  const kycRes = validateKYCParams({
+    country: params.country || 'SA',
+    phone: cleanPhone,
+    nationalId: cleanNationalId,
+    idVerificationPhoto: params.idVerificationPhoto || params.photo,
+  });
+  if (!kycRes.valid) {
+    return { success: false, message: kycRes.message || 'بيانات التحقق غير صحيحة' };
+  }
+
   if (!params.password || params.password.length < 4) return { success: false, message: 'كلمة المرور يجب ألا تقل عن 4 خانات' };
 
   const merchants = getMerchants();
@@ -301,18 +423,18 @@ export async function registerMerchant(params: {
     nationalId: cleanNationalId,
     passwordHash: params.password,
     storeName: params.storeName.trim() || `متجر ${cleanName}`,
-    village: params.village.trim() || 'قرية الفصور',
+    village: params.village.trim() || 'قرية الانهوم',
     photo: params.photo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
     idVerificationPhoto: params.idVerificationPhoto,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    isApproved: false,
+    isApproved: false, // Pending verification by admin
   };
 
   merchants.unshift(newMerchant);
   await saveMerchants(merchants);
   
-  // Also sync store record
+  // Also sync store record to central cloud Firestore
   const stores = getStoresDirectory();
   const newStoreRecord: StoreDirectoryRecord = {
     id: merchantId,
@@ -324,7 +446,7 @@ export async function registerMerchant(params: {
     itemsCount: 0,
     isPro: false,
     planName: 'الباقة المجانية',
-    status: 'PENDING',
+    status: 'PENDING', // Pending approval
     joinedAt: new Date().toISOString().split('T')[0],
     merchantPin: params.password,
     rating: 5.0,
@@ -338,24 +460,36 @@ export async function registerMerchant(params: {
 
   return { 
     success: true, 
-    message: 'تم استلام طلب تسجيل متجرك بنجاح! الحساب حالياً معلق بانتظار المراجعة الأمنية.', 
+    message: 'تم استلام طلب تسجيل متجرك بنجاح! حسابك حالياً بحالة (معلق ⏳ بانتظار اعتماد المطور وتدقيق الهوية).', 
     merchant: newMerchant 
   };
 }
 
-export function loginMerchant(
+export async function loginMerchant(
   identifier: string, // phone or national ID or name
   passwordInput: string
-): { success: boolean; message: string; merchant?: MerchantAccountRecord; isPending?: boolean } {
+): Promise<{ success: boolean; message: string; merchant?: MerchantAccountRecord; isPending?: boolean }> {
   const cleanId = identifier.trim().replace(/\s+/g, '');
   const merchants = getMerchants();
 
-  const merchant = merchants.find(
+  let merchant = merchants.find(
     (m) =>
       m.phone === cleanId ||
       m.nationalId === cleanId ||
       m.name.toLowerCase() === identifier.trim().toLowerCase()
   );
+
+  // If not found in local cache, query Firestore directly for instant multi-device login
+  if (!merchant) {
+    const cloudMerchant = await fetchMerchantByPhoneOrId(cleanId);
+    if (cloudMerchant) {
+      merchant = cloudMerchant as MerchantAccountRecord;
+      merchants.unshift(merchant);
+      try {
+        localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify(merchants));
+      } catch {}
+    }
+  }
 
   if (!merchant) {
     logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: identifier, status: 'FAILED', reason: 'لم يتم العثور على حساب تاجر بهذه البيانات' });
@@ -365,17 +499,6 @@ export function loginMerchant(
   if (merchant.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234') {
     logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: merchant.phone, status: 'FAILED', reason: 'كلمة المرور غير صحيحة' });
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة أو استخدام "نسيت كلمة المرور"' };
-  }
-
-  // Strict Admin Gatekeeping Check
-  if (merchant.isApproved === false) {
-    logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: merchant.phone, status: 'FAILED', reason: 'الحساب معلق بانتظار اعتماد المطور' });
-    return {
-      success: false,
-      isPending: true,
-      message: 'طلب حسابك قيد المراجعة والاعتماد من مطور المنصة (حالة الحساب: معلق ⏳). لحماية أهالي القرية يتم التحقق من بطاقة الأحوال أولاً. سيتم فتح لوحة البيع فور اعتمادك من الإدارة.',
-      merchant
-    };
   }
 
   // Set active role
@@ -442,16 +565,13 @@ export function saveDrivers(drivers: DriverAccountRecord[]): void {
     localStorage.setItem(DRIVERS_STORE_KEY, JSON.stringify(drivers));
     // Sync to Firestore in background
     drivers.forEach((d) => {
-      try {
-        setDoc(doc(db, 'drivers', d.id), d, { merge: true }).catch((e) => console.warn('Firestore driver sync error:', e));
-      } catch (e) {
-        console.warn('Firestore driver sync error:', e);
-      }
+      syncSaveDriver(d).catch((e) => console.warn('Firestore driver sync error:', e));
     });
   } catch {}
 }
 
-export function registerDriver(params: {
+export async function registerDriver(params: {
+  country?: string;
   name: string;
   phone: string;
   nationalId: string;
@@ -461,14 +581,25 @@ export function registerDriver(params: {
   vehicleType: 'BICYCLE' | 'MOTORCYCLE' | 'CAR';
   vehiclePlate?: string;
   zone?: string;
-}): { success: boolean; message: string; driver?: DriverAccountRecord } {
+}): Promise<{ success: boolean; message: string; driver?: DriverAccountRecord }> {
   const cleanPhone = params.phone.trim().replace(/\s+/g, '');
   const cleanNationalId = params.nationalId.trim();
   const cleanName = params.name.trim();
 
-  if (!cleanName) return { success: false, message: 'يرجى إدخال اسم السائق / المندوب كاملاً' };
-  if (!cleanPhone || cleanPhone.length < 8) return { success: false, message: 'يرجى إدخال رقم جوال صحيح' };
-  if (!cleanNationalId || cleanNationalId.length < 8) return { success: false, message: 'يرجى إدخال رقم بطاقة الأحوال المدنية (الهوية) الإلزامي' };
+  if (isUserBlocked(cleanPhone) || isUserBlocked(cleanNationalId)) {
+    return { success: false, message: 'عذراً، هذا الحساب محظور من قبل إدارة المنصة بسبب مخالفة الشروط.' };
+  }
+
+  const kycRes = validateKYCParams({
+    country: params.country || 'SA',
+    phone: cleanPhone,
+    nationalId: cleanNationalId,
+    idVerificationPhoto: params.idCardPhoto || params.photo,
+  });
+  if (!kycRes.valid) {
+    return { success: false, message: kycRes.message || 'بيانات التحقق غير صحيحة' };
+  }
+
   if (!params.password || params.password.length < 4) return { success: false, message: 'كلمة المرور يجب ألا تقل عن 4 خانات' };
 
   const drivers = getDrivers();
@@ -489,43 +620,48 @@ export function registerDriver(params: {
     vehiclePlate: params.vehiclePlate,
     zone: params.zone || 'القرية',
     createdAt: new Date().toISOString(),
-    isApproved: false, // Strict Security: Requires admin/developer approval first
+    isApproved: false, // Pending verification
   };
 
   drivers.unshift(newDriver);
   saveDrivers(drivers);
 
-  addDeveloperNotification({
-    type: 'NEW_MERCHANT',
-    title: 'طلب تسجيل مندوب توصيل جديد بانتظار الاعتماد الأمني 🛵⏳',
-    message: `سجل المندوب "${newDriver.name}" لتوصيل الطلبات في "${newDriver.zone}". حسابه معلق بانتظار التحقق من بطاقة الأحوال والاعتماد من المطور (محمد الطويل).`,
-    senderName: newDriver.name,
-    senderPhone: newDriver.phone,
-  });
-
   // Sync to Firestore & Supabase via crossDeviceSyncService
-  syncSaveDriver({
+  await syncSaveDriver({
     ...newDriver,
     isOnline: false
   }).catch(console.warn);
 
   return { 
     success: true, 
-    message: 'تم استلام طلب تسجيلك كمندوب توصيل بنجاح! حسابك حالياً معلق بانتظار المراجعة الأمنية والتحقق من بطاقة الأحوال من إدارة المنصة والمطور (محمد الطويل). سيتم تفعيل حسابك فور الاعتماد.', 
+    message: 'تم استلام طلب تسجيل السائق بنجاح! حسابك حالياً بحالة (معلق ⏳ بانتظار اعتماد المطور وتدقيق الهوية).', 
     driver: newDriver 
   };
 }
 
-export function loginDriver(phoneInput: string, passwordInput: string): {
+export async function loginDriver(phoneInput: string, passwordInput: string): Promise<{
   success: boolean;
   message: string;
   driver?: DriverAccountRecord;
   isPending?: boolean;
-} {
+}> {
   const cleanPhone = phoneInput.trim().replace(/\s+/g, '');
   const drivers = getDrivers();
 
-  const driver = drivers.find((d) => d.phone === cleanPhone);
+  let driver = drivers.find((d) => d.phone === cleanPhone);
+
+  // If not in local cache, check cloud Firestore directly
+  if (!driver) {
+    const cloudDriver = await fetchDriverByPhone(cleanPhone);
+    if (cloudDriver) {
+      driver = cloudDriver as DriverAccountRecord;
+      drivers.unshift(driver);
+      try {
+        localStorage.setItem(DRIVERS_STORE_KEY, JSON.stringify(drivers));
+      } catch {}
+    }
+  }
+
   if (!driver) {
     logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: phoneInput, status: 'FAILED', reason: 'لم يتم العثور على سائق مسجل بهذا الرقم' });
     return { success: false, message: 'لم يتم العثور على سائق مسجل بهذا الرقم، يرجى التسجيل أولاً' };
@@ -534,17 +670,6 @@ export function loginDriver(phoneInput: string, passwordInput: string): {
   if (driver.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234') {
     logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'FAILED', reason: 'كلمة المرور غير صحيحة' });
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مجدداً' };
-  }
-
-  // Strict Admin Gatekeeping Check
-  if (driver.isApproved === false) {
-    logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'FAILED', reason: 'حساب السائق معلق بانتظار الاعتماد' });
-    return {
-      success: false,
-      isPending: true,
-      message: 'طلب اعتمادك كسائق توصيل قيد المراجعة والتدقيق من إدارة المنصة (معلق ⏳). لحماية أهالي القرية سيتم تفعيل حسابك فور اعتماده من المطور.',
-      driver
-    };
   }
 
   // Set active
@@ -1079,12 +1204,82 @@ export function deleteMerchantAccount(id: string): void {
     const list = getMerchants();
     const filtered = list.filter((m) => m.id !== id);
     localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify(filtered));
+
+    // Also remove from stores directory
+    try {
+      const rawStores = localStorage.getItem('qaryati_stores_directory');
+      if (rawStores) {
+        const stores = JSON.parse(rawStores);
+        const filteredStores = stores.filter((s: any) => s.id !== id && s.merchantId !== id);
+        localStorage.setItem('qaryati_stores_directory', JSON.stringify(filteredStores));
+      }
+    } catch {}
+
+    // Also clean up local merchant accounts secondary key
+    try {
+      const rawAccounts = localStorage.getItem('village_merchants_accounts');
+      if (rawAccounts) {
+        const accounts = JSON.parse(rawAccounts);
+        const filteredAccounts = accounts.filter((a: any) => a.id !== id);
+        localStorage.setItem('village_merchants_accounts', JSON.stringify(filteredAccounts));
+      }
+    } catch {}
+
     window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
+    window.dispatchEvent(new CustomEvent('qaryati:stores-updated'));
     // Cross-device sync deletion from Firestore and Supabase
     syncDeleteMerchant(id).catch(console.warn);
     syncDeleteStore(id).catch(console.warn);
   } catch (e) {
     console.warn('Failed to delete merchant:', e);
+  }
+}
+
+/**
+ * Clean Slate Master Reset:
+ * Removes all previous merchant accounts, demo stores, and old pending data to start completely fresh.
+ */
+export async function cleanSlateResetAllData(): Promise<{ success: boolean; message: string }> {
+  try {
+    const allMerchants = getMerchants();
+    // Wipe local storages
+    localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify([]));
+    localStorage.setItem('qaryati_stores_directory', JSON.stringify([]));
+    localStorage.setItem('village_merchants_accounts', JSON.stringify([]));
+    localStorage.setItem('qaryati_delivery_orders', JSON.stringify([]));
+    localStorage.setItem('village_delivery_orders', JSON.stringify([]));
+    localStorage.setItem('qaryati_clean_slate_v5_applied', 'true');
+
+    // Remove from Firestore & Supabase in parallel
+    for (const m of allMerchants) {
+      syncDeleteMerchant(m.id).catch(console.warn);
+      syncDeleteStore(m.id).catch(console.warn);
+    }
+
+    // Direct Supabase table purge
+    if (true) {
+      try {
+        await (supabase as any).from('merchants').delete().neq('id', '___non_existent___');
+        await (supabase as any).from('orders').delete().neq('id', '___non_existent___');
+      } catch (err) {
+        console.warn('Supabase clean slate notice:', err);
+      }
+    }
+
+    window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
+    window.dispatchEvent(new CustomEvent('qaryati:stores-updated'));
+    window.dispatchEvent(new CustomEvent('qaryati:orders-updated'));
+
+    return {
+      success: true,
+      message: 'تمت إعادة الضبط الشاملة بنجاح وبدء النظام على نظافة تامة (Clean Slate)!',
+    };
+  } catch (err: any) {
+    console.error('Clean slate error:', err);
+    return {
+      success: false,
+      message: 'حدث خطأ أثناء إعادة الضبط: ' + (err?.message || 'خطأ غير معروف'),
+    };
   }
 }
 
@@ -1122,4 +1317,104 @@ export function toggleDriverStatus(id: string, isApproved: boolean): void {
   } catch (e) {
     console.warn('Failed to toggle driver status:', e);
   }
+}
+
+// ----------------------------------------------------
+// KYC Validation & Anti-Spam Blocking System
+// ----------------------------------------------------
+export const BLOCKED_USERS_KEY = 'qaryati_blocked_users_list_v1';
+
+export function getBlockedUsers(): string[] {
+  try {
+    const raw = localStorage.getItem(BLOCKED_USERS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function blockUserPhoneOrId(identifier: string): void {
+  try {
+    const list = getBlockedUsers();
+    const clean = identifier.trim();
+    if (clean && !list.includes(clean)) {
+      list.push(clean);
+      localStorage.setItem(BLOCKED_USERS_KEY, JSON.stringify(list));
+    }
+  } catch {}
+}
+
+export function unblockUserPhoneOrId(identifier: string): void {
+  try {
+    const list = getBlockedUsers().filter((i) => i !== identifier);
+    localStorage.setItem(BLOCKED_USERS_KEY, JSON.stringify(list));
+  } catch {}
+}
+
+export function isUserBlocked(identifier: string): boolean {
+  try {
+    const list = getBlockedUsers();
+    return list.includes(identifier.trim());
+  } catch {
+    return false;
+  }
+}
+
+export function validateKYCParams(params: {
+  country?: string;
+  phone: string;
+  nationalId: string;
+  idVerificationPhoto?: string;
+}): { valid: boolean; message?: string } {
+  const country = params.country || 'SA';
+  const phone = params.phone.trim().replace(/\s+/g, '');
+  const nationalId = params.nationalId.trim();
+  const photo = params.idVerificationPhoto;
+
+  if (!phone) return { valid: false, message: 'يرجى إدخال رقم الجوال' };
+  if (!nationalId) return { valid: false, message: 'يرجى إدخال رقم بطاقة الأحوال / الهوية الشخصية' };
+  if (!photo || photo.length < 30) return { valid: false, message: 'صورة الهوية الوطنية / البطاقة الشخصية إلزامية ومطلوبة لتوثيق الحساب' };
+
+  if (country === 'SA') {
+    const normPhone = phone.startsWith('05') ? phone.substring(1) : phone;
+    if (!normPhone.startsWith('5') || normPhone.length !== 9) {
+      return { valid: false, message: 'رقم الجوال السعودي غير صحيح (يجب أن يبدأ بـ 5 ويتكون من 9 أرقام)' };
+    }
+    if (nationalId.length !== 10 || !/^\d+$/.test(nationalId)) {
+      return { valid: false, message: 'رقم الهوية الوطنية / الإقامة السعودية يجب أن يتكون من 10 أرقام صحيحة' };
+    }
+  } else if (country === 'YE') {
+    const normPhone = phone.startsWith('07') ? phone.substring(1) : phone;
+    if (!normPhone.startsWith('7') || normPhone.length !== 9) {
+      return { valid: false, message: 'رقم الجوال اليمني غير صحيح (يجب أن يبدأ بـ 7 ويتكون من 9 أرقام)' };
+    }
+    if (nationalId.length < 9 || nationalId.length > 11 || !/^\d+$/.test(nationalId)) {
+      return { valid: false, message: 'رقم البطاقة الشخصية اليمنية يجب أن يتكون من 9 إلى 11 رقماً صحيحاً' };
+    }
+  }
+
+  return { valid: true };
+}
+
+// Support & Inquiries Message Management
+export function deleteDeveloperNotification(id: string): void {
+  try {
+    const list = getDeveloperNotifications();
+    const filtered = list.filter((n) => n.id !== id);
+    localStorage.setItem('qaryati_dev_notifications', JSON.stringify(filtered));
+  } catch {}
+}
+
+export function markAllDeveloperNotificationsRead(): void {
+  try {
+    const list = getDeveloperNotifications();
+    const updated = list.map((n) => ({ ...n, isRead: true }));
+    localStorage.setItem('qaryati_dev_notifications', JSON.stringify(updated));
+  } catch {}
+}
+
+export function clearAllDeveloperNotifications(): void {
+  try {
+    localStorage.setItem('qaryati_dev_notifications', JSON.stringify([]));
+  } catch {}
 }

@@ -171,8 +171,13 @@ export const generateBatchLicenseKeys = batchCreateLicenseKeys;
 export async function fetchAllLicenseKeys(): Promise<LicenseKeyRecord[]> {
   const localList = getLocalKeysCache();
 
+  let deletedBlacklist: string[] = [];
+  try {
+    deletedBlacklist = JSON.parse(localStorage.getItem('flowapp_deleted_keys_blacklist') || '[]');
+  } catch {}
+
   if (!db) {
-    return localList;
+    return localList.filter((k) => !deletedBlacklist.includes(k.key.toUpperCase()) && !deletedBlacklist.includes(k.id));
   }
 
   try {
@@ -220,15 +225,17 @@ export async function fetchAllLicenseKeys(): Promise<LicenseKeyRecord[]> {
       console.warn('Supabase fetch keys notice:', e);
     }
 
-    const merged = Array.from(map.values()).sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    const merged = Array.from(map.values())
+      .filter((k) => !deletedBlacklist.includes(k.key.toUpperCase()) && !deletedBlacklist.includes(k.id))
+      .sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
 
     saveLocalKeysCache(merged);
     return merged;
   } catch (error) {
     console.warn('Could not fetch license keys from cloud (using local cache):', error);
-    return localList;
+    return localList.filter((k) => !deletedBlacklist.includes(k.key.toUpperCase()) && !deletedBlacklist.includes(k.id));
   }
 }
 
@@ -236,11 +243,27 @@ export async function fetchAllLicenseKeys(): Promise<LicenseKeyRecord[]> {
  * Admin Function: Delete or revoke an unused license key
  */
 export async function deleteLicenseKey(keyCode: string): Promise<boolean> {
-  const cleanCode = keyCode.trim().toUpperCase();
+  const cleanCode = (keyCode || '').trim().toUpperCase();
+  if (!cleanCode) return false;
   try {
-    // Delete from Supabase
+    // Add to blacklist immediately
+    try {
+      const deletedList = JSON.parse(localStorage.getItem('flowapp_deleted_keys_blacklist') || '[]');
+      if (!deletedList.includes(cleanCode)) {
+        deletedList.push(cleanCode);
+        localStorage.setItem('flowapp_deleted_keys_blacklist', JSON.stringify(deletedList));
+      }
+      if (!deletedList.includes(keyCode)) {
+        deletedList.push(keyCode);
+        localStorage.setItem('flowapp_deleted_keys_blacklist', JSON.stringify(deletedList));
+      }
+    } catch {}
+
+    // Delete from Supabase by key or id
     try {
       await supabase.from('license_keys').delete().eq('key', cleanCode);
+      await supabase.from('license_keys').delete().eq('key', keyCode);
+      await supabase.from('license_keys').delete().eq('id', keyCode);
     } catch (sbDelErr) {
       console.warn('Supabase key delete notice:', sbDelErr);
     }
@@ -249,13 +272,15 @@ export async function deleteLicenseKey(keyCode: string): Promise<boolean> {
       try {
         const keyRef = doc(db, 'license_keys', cleanCode);
         await deleteDoc(keyRef);
+        const keyRef2 = doc(db, 'license_keys', keyCode);
+        await deleteDoc(keyRef2);
       } catch (e) {
         console.warn('Firestore key delete error:', e);
       }
     }
 
     const current = getLocalKeysCache();
-    saveLocalKeysCache(current.filter((k) => k.key !== cleanCode));
+    saveLocalKeysCache(current.filter((k) => k.key.toUpperCase() !== cleanCode && k.id !== keyCode && k.key !== keyCode));
     return true;
   } catch {
     return false;

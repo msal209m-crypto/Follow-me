@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { DeliveryOrder, DeliveryOrderStatus, StoreSettings } from '../types';
 import { getDeliveryOrders, updateOrderStatus, playNotificationChime } from '../services/deliveryService';
+import { blockCustomerByMerchant, unblockCustomerByMerchant, isCustomerBlockedByMerchant } from '../services/rbacAuthService';
 
 interface MerchantOrdersModalProps {
   isOpen: boolean;
@@ -456,6 +457,42 @@ export const MerchantOrdersModal: React.FC<MerchantOrdersModalProps> = ({
                           <div className="flex items-start gap-1.5 text-xs text-slate-300">
                             <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
                             <span>{order.customerAddress}</span>
+                          </div>
+                        )}
+
+                        {order.customerPhone && (
+                          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                            {isCustomerBlockedByMerchant(order.storeId || 'store_default', order.customerPhone) ? (
+                              <span className="text-rose-400 font-bold flex items-center gap-1">
+                                <span>🚫 هذا العميل محظور حالياً</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">حالة العميل: نشط</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const isBlocked = isCustomerBlockedByMerchant(order.storeId || 'store_default', order.customerPhone);
+                                if (isBlocked) {
+                                  if (window.confirm(`هل تريد إلغاء حظر العميل ${order.customerName}?`)) {
+                                    await unblockCustomerByMerchant(order.storeId || 'store_default', order.customerPhone);
+                                    refreshOrders();
+                                  }
+                                } else {
+                                  if (window.confirm(`⚠️ هل أنت متأكد من حظر العميل ${order.customerName} (${order.customerPhone})؟ لن يتمكن من إرسال طلبات جديدة إلى متجرك.`)) {
+                                    await blockCustomerByMerchant(order.storeId || 'store_default', order.customerPhone, order.customerName);
+                                    refreshOrders();
+                                  }
+                                }
+                              }}
+                              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                                isCustomerBlockedByMerchant(order.storeId || 'store_default', order.customerPhone)
+                                  ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                                  : 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
+                              }`}
+                            >
+                              {isCustomerBlockedByMerchant(order.storeId || 'store_default', order.customerPhone) ? 'إلغاء الحظر ✅' : 'حظر العميل 🚫'}
+                            </button>
                           </div>
                         )}
 

@@ -1,26 +1,32 @@
 import { DeliveryOrder, DeliveryOrderStatus, DriverProfile, StoreDirectoryRecord, Item } from '../types';
 import { db } from '../lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { isCustomerBlockedByMerchant } from './rbacAuthService';
+import {
+  syncSaveStore,
+  syncSaveOrder,
+  syncSaveStoreProduct,
+  syncSaveDriver
+} from './crossDeviceSyncService';
 
 const ORDERS_STORAGE_KEY = 'qaryati_delivery_orders';
 const DRIVER_PROFILE_KEY = 'qaryati_driver_profile';
 const STORES_DIRECTORY_KEY = 'qaryati_stores_directory';
-const DB_RESET_FLAG_KEY = 'qaryati_db_reset_multivendor_v2';
+const DB_RESET_FLAG_KEY = 'qaryati_db_reset_clean_slate_v6';
 
-// Clean initial stores - strictly empty by default for multi-vendor registration
+// Clean initial stores - empty by default for multi-vendor registration
 const INITIAL_STORES: StoreDirectoryRecord[] = [];
 
 // Clean initial delivery orders - empty by default
 const INITIAL_ORDERS: DeliveryOrder[] = [];
 
 /**
- * Execute automatic purge of legacy demo stores (like 'عنوان القهوة' or mock items)
+ * Execute automatic purge of legacy mock demo stores to start clean slate
  */
 export function purgeDemoDatabaseIfNeeded() {
   try {
     const isPurged = localStorage.getItem(DB_RESET_FLAG_KEY);
     if (!isPurged) {
-      // 1. Remove demo store directory if it contains mock stores
+      // Clean legacy mock stores from storage
       const rawStores = localStorage.getItem(STORES_DIRECTORY_KEY);
       if (rawStores) {
         try {
@@ -29,48 +35,40 @@ export function purgeDemoDatabaseIfNeeded() {
             (s) =>
               !s.name.includes('عنوان القهوة') &&
               !s.name.includes('تموينات الأمل') &&
-              !s.name.includes('مقهى') &&
+              !s.name.includes('متجر تجريبي') &&
               s.id !== 'store-1' &&
               s.id !== 'store-2' &&
               s.id !== 'store-3' &&
               s.id !== 'store-4' &&
-              s.id !== 'store-5'
+              s.id !== 'store-5' &&
+              s.id !== 'merchant-default-1'
           );
           localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify(filteredStores));
         } catch {
           localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify([]));
         }
-      } else {
-        localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify([]));
       }
 
-      // 2. Remove mock orders if any
-      const rawOrders = localStorage.getItem(ORDERS_STORAGE_KEY);
-      if (rawOrders) {
-        try {
-          const orders: DeliveryOrder[] = JSON.parse(rawOrders);
-          const filteredOrders = orders.filter(
-            (o) => !o.storeName.includes('عنوان القهوة') && !o.storeName.includes('تموينات الأمل')
-          );
-          localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(filteredOrders));
-        } catch {
-          localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify([]));
-        }
-      }
-
-      // 3. Remove old dummy merchants
+      // Clean legacy mock merchants
       const rawMerchants = localStorage.getItem('flowapp_rbac_merchants_v1');
       if (rawMerchants) {
         try {
           const merchants = JSON.parse(rawMerchants);
           const filtered = Array.isArray(merchants)
-            ? merchants.filter((m: any) => m.id !== 'merchant-default-1' && !m.storeName?.includes('تموينات الأمل') && !m.storeName?.includes('عنوان القهوة'))
+            ? merchants.filter(
+                (m: any) =>
+                  m.id !== 'merchant-default-1' &&
+                  !m.storeName?.includes('تموينات الأمل') &&
+                  !m.storeName?.includes('عنوان القهوة') &&
+                  !m.storeName?.includes('متجر تجريبي')
+              )
             : [];
           localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify(filtered));
-        } catch {}
+        } catch {
+          localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify([]));
+        }
       }
 
-      // 4. Mark purged
       localStorage.setItem(DB_RESET_FLAG_KEY, 'true');
     }
   } catch (e) {
@@ -85,7 +83,6 @@ export function getDeliveryOrders(): DeliveryOrder[] {
   try {
     const raw = localStorage.getItem(ORDERS_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(INITIAL_ORDERS));
       return INITIAL_ORDERS;
     }
     return JSON.parse(raw);
@@ -151,13 +148,9 @@ export function saveDeliveryOrders(orders: DeliveryOrder[]) {
   try {
     localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
     window.dispatchEvent(new CustomEvent('qaryati:orders-updated', { detail: orders }));
-    // Sync to Firestore in background
+    // Sync all to Firestore
     orders.forEach((o) => {
-      try {
-        setDoc(doc(db, 'delivery_orders', o.id), o, { merge: true }).catch((e) => console.warn('Firestore order sync error:', e));
-      } catch (e) {
-        console.warn('Firestore order sync error:', e);
-      }
+      syncSaveOrder(o).catch((e) => console.warn('Firestore order sync error:', e));
     });
   } catch (e) {
     console.error('Failed to save delivery orders:', e);
@@ -165,6 +158,11 @@ export function saveDeliveryOrders(orders: DeliveryOrder[]) {
 }
 
 export function createDeliveryOrder(orderData: Omit<DeliveryOrder, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt'>): DeliveryOrder {
+  if (orderData.storeId && orderData.customerPhone) {
+    if (isCustomerBlockedByMerchant(orderData.storeId, orderData.customerPhone)) {
+      throw new Error('عذراً، هذا الحساب محظور من قبل إدارة هذا المتجر ولا يمكنك إرسال طلبات جديدة إليه.');
+    }
+  }
   const orders = getDeliveryOrders();
   const randDigits = Math.floor(1000 + Math.random() * 9000);
   const newOrder: DeliveryOrder = {
@@ -181,6 +179,9 @@ export function createDeliveryOrder(orderData: Omit<DeliveryOrder, 'id' | 'order
   window.dispatchEvent(new CustomEvent('qaryati:new-order-received', { detail: newOrder }));
   playNotificationChime('new_order');
   
+  // Guarantee instant cloud save
+  syncSaveOrder(newOrder).catch((e) => console.warn('Instant cloud order save error:', e));
+
   return newOrder;
 }
 
@@ -205,6 +206,7 @@ export function updateOrderStatus(
 
   orders[index] = updatedOrder;
   saveDeliveryOrders(orders);
+  syncSaveOrder(updatedOrder).catch((e) => console.warn('Cloud order update error:', e));
 
   // Trigger specialized sound & events according to lifecycle stage
   if (newStatus === 'ACCEPTED') {
@@ -235,6 +237,19 @@ export function saveDriverProfile(profile: DriverProfile) {
   try {
     localStorage.setItem(DRIVER_PROFILE_KEY, JSON.stringify(profile));
     window.dispatchEvent(new CustomEvent('qaryati:driver-updated', { detail: profile }));
+    syncSaveDriver({
+      id: profile.id,
+      name: profile.name,
+      phone: profile.phone,
+      nationalId: (profile as any).nationalId || profile.id,
+      vehicleType: profile.vehicleType,
+      vehiclePlate: profile.vehiclePlate,
+      zone: profile.zone,
+      photo: profile.photo,
+      isApproved: true,
+      isOnline: profile.isOnline,
+      createdAt: profile.registeredAt || new Date().toISOString()
+    }).catch(console.warn);
   } catch (e) {
     console.error('Failed to save driver profile:', e);
   }
@@ -251,11 +266,11 @@ export function getStoresDirectory(): StoreDirectoryRecord[] {
   try {
     const raw = localStorage.getItem(STORES_DIRECTORY_KEY);
     if (!raw) {
-      localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify(INITIAL_STORES));
       return INITIAL_STORES;
     }
     return JSON.parse(raw);
-  } catch {
+  } catch (e) {
+    console.error('Failed to parse stores directory:', e);
     return INITIAL_STORES;
   }
 }
@@ -263,14 +278,11 @@ export function getStoresDirectory(): StoreDirectoryRecord[] {
 export function saveStoresDirectory(stores: StoreDirectoryRecord[]) {
   try {
     localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify(stores));
+    localStorage.setItem('village_stores_directory', JSON.stringify(stores));
     window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: stores }));
-    // Sync to Firestore in background
+    // Sync to Firestore
     stores.forEach((s) => {
-      try {
-        setDoc(doc(db, 'stores', s.id), s, { merge: true }).catch((e) => console.warn('Firestore store sync error:', e));
-      } catch (e) {
-        console.warn('Firestore store sync error:', e);
-      }
+      syncSaveStore(s).catch((e) => console.warn('Firestore store sync error:', e));
     });
   } catch {}
 }
@@ -280,10 +292,13 @@ export function addStoreToDirectory(store: Omit<StoreDirectoryRecord, 'id' | 'jo
   const newStore: StoreDirectoryRecord = {
     ...store,
     id: `store-${Date.now()}`,
+    status: store.status || 'ACTIVE',
+    isApproved: (store as any).isApproved !== false,
     joinedAt: new Date().toISOString().split('T')[0],
   };
   const updated = [newStore, ...stores];
   saveStoresDirectory(updated);
+  syncSaveStore(newStore).catch(console.warn);
   return newStore;
 }
 
@@ -300,6 +315,7 @@ export function toggleStoreProStatus(storeId: string): StoreDirectoryRecord | nu
   };
   stores[idx] = updated;
   saveStoresDirectory(stores);
+  syncSaveStore(updated).catch(console.warn);
   return updated;
 }
 
@@ -339,11 +355,7 @@ export function saveStoreProducts(storeId: string, products: Item[]) {
     
     // Sync each product/item to Firestore under stores/{storeId}/items
     products.forEach((prod) => {
-      try {
-        setDoc(doc(db, 'stores', storeId, 'items', prod.id), prod, { merge: true }).catch((e) => console.warn('Firestore store product sync error:', e));
-      } catch (e) {
-        console.warn('Firestore store product sync error:', e);
-      }
+      syncSaveStoreProduct(storeId, prod).catch((e) => console.warn('Firestore store product sync error:', e));
     });
 
     // Update store items count in directory
@@ -389,6 +401,7 @@ export function rateDeliveryOrder(params: {
 
   orders[idx] = updatedOrder;
   saveDeliveryOrders(orders);
+  syncSaveOrder(updatedOrder).catch(console.warn);
 
   // Update store rating in directory
   const stores = getStoresDirectory();
@@ -433,7 +446,7 @@ export function rateDeliveryOrder(params: {
 }
 
 /**
- * Hard reset database to clean state
+ * Reset platform local cache
  */
 export function resetAllPlatformData() {
   try {
@@ -443,7 +456,6 @@ export function resetAllPlatformData() {
     localStorage.removeItem('flowapp_v4_active_local_user');
     localStorage.removeItem('qaryati_products');
     
-    // Purge any merchant keys
     const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);

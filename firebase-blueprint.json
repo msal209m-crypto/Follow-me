@@ -1,40 +1,24 @@
 {
   "entities": {
-    "LicenseKey": {
-      "title": "LicenseKey",
-      "description": "FlowApp Pro activation license keys created by admin and redeemed by users",
+    "Store": {
+      "title": "Store",
+      "description": "Village grocery or store record",
       "type": "object",
       "properties": {
-        "key": { "type": "string", "description": "Unique key formatted like FLOW-XXXX-XXXX-XXXX" },
-        "is_used": { "type": "boolean", "description": "Whether the key has been redeemed" },
-        "plan": { "type": "string", "description": "Plan code (1M, 3M, 6M, 1Y, LIFE)" },
-        "duration_days": { "type": "number", "description": "Duration in days" },
-        "created_at": { "type": "string", "description": "ISO timestamp of key generation" },
-        "created_by": { "type": "string", "description": "Admin who generated the key" },
-        "used_at": { "type": "string", "description": "ISO timestamp of redemption" },
-        "used_by": { "type": "string", "description": "User ID of customer who redeemed" },
-        "user_email": { "type": "string", "description": "Customer email" },
-        "notes": { "type": "string", "description": "Optional notes or retailer name" }
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "phone": { "type": "string" },
+        "cityOrVillage": { "type": "string" },
+        "status": { "type": "string" },
+        "isApproved": { "type": "boolean" },
+        "itemsCount": { "type": "number" }
       },
-      "required": ["key", "is_used"]
-    },
-    "UserProfile": {
-      "title": "UserProfile",
-      "description": "Multi-tenant user profiles and isolated store metadata",
-      "type": "object",
-      "properties": {
-        "email": { "type": "string" },
-        "displayName": { "type": "string" },
-        "role": { "type": "string" },
-        "storeName": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["email", "displayName"]
+      "required": ["id", "name", "cityOrVillage"]
     },
     "Item": {
       "title": "Item",
-      "description": "Inventory product item",
+      "description": "Store product item",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -47,34 +31,11 @@
         "category": { "type": "string" },
         "image": { "type": "string" },
         "imageUrl": { "type": "string" },
-        "available": { "type": "boolean" }
+        "available": { "type": "boolean" },
+        "storeId": { "type": "string" },
+        "merchantId": { "type": "string" }
       },
-      "required": ["id", "name", "salePrice", "quantity"]
-    },
-    "Transaction": {
-      "title": "Transaction",
-      "description": "Sales or purchase invoice transaction",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "invoiceNumber": { "type": "string" },
-        "type": { "type": "string" },
-        "totalAmount": { "type": "number" },
-        "timestamp": { "type": "string" }
-      },
-      "required": ["id", "type", "totalAmount", "timestamp"]
-    },
-    "DebtRecord": {
-      "title": "DebtRecord",
-      "description": "Customer or supplier debt ledger record",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "personName": { "type": "string" },
-        "totalDebt": { "type": "number" },
-        "remainingDebt": { "type": "number" }
-      },
-      "required": ["id", "personName", "totalDebt", "remainingDebt"]
+      "required": ["id", "name", "salePrice"]
     },
     "Merchant": {
       "title": "Merchant",
@@ -82,11 +43,15 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "storeName": { "type": "string" },
+        "name": { "type": "string" },
         "phone": { "type": "string" },
-        "village": { "type": "string" }
+        "nationalId": { "type": "string" },
+        "storeName": { "type": "string" },
+        "village": { "type": "string" },
+        "isApproved": { "type": "boolean" },
+        "createdAt": { "type": "string" }
       },
-      "required": ["id", "storeName"]
+      "required": ["id", "name", "phone", "storeName", "village"]
     },
     "Driver": {
       "title": "Driver",
@@ -96,9 +61,45 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "phone": { "type": "string" },
-        "village": { "type": "string" }
+        "nationalId": { "type": "string" },
+        "vehicleType": { "type": "string" },
+        "zone": { "type": "string" },
+        "isApproved": { "type": "boolean" },
+        "createdAt": { "type": "string" }
       },
-      "required": ["id", "name"]
+      "required": ["id", "name", "phone"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Registered customer account record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "nationalId": { "type": "string" },
+        "village": { "type": "string" },
+        "isApproved": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "phone"]
+    },
+    "DeliveryOrder": {
+      "title": "DeliveryOrder",
+      "description": "Marketplace delivery order record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "storeId": { "type": "string" },
+        "storeName": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "status": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "customerName", "status"]
     },
     "Ad": {
       "title": "Ad",
@@ -111,19 +112,57 @@
       },
       "required": ["id", "title"]
     },
-    "DeliveryOrder": {
-      "title": "DeliveryOrder",
-      "description": "Village marketplace delivery order record",
+    "LicenseKey": {
+      "title": "LicenseKey",
+      "description": "Activation license key",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "customerName": { "type": "string" },
-        "status": { "type": "string" }
+        "key": { "type": "string" },
+        "is_used": { "type": "boolean" }
       },
-      "required": ["id", "customerName"]
+      "required": ["key", "is_used"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile metadata",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["email", "displayName"]
     }
   },
   "firestore": {
+    "/stores/{storeId}": {
+      "schema": "Store",
+      "description": "Public village stores directory"
+    },
+    "/stores/{storeId}/items/{itemId}": {
+      "schema": "Item",
+      "description": "Store inventory products subcollection"
+    },
+    "/merchants/{merchantId}": {
+      "schema": "Merchant",
+      "description": "Central merchants registry collection"
+    },
+    "/drivers/{driverId}": {
+      "schema": "Driver",
+      "description": "Central drivers registry collection"
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Central customers registry collection"
+    },
+    "/delivery_orders/{orderId}": {
+      "schema": "DeliveryOrder",
+      "description": "Central delivery orders collection"
+    },
+    "/ads/{adId}": {
+      "schema": "Ad",
+      "description": "Advertisements collection"
+    },
     "/license_keys/{keyId}": {
       "schema": "LicenseKey",
       "description": "Activation license keys collection"
@@ -131,34 +170,6 @@
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "User profile document"
-    },
-    "/users/{userId}/items/{itemId}": {
-      "schema": "Item",
-      "description": "Isolated merchant inventory items subcollection"
-    },
-    "/users/{userId}/transactions/{transactionId}": {
-      "schema": "Transaction",
-      "description": "Isolated merchant sales transactions subcollection"
-    },
-    "/users/{userId}/debts/{debtId}": {
-      "schema": "DebtRecord",
-      "description": "Isolated merchant debt records subcollection"
-    },
-    "/merchants/{merchantId}": {
-      "schema": "Merchant",
-      "description": "Merchants registry collection"
-    },
-    "/drivers/{driverId}": {
-      "schema": "Driver",
-      "description": "Drivers registry collection"
-    },
-    "/ads/{adId}": {
-      "schema": "Ad",
-      "description": "Advertisements collection"
-    },
-    "/delivery_orders/{orderId}": {
-      "schema": "DeliveryOrder",
-      "description": "Delivery orders collection"
     }
   }
 }

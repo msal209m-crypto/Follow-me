@@ -69,26 +69,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('Error restoring active local user:', e);
       }
     } else {
-      // Auto-provision Developer & Platform Owner session for zero-friction testing and development
-      const defaultDeveloperUser = {
-        uid: 'developer-owner-master-uid',
-        profile: {
-          id: 'developer-owner-master-uid',
-          email: 'developer@qorayti.com',
-          displayName: 'مطور المنصة (المالك)',
-          storeName: 'قريتي',
-          role: 'OWNER',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        } as UserProfile
-      };
-      try {
-        localStorage.setItem(ACTIVE_LOCAL_USER_KEY, JSON.stringify(defaultDeveloperUser));
-        setCurrentUser({ uid: defaultDeveloperUser.uid, email: defaultDeveloperUser.profile.email, displayName: defaultDeveloperUser.profile.displayName });
-        setUserProfile(defaultDeveloperUser.profile);
-      } catch (e) {
-        console.warn('Error setting default developer session:', e);
-      }
+      setCurrentUser(null);
+      setUserProfile(null);
     }
 
     const handleUserChanged = (e: any) => {
@@ -401,12 +383,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const isCloudConnected = Boolean(
-    auth.currentUser &&
-    currentUser &&
-    auth.currentUser.uid === currentUser.uid &&
-    !currentUser.uid.startsWith('usr_')
-  );
+  const isCloudConnected = Boolean(currentUser && currentUser.uid);
 
   return (
     <AuthContext.Provider

@@ -1,17 +1,18 @@
 import {
   collection,
   doc,
-  setDoc,
   deleteDoc,
   onSnapshot,
   getDocs,
+  getDocFromServer,
+  getDoc,
   query,
   where,
   orderBy
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { supabase } from '../lib/supabase';
-import { StoreDirectoryRecord } from '../types';
+import { safeSetDoc, sanitizeForFirestore, handleFirestoreError, OperationType } from '../lib/firestoreUtils';
+import { StoreDirectoryRecord, Item, DeliveryOrder } from '../types';
 
 export interface SyncedMerchant {
   id: string;
@@ -21,6 +22,7 @@ export interface SyncedMerchant {
   storeName: string;
   village: string;
   photo?: string;
+  idVerificationPhoto?: string;
   isApproved: boolean;
   isPro?: boolean;
   planName?: string;
@@ -37,6 +39,7 @@ export interface SyncedDriver {
   vehiclePlate?: string;
   zone?: string;
   photo?: string;
+  idCardPhoto?: string;
   isApproved: boolean;
   isOnline?: boolean;
   createdAt: string;
@@ -46,105 +49,590 @@ export interface SyncedCustomer {
   id: string;
   name: string;
   phone: string;
-  village: string;
-  nationalId?: string;
+  nationalId: string;
+  village?: string;
   housePhoto?: string;
+  idVerificationPhoto?: string;
+  passwordHash?: string;
+  isApproved?: boolean;
   createdAt: string;
 }
 
-export interface SyncedOrder {
-  id: string;
-  storeId?: string;
-  storeName?: string;
-  villageName?: string;
-  customerName?: string;
-  customerPhone?: string;
-  customerAddress?: string;
-  deliveryCoords?: { lat: number; lng: number };
-  items?: Array<{ id: string; name: string; price: number; quantity: number }>;
-  totalAmount?: number;
-  deliveryFee?: number;
-  status: string; // 'PENDING' | 'ACCEPTED' | 'ON_THE_WAY' | 'DELIVERED' | 'CANCELLED'
-  driverName?: string;
-  driverPhone?: string;
-  paymentMethod?: string;
-  paymentReference?: string;
-  createdAt: string;
-  updatedAt?: string;
+// Global active sync flag
+let isSyncInitialized = false;
+
+/**
+ * Validates connection to Firestore at application boot (as required by Firebase skill)
+ */
+export async function testFirestoreConnection(): Promise<boolean> {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+    console.log('✅ Firestore Cloud Database connected successfully.');
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('⚠️ Firestore is offline. Check network connection.');
+    } else {
+      console.log('Firestore connection verified.');
+    }
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
-// 1. STORES CRUD & REALTIME
+// 1. GLOBAL REALTIME CLOUD SYNCHRONIZATION INITIALIZER
+// ---------------------------------------------------------------------------
+
+export function initGlobalCloudSync(): void {
+  if (isSyncInitialized) return;
+  isSyncInitialized = true;
+
+  console.log('🚀 Initializing Central Real-Time Cloud Synchronization (قريتي Cloud Sync)...');
+
+  // Verify connection
+  testFirestoreConnection().catch(console.warn);
+
+  // 1. Sync Stores Directory from Cloud
+  try {
+    onSnapshot(collection(db, 'stores'), (snapshot) => {
+      const stores: StoreDirectoryRecord[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as StoreDirectoryRecord;
+        stores.push({
+          ...data,
+          id: docSnap.id,
+          isApproved: (data as any).isApproved !== false,
+          status: data.status || 'ACTIVE'
+        });
+      });
+      localStorage.setItem('qaryati_stores_directory', JSON.stringify(stores));
+      localStorage.setItem('village_stores_directory', JSON.stringify(stores));
+      window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: stores }));
+    }, (error) => {
+      console.warn('Stores cloud sync listener notice:', error);
+    });
+  } catch (e) {
+    console.warn('Stores sync init error:', e);
+  }
+
+  // 2. Sync Merchants Registry from Cloud
+  try {
+    onSnapshot(collection(db, 'merchants'), (snapshot) => {
+      const merchants: SyncedMerchant[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as SyncedMerchant;
+        merchants.push({
+          ...data,
+          id: docSnap.id,
+          isApproved: data.isApproved !== false
+        });
+      });
+      localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify(merchants));
+      localStorage.setItem('village_merchants_accounts', JSON.stringify(merchants));
+      window.dispatchEvent(new CustomEvent('qaryati:merchants-updated', { detail: merchants }));
+    }, (error) => {
+      console.warn('Merchants cloud sync listener notice:', error);
+    });
+  } catch (e) {
+    console.warn('Merchants sync init error:', e);
+  }
+
+  // 3. Sync Drivers Registry from Cloud
+  try {
+    onSnapshot(collection(db, 'drivers'), (snapshot) => {
+      const drivers: SyncedDriver[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as SyncedDriver;
+        drivers.push({
+          ...data,
+          id: docSnap.id,
+          isApproved: data.isApproved !== false
+        });
+      });
+      localStorage.setItem('flowapp_rbac_drivers_v1', JSON.stringify(drivers));
+      localStorage.setItem('village_drivers_accounts', JSON.stringify(drivers));
+      window.dispatchEvent(new CustomEvent('qaryati:drivers-updated', { detail: drivers }));
+    }, (error) => {
+      console.warn('Drivers cloud sync listener notice:', error);
+    });
+  } catch (e) {
+    console.warn('Drivers sync init error:', e);
+  }
+
+  // 4. Sync Customers Registry from Cloud
+  try {
+    onSnapshot(collection(db, 'customers'), (snapshot) => {
+      const customers: SyncedCustomer[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as SyncedCustomer;
+        customers.push({
+          ...data,
+          id: docSnap.id,
+          isApproved: data.isApproved !== false
+        });
+      });
+      localStorage.setItem('flowapp_rbac_customers_v1', JSON.stringify(customers));
+      window.dispatchEvent(new CustomEvent('qaryati:customers-updated', { detail: customers }));
+    }, (error) => {
+      console.warn('Customers cloud sync listener notice:', error);
+    });
+  } catch (e) {
+    console.warn('Customers sync init error:', e);
+  }
+
+  // 5. Sync Delivery Orders from Cloud
+  try {
+    let initialLoad = true;
+    onSnapshot(collection(db, 'delivery_orders'), (snapshot) => {
+      const orders: DeliveryOrder[] = [];
+      snapshot.forEach((docSnap) => {
+        orders.push({ id: docSnap.id, ...docSnap.data() } as DeliveryOrder);
+      });
+      // Sort newest first
+      orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      localStorage.setItem('qaryati_delivery_orders', JSON.stringify(orders));
+      localStorage.setItem('village_orders', JSON.stringify(orders));
+      window.dispatchEvent(new CustomEvent('qaryati:orders-updated', { detail: orders }));
+
+      // If not initial load and there are newly added pending orders, trigger alert event
+      if (!initialLoad && snapshot.docChanges) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const addedOrder = change.doc.data() as DeliveryOrder;
+            window.dispatchEvent(new CustomEvent('qaryati:new-order-received', { detail: addedOrder }));
+          } else if (change.type === 'modified') {
+            const modOrder = change.doc.data() as DeliveryOrder;
+            if (modOrder.status === 'READY_FOR_PICKUP') {
+              window.dispatchEvent(new CustomEvent('qaryati:order-ready-for-pickup', { detail: modOrder }));
+            }
+          }
+        });
+      }
+      initialLoad = false;
+    }, (error) => {
+      console.warn('Orders cloud sync listener notice:', error);
+    });
+  } catch (e) {
+    console.warn('Orders sync init error:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. STORES & PRODUCTS CRUD
 // ---------------------------------------------------------------------------
 
 export async function syncSaveStore(store: StoreDirectoryRecord): Promise<void> {
-  // 1. Local Cache
+  // 1. Update local cache
   try {
-    const raw = localStorage.getItem('village_stores_directory');
+    const raw = localStorage.getItem('qaryati_stores_directory');
     const list: StoreDirectoryRecord[] = raw ? JSON.parse(raw) : [];
     const index = list.findIndex((s) => s.id === store.id);
-    if (index >= 0) {
-      list[index] = store;
-    } else {
-      list.unshift(store);
-    }
+    if (index >= 0) list[index] = store;
+    else list.unshift(store);
+    localStorage.setItem('qaryati_stores_directory', JSON.stringify(list));
     localStorage.setItem('village_stores_directory', JSON.stringify(list));
-  } catch (e) {
-    console.warn('Local store save note:', e);
-  }
+    window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: list }));
+  } catch {}
 
-  // 2. Firestore Cloud Sync (Instant cross-device real-time broadcast)
+  // 2. Cloud Firestore Write
   try {
     const storeRef = doc(db, 'stores', store.id);
-    await setDoc(storeRef, {
+    await safeSetDoc(storeRef, {
       ...store,
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (err) {
-    console.warn('Firestore store sync note:', err);
-  }
-
-  // 3. Supabase SQL Sync
-  if (true) {
-    try {
-      await (supabase as any).from('stores').upsert({
-        id: store.id,
-        name: store.name,
-        owner_name: store.ownerName,
-        phone: store.phone,
-        village: store.cityOrVillage,
-        status: store.status || 'ACTIVE',
-        is_approved: (store as any).isApproved !== false,
-        created_at: store.joinedAt || new Date().toISOString(),
-      });
-    } catch (err) {
-      // Non-fatal if SQL table is not yet created
-    }
+    console.warn('Firestore syncSaveStore error:', err);
   }
 }
 
 export async function syncDeleteStore(storeId: string): Promise<void> {
-  // Local
   try {
-    const raw = localStorage.getItem('village_stores_directory');
+    const raw = localStorage.getItem('qaryati_stores_directory');
     if (raw) {
       const list = JSON.parse(raw).filter((s: any) => s.id !== storeId);
+      localStorage.setItem('qaryati_stores_directory', JSON.stringify(list));
       localStorage.setItem('village_stores_directory', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: list }));
     }
   } catch {}
 
-  // Firestore
   try {
     await deleteDoc(doc(db, 'stores', storeId));
   } catch (err) {
-    console.warn('Firestore delete store note:', err);
+    console.warn('Firestore syncDeleteStore error:', err);
   }
+}
 
-  // Supabase
-  if (true) {
+export async function fetchAllStores(): Promise<StoreDirectoryRecord[]> {
+  try {
+    const snap = await getDocs(collection(db, 'stores'));
+    const loaded: StoreDirectoryRecord[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as StoreDirectoryRecord;
+      if (data && data.status !== 'SUSPENDED') {
+        loaded.push({
+          ...data,
+          id: docSnap.id,
+          isApproved: (data as any).isApproved !== false,
+          status: data.status || 'ACTIVE',
+        });
+      }
+    });
+    if (loaded.length > 0) {
+      localStorage.setItem('qaryati_stores_directory', JSON.stringify(loaded));
+      localStorage.setItem('village_stores_directory', JSON.stringify(loaded));
+      window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: loaded }));
+    }
+    return loaded;
+  } catch (err) {
+    console.warn('fetchAllStores error:', err);
     try {
-      await (supabase as any).from('stores').delete().eq('id', storeId);
-    } catch {}
+      const raw = localStorage.getItem('qaryati_stores_directory');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+}
+
+export async function syncSaveStoreProduct(storeId: string, item: Item): Promise<void> {
+  // 1. Local Cache
+  try {
+    const key = `merchant_${storeId}_items`;
+    const raw = localStorage.getItem(key);
+    const list: Item[] = raw ? JSON.parse(raw) : [];
+    const idx = list.findIndex((i) => i.id === item.id);
+    if (idx >= 0) list[idx] = item;
+    else list.unshift(item);
+    localStorage.setItem(key, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('qaryati:store-products-updated', { detail: { storeId, count: list.length } }));
+  } catch {}
+
+  // 2. Cloud Firestore
+  try {
+    const itemRef = doc(db, 'stores', storeId, 'items', item.id);
+    await safeSetDoc(itemRef, item, { merge: true });
+    // Also update store document itemsCount in Firestore
+    const storeRef = doc(db, 'stores', storeId);
+    const rawList = localStorage.getItem(`merchant_${storeId}_items`);
+    const count = rawList ? JSON.parse(rawList).length : 1;
+    await safeSetDoc(storeRef, { itemsCount: count, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore syncSaveStoreProduct error:', err);
+  }
+}
+
+export async function syncDeleteStoreProduct(storeId: string, itemId: string): Promise<void> {
+  // Local
+  try {
+    const key = `merchant_${storeId}_items`;
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const list = JSON.parse(raw).filter((i: any) => i.id !== itemId);
+      localStorage.setItem(key, JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('qaryati:store-products-updated', { detail: { storeId, count: list.length } }));
+    }
+  } catch {}
+
+  // Cloud
+  try {
+    await deleteDoc(doc(db, 'stores', storeId, 'items', itemId));
+    // Update store itemsCount
+    const rawList = localStorage.getItem(`merchant_${storeId}_items`);
+    const count = rawList ? JSON.parse(rawList).length : 0;
+    await safeSetDoc(doc(db, 'stores', storeId), { itemsCount: count, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore syncDeleteStoreProduct error:', err);
+  }
+}
+
+export function subscribeToStoreProducts(
+  storeId: string,
+  onUpdate: (items: Item[]) => void
+): () => void {
+  try {
+    const itemsCol = collection(db, 'stores', storeId, 'items');
+    const unsub = onSnapshot(itemsCol, (snapshot) => {
+      const loaded: Item[] = [];
+      snapshot.forEach((docSnap) => {
+        loaded.push({ id: docSnap.id, ...docSnap.data() } as Item);
+      });
+      // Cache locally
+      try {
+        localStorage.setItem(`merchant_${storeId}_items`, JSON.stringify(loaded));
+      } catch {}
+      onUpdate(loaded);
+    }, (error) => {
+      console.warn('Store products subscription notice:', error);
+    });
+    return unsub;
+  } catch (err) {
+    console.warn('Store products subscription error:', err);
+    return () => {};
+  }
+}
+
+export async function fetchStoreProducts(storeId: string): Promise<Item[]> {
+  try {
+    const snap = await getDocs(collection(db, 'stores', storeId, 'items'));
+    const loaded: Item[] = [];
+    snap.forEach((docSnap) => {
+      loaded.push({ id: docSnap.id, ...docSnap.data() } as Item);
+    });
+    if (loaded.length > 0) {
+      try {
+        localStorage.setItem(`merchant_${storeId}_items`, JSON.stringify(loaded));
+      } catch {}
+    }
+    return loaded;
+  } catch (e) {
+    console.warn('fetchStoreProducts error:', e);
+    // fallback to local cache
+    try {
+      const raw = localStorage.getItem(`merchant_${storeId}_items`);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 3. MERCHANTS CRUD
+// ---------------------------------------------------------------------------
+
+export async function syncSaveMerchant(merchant: SyncedMerchant): Promise<void> {
+  // Local
+  try {
+    const raw = localStorage.getItem('flowapp_rbac_merchants_v1');
+    const list = raw ? JSON.parse(raw) : [];
+    const index = list.findIndex((m: any) => m.id === merchant.id);
+    if (index >= 0) list[index] = merchant;
+    else list.unshift(merchant);
+    localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify(list));
+    localStorage.setItem('village_merchants_accounts', JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('qaryati:merchants-updated', { detail: list }));
+  } catch {}
+
+  // Cloud Firestore
+  try {
+    await safeSetDoc(doc(db, 'merchants', merchant.id), {
+      ...merchant,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore merchant save error:', err);
+  }
+}
+
+export async function syncDeleteMerchant(merchantId: string): Promise<void> {
+  // Local
+  try {
+    const raw = localStorage.getItem('flowapp_rbac_merchants_v1');
+    if (raw) {
+      const list = JSON.parse(raw).filter((m: any) => m.id !== merchantId);
+      localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify(list));
+      localStorage.setItem('village_merchants_accounts', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('qaryati:merchants-updated', { detail: list }));
+    }
+  } catch {}
+
+  // Cloud
+  try {
+    await deleteDoc(doc(db, 'merchants', merchantId));
+    await deleteDoc(doc(db, 'stores', merchantId));
+  } catch (err) {
+    console.warn('Firestore merchant delete error:', err);
+  }
+}
+
+export async function fetchMerchantByPhoneOrId(identifier: string): Promise<SyncedMerchant | null> {
+  const clean = identifier.trim().replace(/\s+/g, '');
+  try {
+    const docSnap = await getDoc(doc(db, 'merchants', clean));
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as SyncedMerchant;
+    }
+    // Query by phone or nationalId
+    const q1 = query(collection(db, 'merchants'), where('phone', '==', clean));
+    const snap1 = await getDocs(q1);
+    if (!snap1.empty) {
+      const docFirst = snap1.docs[0];
+      return { id: docFirst.id, ...docFirst.data() } as SyncedMerchant;
+    }
+    const q2 = query(collection(db, 'merchants'), where('nationalId', '==', clean));
+    const snap2 = await getDocs(q2);
+    if (!snap2.empty) {
+      const docFirst = snap2.docs[0];
+      return { id: docFirst.id, ...docFirst.data() } as SyncedMerchant;
+    }
+  } catch (e) {
+    console.warn('fetchMerchantByPhoneOrId error:', e);
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// 4. DRIVERS CRUD
+// ---------------------------------------------------------------------------
+
+export async function syncSaveDriver(driver: SyncedDriver): Promise<void> {
+  // Local
+  try {
+    const raw = localStorage.getItem('flowapp_rbac_drivers_v1');
+    const list = raw ? JSON.parse(raw) : [];
+    const index = list.findIndex((d: any) => d.id === driver.id);
+    if (index >= 0) list[index] = driver;
+    else list.unshift(driver);
+    localStorage.setItem('flowapp_rbac_drivers_v1', JSON.stringify(list));
+    localStorage.setItem('village_drivers_accounts', JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('qaryati:drivers-updated', { detail: list }));
+  } catch {}
+
+  // Cloud Firestore
+  try {
+    await safeSetDoc(doc(db, 'drivers', driver.id), {
+      ...driver,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore driver save error:', err);
+  }
+}
+
+export async function syncDeleteDriver(driverId: string): Promise<void> {
+  try {
+    const raw = localStorage.getItem('flowapp_rbac_drivers_v1');
+    if (raw) {
+      const list = JSON.parse(raw).filter((d: any) => d.id !== driverId);
+      localStorage.setItem('flowapp_rbac_drivers_v1', JSON.stringify(list));
+      localStorage.setItem('village_drivers_accounts', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('qaryati:drivers-updated', { detail: list }));
+    }
+  } catch {}
+
+  try {
+    await deleteDoc(doc(db, 'drivers', driverId));
+  } catch (err) {
+    console.warn('Firestore driver delete error:', err);
+  }
+}
+
+export async function fetchDriverByPhone(phone: string): Promise<SyncedDriver | null> {
+  const clean = phone.trim().replace(/\s+/g, '');
+  try {
+    const docSnap = await getDoc(doc(db, 'drivers', clean));
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as SyncedDriver;
+    }
+    const q1 = query(collection(db, 'drivers'), where('phone', '==', clean));
+    const snap1 = await getDocs(q1);
+    if (!snap1.empty) {
+      const docFirst = snap1.docs[0];
+      return { id: docFirst.id, ...docFirst.data() } as SyncedDriver;
+    }
+  } catch (e) {
+    console.warn('fetchDriverByPhone error:', e);
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// 5. CUSTOMERS CRUD
+// ---------------------------------------------------------------------------
+
+export async function syncSaveCustomer(customer: SyncedCustomer): Promise<void> {
+  // Local
+  try {
+    const raw = localStorage.getItem('flowapp_rbac_customers_v1');
+    const list = raw ? JSON.parse(raw) : [];
+    const index = list.findIndex((c: any) => c.id === customer.id);
+    if (index >= 0) list[index] = customer;
+    else list.unshift(customer);
+    localStorage.setItem('flowapp_rbac_customers_v1', JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('qaryati:customers-updated', { detail: list }));
+  } catch {}
+
+  // Cloud Firestore
+  try {
+    await safeSetDoc(doc(db, 'customers', customer.id), {
+      ...customer,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore customer save error:', err);
+  }
+}
+
+export async function fetchCustomerByPhoneOrId(identifier: string): Promise<SyncedCustomer | null> {
+  const clean = identifier.trim().replace(/\s+/g, '');
+  try {
+    const docSnap = await getDoc(doc(db, 'customers', clean));
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as SyncedCustomer;
+    }
+    const q1 = query(collection(db, 'customers'), where('phone', '==', clean));
+    const snap1 = await getDocs(q1);
+    if (!snap1.empty) {
+      const docFirst = snap1.docs[0];
+      return { id: docFirst.id, ...docFirst.data() } as SyncedCustomer;
+    }
+    const q2 = query(collection(db, 'customers'), where('nationalId', '==', clean));
+    const snap2 = await getDocs(q2);
+    if (!snap2.empty) {
+      const docFirst = snap2.docs[0];
+      return { id: docFirst.id, ...docFirst.data() } as SyncedCustomer;
+    }
+  } catch (e) {
+    console.warn('fetchCustomerByPhoneOrId error:', e);
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// 6. DELIVERY ORDERS CRUD
+// ---------------------------------------------------------------------------
+
+export async function syncSaveOrder(order: DeliveryOrder): Promise<void> {
+  // Local
+  try {
+    const raw = localStorage.getItem('qaryati_delivery_orders');
+    const list: DeliveryOrder[] = raw ? JSON.parse(raw) : [];
+    const index = list.findIndex((o) => o.id === order.id);
+    if (index >= 0) list[index] = order;
+    else list.unshift(order);
+    localStorage.setItem('qaryati_delivery_orders', JSON.stringify(list));
+    localStorage.setItem('village_orders', JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('qaryati:orders-updated', { detail: list }));
+  } catch {}
+
+  // Cloud Firestore
+  try {
+    await safeSetDoc(doc(db, 'delivery_orders', order.id), {
+      ...order,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore order save error:', err);
+  }
+}
+
+export async function syncDeleteOrder(orderId: string): Promise<void> {
+  try {
+    const raw = localStorage.getItem('qaryati_delivery_orders');
+    if (raw) {
+      const list = JSON.parse(raw).filter((o: any) => o.id !== orderId);
+      localStorage.setItem('qaryati_delivery_orders', JSON.stringify(list));
+      localStorage.setItem('village_orders', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('qaryati:orders-updated', { detail: list }));
+    }
+  } catch {}
+
+  try {
+    await deleteDoc(doc(db, 'delivery_orders', orderId));
+  } catch (err) {
+    console.warn('Firestore order delete error:', err);
   }
 }
 
@@ -159,26 +647,26 @@ export function subscribeToVillageStores(
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as StoreDirectoryRecord;
         if (data && data.status !== 'SUSPENDED') {
-          // Check if matches village or if general
+          // If no targetVillage or 'ALL', return all stores
           if (
             !targetVillage ||
+            targetVillage === 'ALL' ||
             data.cityOrVillage === targetVillage ||
             data.cityOrVillage?.includes(targetVillage) ||
             targetVillage.includes(data.cityOrVillage || '')
           ) {
             loaded.push({
               ...data,
-              id: docSnap.id
+              id: docSnap.id,
+              isApproved: (data as any).isApproved !== false,
+              status: data.status || 'ACTIVE'
             });
           }
         }
       });
-
-      if (loaded.length > 0) {
-        onUpdate(loaded);
-      }
+      onUpdate(loaded);
     }, (error) => {
-      console.warn('Stores subscription note:', error);
+      console.warn('Stores subscription notice:', error);
     });
 
     return unsub;
@@ -188,159 +676,29 @@ export function subscribeToVillageStores(
   }
 }
 
-// ---------------------------------------------------------------------------
-// 2. MERCHANTS CRUD & REALTIME
-// ---------------------------------------------------------------------------
-
-export async function syncSaveMerchant(merchant: SyncedMerchant): Promise<void> {
-  // Local
-  try {
-    const raw = localStorage.getItem('village_merchants_accounts');
-    const list = raw ? JSON.parse(raw) : [];
-    const index = list.findIndex((m: any) => m.id === merchant.id);
-    if (index >= 0) list[index] = merchant;
-    else list.unshift(merchant);
-    localStorage.setItem('village_merchants_accounts', JSON.stringify(list));
-  } catch {}
-
-  // Firestore
-  try {
-    await setDoc(doc(db, 'merchants', merchant.id), {
-      ...merchant,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-  } catch (err) {
-    console.warn('Firestore merchant save note:', err);
-  }
-
-  // Supabase
-  if (true) {
-    try {
-      await (supabase as any).from('merchants').upsert({
-        id: merchant.id,
-        name: merchant.name,
-        phone: merchant.phone,
-        national_id: merchant.nationalId,
-        store_name: merchant.storeName,
-        village_name: merchant.village,
-        is_approved: merchant.isApproved !== false,
-        created_at: merchant.createdAt,
-      });
-    } catch {}
-  }
-}
-
-export async function syncDeleteMerchant(merchantId: string): Promise<void> {
-  // Local
-  try {
-    const raw = localStorage.getItem('village_merchants_accounts');
-    if (raw) {
-      const list = JSON.parse(raw).filter((m: any) => m.id !== merchantId);
-      localStorage.setItem('village_merchants_accounts', JSON.stringify(list));
-    }
-  } catch {}
-
-  // Firestore
-  try {
-    await deleteDoc(doc(db, 'merchants', merchantId));
-    // Also delete their corresponding store entry
-    await deleteDoc(doc(db, 'stores', merchantId));
-  } catch (err) {
-    console.warn('Firestore merchant delete note:', err);
-  }
-
-  // Supabase
-  if (true) {
-    try {
-      await (supabase as any).from('merchants').delete().eq('id', merchantId);
-    } catch {}
-  }
-}
+export type SyncedOrder = DeliveryOrder;
 
 export function subscribeToAllMerchants(
   onUpdate: (merchants: SyncedMerchant[]) => void
 ): () => void {
   try {
     const unsub = onSnapshot(collection(db, 'merchants'), (snapshot) => {
-      const list: SyncedMerchant[] = [];
+      const loaded: SyncedMerchant[] = [];
       snapshot.forEach((docSnap) => {
-        list.push({ ...docSnap.data(), id: docSnap.id } as SyncedMerchant);
+        const data = docSnap.data() as SyncedMerchant;
+        loaded.push({
+          ...data,
+          id: docSnap.id,
+          isApproved: data.isApproved !== false,
+        });
       });
-      onUpdate(list);
+      onUpdate(loaded);
     }, (err) => {
-      console.warn('Merchants subscription note:', err);
+      console.warn('subscribeToAllMerchants error:', err);
     });
     return unsub;
   } catch {
     return () => {};
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 3. DRIVERS CRUD & REALTIME
-// ---------------------------------------------------------------------------
-
-export async function syncSaveDriver(driver: SyncedDriver): Promise<void> {
-  // Local
-  try {
-    const raw = localStorage.getItem('village_drivers_accounts');
-    const list = raw ? JSON.parse(raw) : [];
-    const index = list.findIndex((d: any) => d.id === driver.id);
-    if (index >= 0) list[index] = driver;
-    else list.unshift(driver);
-    localStorage.setItem('village_drivers_accounts', JSON.stringify(list));
-  } catch {}
-
-  // Firestore
-  try {
-    await setDoc(doc(db, 'drivers', driver.id), {
-      ...driver,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-  } catch (err) {
-    console.warn('Firestore driver save note:', err);
-  }
-
-  // Supabase
-  if (true) {
-    try {
-      await (supabase as any).from('drivers').upsert({
-        id: driver.id,
-        name: driver.name,
-        phone: driver.phone,
-        national_id: driver.nationalId,
-        vehicle_type: driver.vehicleType,
-        vehicle_plate: driver.vehiclePlate || null,
-        zone: driver.zone,
-        is_approved: driver.isApproved !== false,
-        created_at: driver.createdAt,
-      });
-    } catch {}
-  }
-}
-
-export async function syncDeleteDriver(driverId: string): Promise<void> {
-  // Local
-  try {
-    const raw = localStorage.getItem('village_drivers_accounts');
-    if (raw) {
-      const list = JSON.parse(raw).filter((d: any) => d.id !== driverId);
-      localStorage.setItem('village_drivers_accounts', JSON.stringify(list));
-    }
-  } catch {}
-
-  // Firestore
-  try {
-    await deleteDoc(doc(db, 'drivers', driverId));
-  } catch (err) {
-    console.warn('Firestore driver delete note:', err);
-  }
-
-  // Supabase
-  if (true) {
-    try {
-      await (supabase as any).from('drivers').delete().eq('id', driverId);
-    } catch {}
   }
 }
 
@@ -349,13 +707,18 @@ export function subscribeToAllDrivers(
 ): () => void {
   try {
     const unsub = onSnapshot(collection(db, 'drivers'), (snapshot) => {
-      const list: SyncedDriver[] = [];
+      const loaded: SyncedDriver[] = [];
       snapshot.forEach((docSnap) => {
-        list.push({ ...docSnap.data(), id: docSnap.id } as SyncedDriver);
+        const data = docSnap.data() as SyncedDriver;
+        loaded.push({
+          ...data,
+          id: docSnap.id,
+          isApproved: data.isApproved !== false,
+        });
       });
-      onUpdate(list);
+      onUpdate(loaded);
     }, (err) => {
-      console.warn('Drivers subscription note:', err);
+      console.warn('subscribeToAllDrivers error:', err);
     });
     return unsub;
   } catch {
@@ -363,88 +726,19 @@ export function subscribeToAllDrivers(
   }
 }
 
-// ---------------------------------------------------------------------------
-// 4. ORDERS CRUD & REALTIME
-// ---------------------------------------------------------------------------
-
-export async function syncSaveOrder(order: SyncedOrder): Promise<void> {
-  // Local
-  try {
-    const raw = localStorage.getItem('village_orders');
-    const list = raw ? JSON.parse(raw) : [];
-    const index = list.findIndex((o: any) => o.id === order.id);
-    if (index >= 0) list[index] = order;
-    else list.unshift(order);
-    localStorage.setItem('village_orders', JSON.stringify(list));
-  } catch {}
-
-  // Firestore
-  try {
-    await setDoc(doc(db, 'delivery_orders', order.id), {
-      ...order,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-  } catch (err) {
-    console.warn('Firestore order save note:', err);
-  }
-
-  // Supabase
-  if (true) {
-    try {
-      await (supabase as any).from('orders').upsert({
-        id: order.id,
-        customer_name: order.customerName,
-        customer_phone: order.customerPhone,
-        store_id: order.storeId,
-        store_name: order.storeName,
-        village_name: order.villageName,
-        total_amount: order.totalAmount || 0,
-        status: order.status,
-        created_at: order.createdAt,
-      });
-    } catch {}
-  }
-}
-
-export async function syncDeleteOrder(orderId: string): Promise<void> {
-  // Local
-  try {
-    const raw = localStorage.getItem('village_orders');
-    if (raw) {
-      const list = JSON.parse(raw).filter((o: any) => o.id !== orderId);
-      localStorage.setItem('village_orders', JSON.stringify(list));
-    }
-  } catch {}
-
-  // Firestore
-  try {
-    await deleteDoc(doc(db, 'delivery_orders', orderId));
-  } catch (err) {
-    console.warn('Firestore order delete note:', err);
-  }
-
-  // Supabase
-  if (true) {
-    try {
-      await (supabase as any).from('orders').delete().eq('id', orderId);
-    } catch {}
-  }
-}
-
 export function subscribeToAllOrders(
-  onUpdate: (orders: SyncedOrder[]) => void
+  onUpdate: (orders: DeliveryOrder[]) => void
 ): () => void {
   try {
     const unsub = onSnapshot(collection(db, 'delivery_orders'), (snapshot) => {
-      const list: SyncedOrder[] = [];
+      const loaded: DeliveryOrder[] = [];
       snapshot.forEach((docSnap) => {
-        list.push({ ...docSnap.data(), id: docSnap.id } as SyncedOrder);
+        loaded.push({ id: docSnap.id, ...docSnap.data() } as DeliveryOrder);
       });
-      // Sort newest first
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      onUpdate(list);
+      loaded.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      onUpdate(loaded);
     }, (err) => {
-      console.warn('Orders subscription note:', err);
+      console.warn('subscribeToAllOrders error:', err);
     });
     return unsub;
   } catch {

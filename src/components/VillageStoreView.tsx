@@ -38,6 +38,7 @@ import {
   Building,
   KeyRound,
   AlertTriangle,
+  AlertCircle,
   Star,
   Wallet,
   Navigation,
@@ -77,7 +78,7 @@ import {
   FIXED_VILLAGES_LIST,
   registerCustomerAccount
 } from '../services/supabaseQaryatiService';
-import { subscribeToVillageStores } from '../services/crossDeviceSyncService';
+import { subscribeToVillageStores, fetchAllStores } from '../services/crossDeviceSyncService';
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
 import { StorePrayerClosedBanner } from './StorePrayerClosedBanner';
 import { AdBannerWidget } from './AdBannerWidget';
@@ -137,6 +138,8 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   // Customer Session & Identity (RBAC Customer)
   const [activeCustomer, setActiveCustomer] = useState(() => getActiveCustomer());
   const [showCustomerAuthModal, setShowCustomerAuthModal] = useState(false);
+  const [customerModalError, setCustomerModalError] = useState<string | null>(null);
+  const [customerModalSuccess, setCustomerModalSuccess] = useState<string | null>(null);
   const [custModalName, setCustModalName] = useState(activeCustomer?.name || '');
   const [custModalPhone, setCustModalPhone] = useState(activeCustomer?.phone || '');
   const [custModalNationalId, setCustModalNationalId] = useState(activeCustomer?.nationalId || '');
@@ -185,44 +188,48 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     });
   };
 
-  // Check if customer credentials exist on mount; if not, open registration modal
-  useEffect(() => {
-    if (!activeCustomer?.name || !activeCustomer?.phone || !activeCustomer?.nationalId) {
-      setShowCustomerAuthModal(true);
-    }
-  }, [activeCustomer]);
-
   // Village & Store Selection - Live Cloud Sync across all devices
   const [allStores, setAllStores] = useState<StoreDirectoryRecord[]>(() =>
     getStoresDirectory().filter((s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false)
   );
-  const [selectedVillage, setSelectedVillage] = useState<string>('ALL');
+  // Default to user's village if available, otherwise 'قرية الانهوم'
+  const [selectedVillage, setSelectedVillage] = useState<string>(() => {
+    const cust = getActiveCustomer();
+    if (cust?.village && cust.village.trim()) return cust.village.trim();
+    return 'قرية الانهوم';
+  });
+  const [villageSearchQuery, setVillageSearchQuery] = useState<string>('');
   const [selectedStoreId, setSelectedStoreId] = useState<string>('default');
 
+  // Sync village when active customer updates
   useEffect(() => {
-    const handleStoresRefresh = () => {
-      setAllStores(getStoresDirectory().filter((s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false));
+    if (activeCustomer?.village && activeCustomer.village.trim()) {
+      setSelectedVillage(activeCustomer.village.trim());
+    }
+  }, [activeCustomer]);
+
+  useEffect(() => {
+    const handleStoresRefresh = (e?: any) => {
+      const list = (e?.detail && Array.isArray(e.detail)) ? e.detail : getStoresDirectory();
+      setAllStores(list.filter((s: any) => s.status !== 'SUSPENDED' && s.isApproved !== false));
     };
     window.addEventListener('qaryati:stores-updated', handleStoresRefresh);
     window.addEventListener('qaryati:order-rated', handleStoresRefresh);
     window.addEventListener('qaryati:merchant-approval-changed', handleStoresRefresh);
 
-    // Real-time Cloud listener across all phones & devices
-    const unsubCloudStores = subscribeToVillageStores(
-      selectedVillage === 'ALL' ? '' : selectedVillage,
-      (cloudStores) => {
-        if (cloudStores && cloudStores.length > 0) {
-          setAllStores((prev) => {
-            const map = new Map<string, StoreDirectoryRecord>();
-            prev.forEach((st) => map.set(st.id, st));
-            cloudStores.forEach((st) => map.set(st.id, st));
-            return Array.from(map.values()).filter(
-              (s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false
-            );
-          });
-        }
+    // Initial fresh fetch from Firestore
+    fetchAllStores().then((cloudStores) => {
+      if (cloudStores && cloudStores.length > 0) {
+        setAllStores(cloudStores.filter((s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false));
       }
-    );
+    }).catch(console.warn);
+
+    // Real-time Cloud listener across all phones & devices for all stores
+    const unsubCloudStores = subscribeToVillageStores('', (cloudStores) => {
+      if (cloudStores) {
+        setAllStores(cloudStores.filter((s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false));
+      }
+    });
 
     // Supabase Realtime master sync
     const unsubRealtime = initSupabaseRealtime({
@@ -238,7 +245,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       if (unsubCloudStores) unsubCloudStores();
       if (unsubRealtime) unsubRealtime();
     };
-  }, [selectedVillage]);
+  }, []);
 
   // Sync Supabase merchants dynamically when a village is chosen (Village-First Query)
   useEffect(() => {
@@ -349,13 +356,27 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     const approvedStores = allStores.filter(
       (s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false
     );
-    if (selectedVillage === 'ALL') return approvedStores;
-    return approvedStores.filter(
-      (s) =>
-        s.cityOrVillage === selectedVillage ||
-        s.cityOrVillage?.includes(selectedVillage)
-    );
-  }, [allStores, selectedVillage]);
+    let result = approvedStores;
+    if (selectedVillage !== 'ALL') {
+      result = result.filter(
+        (s) => {
+          const vill = (s.cityOrVillage || (s as any).village || '').trim();
+          const target = selectedVillage.trim();
+          return vill === target || vill.includes(target) || target.includes(vill);
+        }
+      );
+    }
+    if (villageSearchQuery.trim()) {
+      const q = villageSearchQuery.trim().toLowerCase();
+      result = result.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.cityOrVillage.toLowerCase().includes(q) ||
+          s.ownerName?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [allStores, selectedVillage, villageSearchQuery]);
 
   // Currently active selected store target
   const activeSelectedStore = useMemo(() => {
@@ -1016,231 +1037,236 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       </div>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 flex flex-col gap-6">
+      <main className="flex-1 max-w-6xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-5 sm:gap-6">
         {/* Prayer Time Closed Banner (if active) */}
         <StorePrayerClosedBanner isRTL={isRTL} />
-        {selectedVillage === 'ALL' ? (
-          <div className="space-y-6 py-4">
-            <div className="text-center space-y-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <MapPin className="w-3.5 h-3.5" />
-                اختر قريتك للبدء في التسوق
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-black text-white">أسماء القرى المتاحة في المنصة</h2>
-              <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
-                مجرد ما تضغط على القرية (مثل قرية الفصور أو غيرها)، ستظهر لك فوراً المتاجر المسجلة في هذه القرية فقط.
-              </p>
+
+        {/* ================================================================= */}
+        {/* GEOGRAPHIC VILLAGE SEARCH & SELECTION SYSTEM (نظام القرى والبحث الجغرافي) */}
+        {/* ================================================================= */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xl space-y-4">
+          {/* Header & Village Search Input */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                <MapPin className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                  <span>نظام القرى والبحث الجغرافي</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
+                    {selectedVillage === 'ALL' ? 'كافة القرى' : selectedVillage}
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-400">
+                  {selectedVillage === 'ALL'
+                    ? 'يتم الآن عرض كافة المتاجر والبقالات في جميع القرى بالنظام'
+                    : `تظهر الآن متاجر وبقالات (${selectedVillage}) فقط`}
+                </p>
+              </div>
             </div>
 
-            {/* Standalone Circular Icons and Buttons (No boxes or card containers) */}
-            <div className="flex flex-wrap items-start justify-center gap-7 sm:gap-10 py-6 max-w-4xl mx-auto">
-              {villageList.map((village) => {
-                const villageStores = allStores.filter(
-                  (s) =>
-                    (s.cityOrVillage === village || s.cityOrVillage?.includes(village)) &&
-                    s.status !== 'SUSPENDED' &&
-                    (s as any).isApproved !== false
-                );
-                return (
+            {/* All Villages Button & Village Search input */}
+            <div className="flex items-center gap-2 flex-1 max-w-md">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 right-3 text-emerald-400" />
+                <input
+                  type="text"
+                  value={villageSearchQuery}
+                  onChange={(e) => setVillageSearchQuery(e.target.value)}
+                  placeholder="ابحث باسم القرية (مثال: الانهوم، الفصور...) أو المتجر"
+                  className="w-full bg-slate-950 border border-slate-700/80 rounded-xl py-2 pr-9 pl-8 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-500"
+                />
+                {villageSearchQuery && (
                   <button
-                    key={village}
                     type="button"
-                    onClick={() => {
-                      setSelectedVillage(village);
-                      setSelectedStoreId('default');
-                    }}
-                    className="flex flex-col items-center group cursor-pointer transition-all duration-200 focus:outline-none select-none text-center"
+                    onClick={() => setVillageSearchQuery('')}
+                    className="absolute top-1/2 -translate-y-1/2 left-2.5 text-slate-400 hover:text-white p-1"
                   >
-                    {/* Standalone Circular Icon Button */}
-                    <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-slate-900 border-2 border-slate-700/80 group-hover:border-emerald-400 group-hover:bg-emerald-950/40 text-emerald-400 group-hover:text-emerald-300 flex items-center justify-center shadow-lg shadow-black/40 group-hover:shadow-emerald-500/25 group-hover:scale-105 active:scale-95 transition-all duration-200">
-                      <MapPin className="w-8 h-8 sm:w-10 sm:h-10 transition-transform duration-200 group-hover:-translate-y-1" />
-                      {villageStores.length > 0 && (
-                        <span
-                          className="absolute -top-1 -right-1 bg-emerald-500 text-slate-950 font-black text-[11px] font-mono px-2 py-0.5 rounded-full shadow-md border-2 border-slate-900"
-                          title={`${villageStores.length} متجر`}
-                        >
-                          {villageStores.length}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Village Name Directly Underneath */}
-                    <span className="mt-3 text-sm sm:text-base font-extrabold text-slate-200 group-hover:text-emerald-400 transition-colors tracking-tight max-w-[120px] line-clamp-1">
-                      {village}
-                    </span>
-                    <span className="text-[11px] text-slate-400 font-semibold mt-0.5">
-                      {villageStores.length > 0 ? `${villageStores.length} متجر` : 'لا توجد متاجر'}
-                    </span>
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                );
-              })}
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedVillage('ALL');
+                  setVillageSearchQuery('');
+                  setSelectedStoreId('default');
+                }}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center gap-1.5 border shadow-sm ${
+                  selectedVillage === 'ALL'
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-emerald-500/20'
+                    : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border-slate-700'
+                }`}
+              >
+                <Store className="w-3.5 h-3.5" />
+                <span>جميع القرى</span>
+              </button>
             </div>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Selected Village Header Bar */}
-            <div className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                  <MapPin className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-xs text-slate-400">القرية المحددة حالياً:</div>
-                  <h3 className="font-black text-white text-base sm:text-lg">{selectedVillage}</h3>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedVillage('ALL');
-                  setSelectedStoreId('default');
-                }}
-                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all border border-slate-700 cursor-pointer flex items-center gap-1.5"
-              >
-                {isRTL ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
-                <span>تغيير القرية / عرض كل القرى</span>
-              </button>
+
+          {/* Horizontal Village Switcher Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 no-scrollbar">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedVillage('ALL');
+                setSelectedStoreId('default');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer border ${
+                selectedVillage === 'ALL'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-sm'
+                  : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+              }`}
+            >
+              <span>جميع القرى</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">
+                {allStores.length}
+              </span>
+            </button>
+
+            {villageList.map((vil) => {
+              const isSelected = selectedVillage === vil;
+              const storeCount = allStores.filter((s) => s.cityOrVillage === vil || s.cityOrVillage?.includes(vil)).length;
+              return (
+                <button
+                  key={vil}
+                  type="button"
+                  onClick={() => {
+                    setSelectedVillage(vil);
+                    setSelectedStoreId('default');
+                    setVillageSearchQuery('');
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer border ${
+                    isSelected
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-sm shadow-emerald-500/20 font-black'
+                      : 'bg-slate-950/80 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                  <span>{vil}</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+                    {storeCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* List of Stores Registered in this Village or All Villages */}
+          <div className="space-y-3 pt-2 border-t border-slate-800/80">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h4 className="text-xs sm:text-sm font-bold text-slate-200 flex items-center gap-2">
+                <Store className="w-4 h-4 text-emerald-400" />
+                <span>
+                  {selectedVillage === 'ALL'
+                    ? `كافة المتاجر والبقالات بالمنصة (${availableStores.length}):`
+                    : `المتاجر والبقالات في ${selectedVillage} (${availableStores.length}):`}
+                </span>
+              </h4>
+              <span className="text-[11px] text-slate-400">
+                انقر على أي متجر أو بقالة لتصفح بضائعها والطلب الفوري
+              </span>
             </div>
 
-            {/* Quick Village Switcher (Horizontal Circular/Pill buttons) */}
-            <div className="flex items-center gap-2.5 overflow-x-auto pb-2 pt-1 no-scrollbar">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedVillage('ALL');
-                  setSelectedStoreId('default');
-                }}
-                className="flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500"
-              >
-                <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                <span>كل القرى</span>
-              </button>
-
-              {villageList.map((vil) => {
-                const isSelected = selectedVillage === vil;
-                const storeCount = allStores.filter((s) => s.cityOrVillage === vil).length;
-                return (
-                  <button
-                    key={vil}
-                    type="button"
-                    onClick={() => {
-                      setSelectedVillage(vil);
-                      setSelectedStoreId('default');
-                    }}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer border ${
-                      isSelected
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-sm shadow-emerald-500/20'
-                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
-                    }`}
-                  >
-                    <div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                    <span>{vil}</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
-                      {storeCount}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* List of Stores Registered in this Village */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs sm:text-sm font-bold text-slate-200 flex items-center gap-2">
-                  <Store className="w-4 h-4 text-emerald-400" />
-                  <span>المتاجر المسجلة في {selectedVillage} ({availableStores.length}):</span>
-                </h4>
-                <span className="text-[11px] text-slate-400">اختر المتجر لتصفح منتجاته والطلب منه مباشرة</span>
+            {availableStores.length === 0 ? (
+              <div className="p-8 text-center bg-slate-950/40 border border-dashed border-slate-800 rounded-2xl space-y-2">
+                <Store className="w-10 h-10 text-slate-600 mx-auto" />
+                <p className="text-sm font-bold text-slate-300">
+                  {selectedVillage === 'ALL'
+                    ? 'لا توجد متاجر مطابقة لبحثك حالياً'
+                    : `لا توجد بقالات مسجلة في ${selectedVillage} حتى الآن`}
+                </p>
+                <p className="text-xs text-slate-500">
+                  يمكنك أن تكون أول تاجر يسجل بقالته أو متجره لخدمة أهالي القرية
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenAuthModal) onOpenAuthModal('MERCHANT');
+                    else onOpenMerchantPortal();
+                  }}
+                  className="mt-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-md shadow-emerald-950"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>تسجيل متجر جديد الآن</span>
+                </button>
               </div>
-
-              {availableStores.length === 0 ? (
-                <div className="p-8 text-center bg-slate-900/60 border border-dashed border-slate-800 rounded-2xl">
-                  <Store className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                  <p className="text-sm font-bold text-slate-300">لا توجد متاجر مسجلة في {selectedVillage} حتى الآن</p>
-                  <p className="text-xs text-slate-500 mt-1">هل أنت تاجر في هذه القرية؟ يمكنك تسجيل متجرك الآن بكل سهولة.</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onOpenAuthModal) onOpenAuthModal('MERCHANT');
-                      else onOpenMerchantPortal();
-                    }}
-                    className="mt-3 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>تسجيل متجر جديد في {selectedVillage}</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {availableStores.map((st) => {
-                    const isSelected = selectedStoreId === st.id;
-                    const ratingVal = st.rating || 5;
-                    const ratingCount = st.ratingCount || 0;
-                    return (
-                      <div
-                        key={st.id}
-                        onClick={() => setSelectedStoreId(st.id)}
-                        className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
-                          isSelected
-                            ? 'bg-emerald-950/40 border-emerald-500/70 shadow-lg shadow-emerald-950/30 ring-1 ring-emerald-500/50'
-                            : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shrink-0">
-                              <Store className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <h5 className="font-extrabold text-white text-sm leading-tight flex items-center gap-1.5">
-                                <span>{st.name}</span>
-                                {st.isPro && <span className="text-xs" title="تاجر معتمد">👑</span>}
-                              </h5>
-                              <p className="text-[11px] text-emerald-400 font-semibold mt-0.5">{st.cityOrVillage}</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {availableStores.map((st) => {
+                  const isSelected = selectedStoreId === st.id;
+                  const ratingVal = st.rating || 5;
+                  const ratingCount = st.ratingCount || 0;
+                  return (
+                    <div
+                      key={st.id}
+                      onClick={() => setSelectedStoreId(st.id)}
+                      className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 ${
+                        isSelected
+                          ? 'bg-emerald-950/40 border-emerald-500/70 shadow-lg shadow-emerald-950/30 ring-1 ring-emerald-500/50'
+                          : 'bg-slate-950/80 hover:bg-slate-900 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shrink-0">
+                            <Store className="w-5 h-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <h5 className="font-black text-white text-sm leading-tight flex items-center gap-1.5 truncate">
+                              <span className="truncate">{st.name}</span>
+                              {st.isPro && <span className="text-xs shrink-0" title="تاجر معتمد">👑</span>}
+                            </h5>
+                            <div className="inline-flex items-center gap-1 mt-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                              <MapPin className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{st.cityOrVillage}</span>
                             </div>
                           </div>
-                          {isSelected && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-slate-950 shrink-0">
-                              المحدد للتسوق ✓
-                            </span>
-                          )}
                         </div>
+                        {isSelected && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-slate-950 shrink-0">
+                            المحدد للتسوق ✓
+                          </span>
+                        )}
+                      </div>
 
-                        {/* Store Ratings (Stars) */}
-                        <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
-                          <div className="flex items-center gap-1">
-                            <div className="flex text-amber-400">
-                              {[1, 2, 3, 4, 5].map((starIdx) => (
-                                <Star
-                                  key={starIdx}
-                                  className={`w-3.5 h-3.5 ${
-                                    starIdx <= Math.round(ratingVal)
-                                      ? 'fill-amber-400 text-amber-400'
-                                      : 'text-slate-600'
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                            <span className="text-xs font-mono font-bold text-amber-300 ml-1">
-                              {ratingVal.toFixed(1)}
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              ({ratingCount > 0 ? `${ratingCount} تقييم` : 'جديد'})
-                            </span>
+                      {/* Store Ratings (Stars) & Details */}
+                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <div className="flex text-amber-400">
+                            {[1, 2, 3, 4, 5].map((starIdx) => (
+                              <Star
+                                key={starIdx}
+                                className={`w-3.5 h-3.5 ${
+                                  starIdx <= Math.round(ratingVal)
+                                    ? 'fill-amber-400 text-amber-400'
+                                    : 'text-slate-600'
+                                }`}
+                              />
+                            ))}
                           </div>
-
-                          <span className="text-[11px] font-bold text-emerald-400">
-                            {isSelected ? 'المتجر النشط' : 'تصفح المتجر ←'}
+                          <span className="text-xs font-mono font-bold text-amber-300 ml-1">
+                            {ratingVal.toFixed(1)}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            ({ratingCount > 0 ? `${ratingCount} تقييم` : 'جديد'})
                           </span>
                         </div>
+
+                        <span className="text-[11px] font-bold text-emerald-400">
+                          {isSelected ? 'المتجر النشط ✓' : 'تصفح البضائع ←'}
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Search & Category Filter */}
         <div className="flex flex-col gap-3">
@@ -2125,48 +2151,91 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
       {/* Customer Quick Login Modal (تسجيل دخول العميل البسيط) */}
       {showCustomerAuthModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div
             dir={isRTL ? 'rtl' : 'ltr'}
-            className="bg-slate-900 border border-emerald-500/40 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95"
+            className="bg-slate-900 border border-emerald-500/40 rounded-3xl max-w-md w-full max-h-[92dvh] sm:max-h-[88vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 my-auto"
           >
-            <div className="text-center">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto mb-2">
-                <UserCheck className="w-6 h-6" />
+            {/* Modal Header */}
+            <div className="shrink-0 p-4 sm:p-5 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white">تسجيل بيانات العميل</h3>
+                  <p className="text-[11px] text-slate-400">
+                    الاسم ورقم الجوال والقرية لتوصيل الطلبات بدقة
+                  </p>
+                </div>
               </div>
-              <h3 className="text-base font-black text-white">تسجيل بيانات العميل (إلزامي للطلب)</h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                يرجى تسجيل (الاسم + رقم الجوال + رقم بطاقة الأحوال) لضمان الجدية ومنع التلاعب وسرعة توصيل الطلبات.
-              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCustomerAuthModal(false);
+                  setCustomerModalError(null);
+                  setCustomerModalSuccess(null);
+                }}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
+            {/* Modal Form Body */}
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
+                setCustomerModalError(null);
+                setCustomerModalSuccess(null);
+
                 if (!custModalName.trim() || !custModalPhone.trim() || !custModalNationalId.trim()) {
-                  alert('يرجى تعبئة الحقول الإلزامية: الاسم الكامل، رقم الجوال، ورقم بطاقة الأحوال');
+                  setCustomerModalError('يرجى تعبئة الحقول الإلزامية: الاسم الكامل، رقم الجوال، ورقم بطاقة الأحوال');
                   return;
                 }
-                const res = registerCustomerRecord({
+                const res = await registerCustomerRecord({
                   name: custModalName.trim(),
                   phone: custModalPhone.trim(),
                   nationalId: custModalNationalId.trim(),
                   housePhoto: custModalHousePhoto.trim() || '',
                   idVerificationPhoto: custModalIdPhoto,
                   password: custModalPassword.trim() || 'user123',
-                  village: custModalVillage.trim() || undefined,
+                  village: custModalVillage.trim() || selectedVillage || 'قرية الانهوم',
                 });
 
                 if (!res.success) {
-                  alert(res.message);
+                  setCustomerModalError(res.message);
                   return;
                 }
 
-                alert(res.message); // "تم استلام طلب تسجيل حسابك بنجاح! حسابك حالياً (تحت المراجعة) بانتظار التحقق اليدوي من الهوية والاعتماد من التاجر أو المسؤول."
-                setShowCustomerAuthModal(false);
+                // If user selected a village during customer registration, sync it
+                if (custModalVillage.trim()) {
+                  setSelectedVillage(custModalVillage.trim());
+                }
+
+                setCustomerModalSuccess(res.message);
+                setTimeout(() => {
+                  setShowCustomerAuthModal(false);
+                  setCustomerModalError(null);
+                  setCustomerModalSuccess(null);
+                }, 1200);
               }}
-              className="space-y-2.5 max-h-[70vh] overflow-y-auto px-1"
+              className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3"
             >
+              {customerModalError && (
+                <div className="p-3 rounded-2xl bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{customerModalError}</span>
+                </div>
+              )}
+
+              {customerModalSuccess && (
+                <div className="p-3 rounded-2xl bg-emerald-950/60 border border-emerald-600/80 text-emerald-200 text-xs flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+                  <span>{customerModalSuccess}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">الاسم الكامل *</label>
                 <input
@@ -2207,7 +2276,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  رفع صورة الهوية الوطنية (ID Card) *
+                  رفع صورة الهوية الوطنية (اختياري)
                 </label>
                 <input
                   type="file"
@@ -2232,9 +2301,9 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">القرية التابع لها (من القرى الثابتة)</label>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">القرية التابع لها (من القرى الثابتة) *</label>
                 <select
-                  value={custModalVillage}
+                  value={custModalVillage || selectedVillage}
                   onChange={(e) => setCustModalVillage(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-emerald-500"
                 >
@@ -2247,36 +2316,21 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                 </select>
               </div>
 
-              <div className="pt-1 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const pInput = prompt('أدخل رقم جوالك المسجل لاستعادة كلمة السر عبر زر الأمان:');
-                    if (!pInput) return;
-                    if (activeCustomer && activeCustomer.phone === pInput.trim()) {
-                      alert(`🔒 نظام الأمان:\nكلمة السر الخاصة بك هي: ${activeCustomer.passwordHash || 'غير متوفرة'}`);
-                    } else {
-                      alert('⚠️ رقم الجوال غير مطابق للحساب الحالي على هذا الجهاز.');
-                    }
-                  }}
-                  className="text-xs text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer flex items-center gap-1"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>زر الأمان لاستعادة كلمة السر</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-2">
+              <div className="pt-3 border-t border-slate-800 grid grid-cols-2 gap-2">
                 <button
                   type="submit"
                   className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
                 >
-                  تم التسجيل بنجاح
+                  حفظ وتسجيل البيانات ✓
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowCustomerAuthModal(false)}
-                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+                  onClick={() => {
+                    setShowCustomerAuthModal(false);
+                    setCustomerModalError(null);
+                    setCustomerModalSuccess(null);
+                  }}
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
                 >
                   إلغاء
                 </button>

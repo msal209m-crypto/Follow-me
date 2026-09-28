@@ -77,7 +77,12 @@ import {
   deleteMerchantAccount,
   deleteDriverAccount,
   toggleMerchantStatus,
-  toggleDriverStatus
+  toggleDriverStatus,
+  cleanSlateResetAllData,
+  deleteDeveloperNotification,
+  markAllDeveloperNotificationsRead,
+  clearAllDeveloperNotifications,
+  blockUserPhoneOrId,
 } from '../services/rbacAuthService';
 import { 
   FIXED_VILLAGES_LIST, 
@@ -248,6 +253,43 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
 
   const loadNotifications = () => {
     setNotifications(getDeveloperNotifications());
+  };
+
+  const handleMarkAllRead = () => {
+    markAllDeveloperNotificationsRead();
+    loadNotifications();
+    setActionSuccessMsg('تم تحديد كافة الرسائل والاستفسارات كمقروءة ✅');
+    setTimeout(() => setActionSuccessMsg(null), 3000);
+  };
+
+  const handleDeleteNotificationMessage = (id: string) => {
+    if (window.confirm('هل أنت متأكد من حذف هذه الرسالة نهائياً من مركز الدعم؟')) {
+      deleteDeveloperNotification(id);
+      loadNotifications();
+      setActionSuccessMsg('تم حذف الرسالة بنجاح 🗑️');
+      setTimeout(() => setActionSuccessMsg(null), 3000);
+    }
+  };
+
+  const handleClearAllNotificationMessages = () => {
+    if (window.confirm('هل أنت متأكد من مسح جميع رسائل واستفسارات الدعم الفني نهائياً؟')) {
+      clearAllDeveloperNotifications();
+      loadNotifications();
+      setActionSuccessMsg('تم تفريغ وحذف جميع الرسائل بنجاح 🧹');
+      setTimeout(() => setActionSuccessMsg(null), 3000);
+    }
+  };
+
+  const handleBlockSenderFromMessage = (phone: string, senderName: string) => {
+    if (!phone) {
+      alert('لا يتوفر رقم جوال لهذا المرسل للحظر.');
+      return;
+    }
+    if (window.confirm(`هل أنت متأكد من حظر المستخدم (${senderName} - ${phone}) ومنع أي رسائل أو محاولات تسجيل متكررة مزعجة منه؟`)) {
+      blockUserPhoneOrId(phone);
+      setActionSuccessMsg(`تم حظر المستخدم (${senderName}) بنجاح 🚫`);
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
   };
 
   const loadAdsList = () => {
@@ -527,13 +569,18 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   };
 
   const handleDeleteMerchant = async (id: string, name: string) => {
-    if (window.confirm(`هل أنت متأكد من حذف حساب التاجر (${name}) ومتجره نهائياً؟`)) {
-      deleteMerchantAccount(id);
-      await syncDeleteMerchant(id);
-      refreshAccounts();
-      setActionSuccessMsg(`تم حذف حساب التاجر (${name}) نهائياً من النظام والسحابة 🗑️`);
-      setTimeout(() => setActionSuccessMsg(null), 3500);
-    }
+    deleteMerchantAccount(id);
+    await syncDeleteMerchant(id);
+    refreshAccounts();
+    setActionSuccessMsg(`تم حذف حساب التاجر (${name}) ومتجره نهائياً من قاعدة البيانات والسحابة 🗑️`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleCleanSlateWipe = async () => {
+    const res = await cleanSlateResetAllData();
+    refreshAccounts();
+    setActionSuccessMsg(res.message);
+    setTimeout(() => setActionSuccessMsg(null), 4000);
   };
 
   const openEditMerchantModal = (merchant: any) => {
@@ -1304,11 +1351,22 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                     </p>
                   </div>
                 </div>
-                {pendingMerchants.length > 0 && (
-                  <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 text-xs font-bold animate-pulse">
-                    يتطلب قرارك ⚠️
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCleanSlateWipe}
+                    className="px-3 py-1.5 rounded-xl bg-red-950/70 hover:bg-red-900 border border-red-700/60 text-red-200 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                    title="حذف جميع حسابات التجار والبيانات القديمة والبدء على نظافة (Clean Slate)"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                    <span>إعادة ضبط شاملة (Clean Slate)</span>
+                  </button>
+                  {pendingMerchants.length > 0 && (
+                    <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 text-xs font-bold animate-pulse">
+                      يتطلب قرارك ⚠️
+                    </span>
+                  )}
+                </div>
               </div>
 
               {pendingMerchants.length === 0 ? (
@@ -1374,6 +1432,15 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                         >
                           <XCircle className="w-4 h-4" />
                           <span>رفض</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMerchant(m.id, m.name)}
+                          className="px-3 py-2 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
+                          title="حذف هذا الطلب وحساب التاجر نهائياً من قاعدة البيانات"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>حذف</span>
                         </button>
                       </div>
                     </div>
@@ -2673,21 +2740,47 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
               <div>
                 <h3 className="text-sm font-black text-white flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-emerald-400" />
-                  <span>مركز استقبال رسائل واستفسارات الدعم الفني</span>
+                  <span>مركز استقبال رسائل واستفسارات الدعم الفني ({notifications.length})</span>
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  جميع الرسائل الواردة من «الزر الذكي العائم» ومن المستخدمين والتجار تظهر هنا مع إمكانية الرد الفوري.
+                  جميع الرسائل الواردة من «الزر الذكي العائم» ومن المستخدمين والتجار تظهر هنا مع إمكانية الرد الفوري أو الحذف.
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={loadNotifications}
-                className="px-3.5 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-750 text-slate-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
-                <span>تحديث الرسائل</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                {notifications.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleMarkAllRead}
+                      className="px-3 py-2 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="تحديد كافة الرسائل كمقروءة"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>تحديد الكل مقروء ✅</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleClearAllNotificationMessages}
+                      className="px-3 py-2 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="حذف جميع الرسائل والاستفسارات"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>مسح الكل 🗑️</span>
+                    </button>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  onClick={loadNotifications}
+                  className="px-3.5 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-750 text-slate-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>تحديث</span>
+                </button>
+              </div>
             </div>
 
             {/* Messages Cards */}
@@ -2803,6 +2896,28 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                               <span>مقروء</span>
                             </button>
                           )}
+
+                          {notif.senderPhone && (
+                            <button
+                              type="button"
+                              onClick={() => handleBlockSenderFromMessage(notif.senderPhone!, notif.senderName)}
+                              className="py-2 px-3 bg-rose-950/40 hover:bg-rose-900 border border-rose-800/40 text-rose-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer w-full md:w-auto"
+                              title="حظر مرسل الرسالة / التطفل"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>حظر 🚫</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteNotificationMessage(notif.id)}
+                            className="py-2 px-3 bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer w-full md:w-auto"
+                            title="حذف هذه الرسالة"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف 🗑️</span>
+                          </button>
                         </div>
                       </div>
                     </div>

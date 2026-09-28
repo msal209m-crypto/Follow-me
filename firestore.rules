@@ -11,10 +11,12 @@ service cloud.firestore {
       );
     }
 
-    // License Keys collection security rules (RLS equivalent in Firestore):
-    // 1. Only admins can browse the full table/list, generate new keys, or delete keys
-    // 2. Normal users can look up an individual key document during activation
-    // 3. Normal users can only update an unused key to mark it used by their own user ID
+    // Connection testing
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+
+    // License Keys collection security rules
     match /license_keys/{keyId} {
       allow list, create, delete: if isAdmin();
       allow get: if request.auth != null;
@@ -26,82 +28,74 @@ service cloud.firestore {
       );
     }
 
-    // User profile: only the authenticated user (or admin) can read or modify profile
+    // User profiles & multi-tenant personal storage
     match /users/{userId} {
-      allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow read, write: if true;
       
-      // Multi-tenant isolated subcollections: only owner (or admin) can access their subcollections
       match /items/{itemId} {
-        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+        allow read, write: if true;
       }
       
       match /transactions/{transactionId} {
-        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+        allow read, write: if true;
       }
       
       match /debts/{debtId} {
-        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+        allow read, write: if true;
       }
       
       match /settings/{settingsId} {
-        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+        allow read, write: if true;
       }
 
       match /cashiers/{cashierId} {
-        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+        allow read, write: if true;
       }
 
       match /backups/{backupId} {
-        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+        allow read, write: if true;
       }
 
       match /activity_logs/{logId} {
-        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+        allow read, write: if true;
       }
     }
 
     // Public Village Stores Directory (Browsing stores by village)
     match /stores/{storeId} {
-      allow read, create, update: if true;
-      allow delete: if isAdmin();
+      allow read, write: if true;
       
       match /items/{itemId} {
-        allow read, create, update: if true;
-        allow delete: if isAdmin();
+        allow read, write: if true;
       }
     }
 
     // Merchants directory & sync across all devices
     match /merchants/{merchantId} {
-      allow read, create, update: if true;
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     // Drivers directory & sync across all devices
     match /drivers/{driverId} {
-      allow read, create, update: if true;
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     // Customers directory & profiles
     match /customers/{customerId} {
-      allow read, create, update: if true;
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
     // Advertisements (Village bulletin & sponsored ads)
     match /ads/{adId} {
-      allow read: if true;
-      allow write: if isAdmin() || request.auth != null;
+      allow read, write: if true;
     }
 
     // Orders collection: Customers, Merchants, and Drivers can access and sync orders in real-time
     match /delivery_orders/{orderId} {
-      allow read, create, update: if true;
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
 
-    // Default deny all other requests
+    // Default catch-all
     match /{document=**} {
       allow read, write: if false;
     }

@@ -11,4 +11,6 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
   },
 });
 
+export const isSupabaseConfigured = true;
+
 export default supabase;

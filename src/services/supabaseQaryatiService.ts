@@ -124,7 +124,35 @@ export async function getApprovedMerchantsByVillage(
 ): Promise<StoreDirectoryRecord[]> {
   const cleanVillage = chosenVillage?.trim();
   if (!cleanVillage || cleanVillage === 'ALL') {
-    // When no specific village is selected, return all approved stores
+    // When no specific village is selected, return all approved stores from Supabase or local directory
+    try {
+      const { data, error } = await (supabase as any)
+        .from('merchants')
+        .select('*')
+        .eq('is_approved', true);
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data.map((m: any) => ({
+          id: m.id,
+          merchantId: m.id,
+          name: m.store_name || m.name,
+          ownerName: m.name,
+          phone: m.phone,
+          cityOrVillage: m.village_name || 'القرية',
+          itemsCount: 0,
+          isPro: Boolean(m.is_pro),
+          planName: m.plan_name || (m.is_pro ? 'باقة PRO' : 'الباقة المجانية'),
+          status: 'ACTIVE',
+          rating: 5.0,
+          ratingCount: 0,
+          joinedAt: m.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+          isApproved: true,
+        }));
+      }
+    } catch (err) {
+      console.warn('Supabase all-merchants fetch note:', err);
+    }
+
     const localStores = getStoresDirectory().filter(
       (s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false
     );

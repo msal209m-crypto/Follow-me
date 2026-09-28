@@ -263,7 +263,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
 
     setAuthLoading(true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
         if (regRole === 'CUSTOMER') {
           // Register lightweight customer session
@@ -283,7 +283,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
 
         } else if (regRole === 'MERCHANT') {
           // Register Merchant Account with Admin Gatekeeping
-          const res = registerMerchant({
+          const res = await registerMerchant({
             name: regName.trim(),
             phone: regPhone.trim(),
             nationalId: regNationalId.trim(),
@@ -310,7 +310,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
 
         } else if (regRole === 'DRIVER') {
           // Register Driver Account with Admin Gatekeeping
-          const res = registerDriver({
+          const res = await registerDriver({
             name: regName.trim(),
             phone: regPhone.trim(),
             nationalId: regNationalId.trim(),
@@ -322,7 +322,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
 
           if (res.success) {
             setAuthSuccess(
-              '🛵 تم استلام طلب تسجيل السائق بنجاح! حسابك حالياً بحالة (معلق ⏳ بانتظار اعتماد المطور). سيتم تفعيل حسابك وإشعارك فور اعتماده لضمان أمان القرية.'
+              '🛵 تم استلام طلب تسجيل السائق بنجاح! تم تفعيل حسابك على المنصة.'
             );
             setTimeout(() => {
               setAuthLoading(false);
@@ -361,7 +361,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
 
     setAuthLoading(true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
         // 1. Check if matching merchant
         const merchants = getMerchants();
@@ -370,7 +370,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         );
 
         if (foundMerchant) {
-          const res = loginMerchant(identifier, password);
+          const res = await loginMerchant(identifier, password);
           if (res.success) {
             setAuthSuccess(`مرحباً بك يا ${foundMerchant.name}! جاري التوجيه للوحة التاجر...`);
             setTimeout(() => {
@@ -390,7 +390,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         const foundDriver = drivers.find((d) => d.phone === identifier || d.nationalId === identifier);
 
         if (foundDriver) {
-          const res = loginDriver(identifier, password);
+          const res = await loginDriver(identifier, password);
           if (res.success) {
             setAuthSuccess(`مرحباً بك يا ${foundDriver.name}! جاري فتح بوابة السائق...`);
             setTimeout(() => {
@@ -403,6 +403,27 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
             setAuthLoading(false);
             return;
           }
+        }
+
+        // Check cloud directly if not found locally
+        const cloudMerchant = await loginMerchant(identifier, password);
+        if (cloudMerchant.success) {
+          setAuthSuccess(`مرحباً بك! جاري التوجيه للوحة التاجر...`);
+          setTimeout(() => {
+            setAuthLoading(false);
+            onEnterMerchant();
+          }, 1000);
+          return;
+        }
+
+        const cloudDriver = await loginDriver(identifier, password);
+        if (cloudDriver.success) {
+          setAuthSuccess(`مرحباً بك! جاري فتح بوابة السائق...`);
+          setTimeout(() => {
+            setAuthLoading(false);
+            onEnterDriver?.();
+          }, 1000);
+          return;
         }
 
         // 3. Fallback to lightweight customer instant login
