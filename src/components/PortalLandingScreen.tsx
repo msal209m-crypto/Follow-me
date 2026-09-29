@@ -52,7 +52,9 @@ import {
   saveActiveCustomer,
   getMerchants,
   getDrivers,
-  validateKYCParams
+  validateKYCParams,
+  registerCustomerRecord,
+  loginCustomerRecord
 } from '../services/rbacAuthService';
 import { VillageBulletinView } from './VillageBulletinView';
 import { DeveloperAuthModal } from './DeveloperAuthModal';
@@ -303,16 +305,16 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
       return;
     }
 
-    if (regRole !== 'CUSTOMER' && !regPassword.trim()) {
+    if (!regPassword.trim()) {
       setAuthError('يرجى تعيين كلمة مرور لحماية حسابك.');
       return;
     }
-    if ((regRole === 'MERCHANT' || regRole === 'DRIVER') && !regSelfie) {
+    if (!regSelfie) {
       setAuthError('يُشترط التقاط أو رفع صورة سيلفي شخصية حية للتحقق الأمني.');
       return;
     }
-    if ((regRole === 'MERCHANT' || regRole === 'DRIVER') && !regIdCardPhoto) {
-      setAuthError('صورة البطاقة الشخصية / الهوية الإلزامية مطلوبة للتوثيق في حاوية Supabase (id-cards).');
+    if (!regIdCardPhoto) {
+      setAuthError('صورة البطاقة الشخصية / الهوية الإلزامية مطلوبة للتوثيق والتحقق.');
       return;
     }
     if (regRole === 'MERCHANT' && !regStoreName.trim()) {
@@ -325,19 +327,27 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
     setTimeout(async () => {
       try {
         if (regRole === 'CUSTOMER') {
-          saveActiveCustomer({
+          const res = await registerCustomerRecord({
             name: regName.trim(),
             phone: regPhone.trim(),
             nationalId: regNationalId.trim(),
-            village: regVillage,
+            password: regPassword,
             housePhoto: regSelfie || undefined,
-            passwordHash: regPassword || undefined
+            idVerificationPhoto: regIdCardPhoto || undefined,
+            village: regVillage,
           });
-          setAuthSuccess('تم تسجيل دخولك كعميل بنجاح! جاري التوجيه إلى المتجر...');
-          setTimeout(() => {
+
+          if (res.success) {
+            setAuthSuccess(res.message);
+            setTimeout(() => {
+              setAuthLoading(false);
+              setAuthTab('login');
+              setLoginIdentifier(regPhone.trim());
+            }, 3000);
+          } else {
+            setAuthError(res.message);
             setAuthLoading(false);
-            onEnterStore();
-          }, 1000);
+          }
 
         } else if (regRole === 'MERCHANT') {
           const res = await registerMerchant({
@@ -485,18 +495,20 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
           return;
         }
 
-        // 3. Fallback to lightweight customer instant login
-        // If password is not set or arbitrary, we can log them in instantly as a customer to offer supreme zero-friction access
-        saveActiveCustomer({
-          name: identifier,
-          phone: identifier,
-          village: FIXED_VILLAGES[0]
-        });
-        setAuthSuccess('تم التعرف على حسابك كزائر/عميل بنجاح! جاري فتح المتجر...');
-        setTimeout(() => {
+        // 3. Authenticate as customer securely
+        const customerRes = await loginCustomerRecord(identifier, password);
+        if (customerRes.success) {
+          setAuthSuccess(customerRes.message || 'تم تسجيل دخولك كعميل بنجاح! جاري فتح المتجر...');
+          setTimeout(() => {
+            setAuthLoading(false);
+            onEnterStore();
+          }, 1000);
+          return;
+        } else {
+          setAuthError(customerRes.message || 'فشل تسجيل الدخول، يرجى التأكد من البيانات والمحاولة مجدداً.');
           setAuthLoading(false);
-          onEnterStore();
-        }, 1000);
+          return;
+        }
 
       } catch (err: any) {
         setAuthError(err?.message || 'فشل تسجيل الدخول، يرجى التأكد من البيانات والمحاولة مجدداً.');
@@ -505,15 +517,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
     }, 600);
   };
 
-  // Trigger quick anonymous store entry for simple navigation
-  const handleQuickGuestEntry = () => {
-    saveActiveCustomer({
-      name: 'زائر القرية',
-      phone: '0500000000',
-      village: FIXED_VILLAGES[0]
-    });
-    onEnterStore();
-  };
+  // Guest entry is disabled for absolute security.
 
   // Close camera on component unmount
   useEffect(() => {
@@ -795,14 +799,10 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
                     <span>تسجيل الدخول الآمن</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleQuickGuestEntry}
-                    className="w-full py-3 rounded-xl border border-slate-800 hover:bg-slate-850/50 text-slate-300 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <ShoppingBag className="w-4 h-4 text-teal-500" />
-                    <span>تصفح كزائر / عميل سريع (بدون كلمة مرور) 🛒</span>
-                  </button>
+                  <div className="text-center text-[10px] text-slate-500 mt-2 flex items-center justify-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>منظومة موثقة ومحمية - يُشترط تسجيل الدخول للجميع</span>
+                  </div>
                 </div>
               </form>
             )}
@@ -978,33 +978,30 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
                   </div>
                 )}
 
-                {/* 7. Password for merchants & drivers */}
-                {regRole !== 'CUSTOMER' && (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1.5">كلمة مرور الحساب:</label>
-                    <div className="relative">
-                      <input
-                        type={showRegPassword ? 'text' : 'password'}
-                        required
-                        value={regPassword}
-                        onChange={(e) => setRegPassword(e.target.value)}
-                        placeholder="تعيين كلمة مرور لحماية حسابك..."
-                        className={`w-full text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-emerald-500 border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-600 focus:border-emerald-500' : 'bg-slate-50 border-slate-200 text-slate-950 placeholder-slate-400 focus:border-emerald-500'}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowRegPassword(!showRegPassword)}
-                        className="absolute top-1/2 -translate-y-1/2 left-3 text-slate-500 hover:text-slate-300"
-                      >
-                        {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
+                {/* 7. Password for everyone */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">كلمة مرور الحساب:</label>
+                  <div className="relative">
+                    <input
+                      type={showRegPassword ? 'text' : 'password'}
+                      required
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="تعيين كلمة مرور لحماية حسابك..."
+                      className={`w-full text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-emerald-500 border ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-600 focus:border-emerald-500' : 'bg-slate-50 border-slate-200 text-slate-950 placeholder-slate-400 focus:border-emerald-500'}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      className="absolute top-1/2 -translate-y-1/2 left-3 text-slate-500 hover:text-slate-300"
+                    >
+                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
-                )}
+                </div>
 
-                {/* 8. Live Selfie Capture Interface (REQUIRED for Merchants & Drivers) */}
-                {(regRole === 'MERCHANT' || regRole === 'DRIVER') && (
-                  <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-850 space-y-3">
+                {/* 8. Live Selfie Capture Interface (REQUIRED for Everyone) */}
+                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-850 space-y-3">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                         <Camera className="w-4 h-4 text-emerald-400 animate-pulse" />
@@ -1186,7 +1183,6 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
                       )}
                     </div>
                   </div>
-                )}
 
                 {/* Submit button */}
                 <div className="pt-3">

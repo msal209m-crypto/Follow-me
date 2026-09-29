@@ -123,7 +123,8 @@ import {
   fetchAllLicenseKeys,
   deleteLicenseKey,
   generateBatchLicenseKeys,
-  PLAN_CONFIGS
+  PLAN_CONFIGS,
+  deleteAllLicenseKeys
 } from '../services/licenseKeyService';
 import { LicenseKeyRecord } from '../types';
 
@@ -578,10 +579,19 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   };
 
   const handleCleanSlateWipe = async () => {
+    const isConfirmed = window.confirm(
+      '⚠️ تنبيه أمني مشدد:\nهل أنت متأكد من رغبتك في مسح كافة البيانات المدخلة في التطبيق تماماً (مسح الحسابات، المتاجر، السائقين، الطلبات والزبائن) وإعادة تهيئة المنصة كأنها جديدة تماماً؟\nهذا الإجراء لا يمكن التراجع عنه وهو مخصص للتهيئة قبل النشر والمشاركة.'
+    );
+    if (!isConfirmed) return;
+
     const res = await cleanSlateResetAllData();
     refreshAccounts();
     setActionSuccessMsg(res.message);
-    setTimeout(() => setActionSuccessMsg(null), 4000);
+    
+    // إعادة التوجيه إلى شاشة الترحيب والتهيئة التلقائية بعد ثانيتين
+    setTimeout(() => {
+      window.location.href = window.location.origin;
+    }, 2000);
   };
 
   const openEditMerchantModal = (merchant: any) => {
@@ -724,6 +734,17 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
       await loadLicenseKeys();
       setKeySuccessMsg(`تم حذف مفتاح الترخيص (${keyString}) 🗑️`);
       setTimeout(() => setKeySuccessMsg(null), 3500);
+    }
+  };
+
+  const handleDeleteAllLicenseKeys = async () => {
+    if (window.confirm('⚠️ تنبيه هام جداً:\nهل أنت متأكد من رغبتك في حذف وإلغاء جميع سجلات مفاتيح التراخيص الجاهزة نهائياً من النظام والسحابة وقاعدة البيانات؟\nهذا الإجراء لا يمكن التراجع عنه.')) {
+      const res = await deleteAllLicenseKeys();
+      if (res) {
+        await loadLicenseKeys();
+        setKeySuccessMsg('تم حذف وتصفير جميع مفاتيح التراخيص الجاهزة من السحابة بنجاح! 🗑️🔑');
+        setTimeout(() => setKeySuccessMsg(null), 5000);
+      }
     }
   };
 
@@ -2600,14 +2621,25 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                   <h4 className="text-xs font-black text-white">سجل مفاتيح التراخيص الصادرة ({licenseKeysList.length} مفتاح)</h4>
                   {isLoadingLicenses && <span className="text-[10px] text-cyan-400 animate-pulse">جاري المزامنة...</span>}
                 </div>
-                <button
-                  type="button"
-                  onClick={loadLicenseKeys}
-                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>تحديث القائمة</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllLicenseKeys}
+                    className="p-1.5 px-2.5 rounded-lg bg-red-950/40 hover:bg-red-900 border border-red-800/40 text-red-300 text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                    title="تصفير وحذف كافة المفاتيح الجاهزة من السحابة"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                    <span>مسح السجل بالكامل 🧹</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={loadLicenseKeys}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>تحديث القائمة</span>
+                  </button>
+                </div>
               </div>
 
               {licenseKeysList.length === 0 ? (

@@ -132,6 +132,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
   const [address, setAddress] = useState(settings.address);
   const [currency, setCurrency] = useState(settings.currency);
   const [footerNote, setFooterNote] = useState(settings.footerNote);
+  const [activeHelp, setActiveHelp] = useState<string | null>(null);
 
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -578,7 +579,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
             {/* Store Name & Phone */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-slate-300 font-bold block mb-1">{t.storeName}:</label>
+                <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                  <span>{t.storeName}:</span>
+                  <HelpCircle
+                    type="button"
+                    onClick={() => setActiveHelp(activeHelp === 'storeName' ? null : 'storeName')}
+                    className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                    title="مساعدة"
+                  />
+                </label>
+                {activeHelp === 'storeName' && (
+                  <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                    💡 <strong>اسم المتجر:</strong> الاسم الرسمي لمشروعك (مثل: بقالة البركة الذكية) الذي يظهر للعملاء في أعلى صفحة المتجر الإلكتروني والفواتير.
+                  </div>
+                )}
                 <input
                   type="text"
                   value={storeName}
@@ -587,7 +601,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
                 />
               </div>
               <div>
-                <label className="text-slate-300 font-bold block mb-1">{t.phone}:</label>
+                <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                  <span>{t.phone}:</span>
+                  <HelpCircle
+                    type="button"
+                    onClick={() => setActiveHelp(activeHelp === 'phone' ? null : 'phone')}
+                    className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                    title="مساعدة"
+                  />
+                </label>
+                {activeHelp === 'phone' && (
+                  <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                    💡 <strong>رقم الهاتف:</strong> رقم التواصل المباشر مع متجرك، والهدف منه إتاحة زر التواصل المباشر للزبائن عبر الواتساب لتأكيد الطلب الفوري وتوصيله.
+                  </div>
+                )}
                 <input
                   type="text"
                   value={phone}
@@ -600,7 +627,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
             {/* Tax Number & Address */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-slate-300 font-bold block mb-1">{t.taxNumber}:</label>
+                <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                  <span>{t.taxNumber}:</span>
+                  <HelpCircle
+                    type="button"
+                    onClick={() => setActiveHelp(activeHelp === 'taxNumber' ? null : 'taxNumber')}
+                    className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                    title="مساعدة"
+                  />
+                </label>
+                {activeHelp === 'taxNumber' && (
+                  <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                    💡 <strong>الرقم الضريبي:</strong> الرقم التعريفي لمتجرك المسجل لدى هيئة الزكاة والضريبة والجمارك لطباعته في الفواتير الرسمية المبسطة (اختياري).
+                  </div>
+                )}
                 <input
                   type="text"
                   value={taxNumber}
@@ -609,7 +649,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
                 />
               </div>
               <div>
-                <label className="text-slate-300 font-bold block mb-1">{t.address}:</label>
+                <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                  <span>{t.address}:</span>
+                  <HelpCircle
+                    type="button"
+                    onClick={() => setActiveHelp(activeHelp === 'address' ? null : 'address')}
+                    className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                    title="مساعدة"
+                  />
+                </label>
+                {activeHelp === 'address' && (
+                  <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                    💡 <strong>العنوان / الموقع:</strong> الحي أو القرية التي يتواجد فيها محلّك ليعرف الزبائن نطاق توصيل وتوفر طلباتهم (مثال: حي الفصور بالقرية).
+                  </div>
+                )}
                 <input
                   type="text"
                   value={address}
@@ -677,7 +730,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
 
             {/* Footer Note */}
             <div>
-              <label className="text-slate-300 font-bold block mb-1">{t.invoiceFooter}:</label>
+              <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                <span>{t.invoiceFooter}:</span>
+                <HelpCircle
+                  type="button"
+                  onClick={() => setActiveHelp(activeHelp === 'footerNote' ? null : 'footerNote')}
+                  className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                  title="مساعدة"
+                />
+              </label>
+              {activeHelp === 'footerNote' && (
+                <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                  💡 <strong>ملاحظة أسفل الفاتورة:</strong> جملة نصية أو ترحيبية تُطبع تلقائياً في أسفل فواتير المشتريات المطبوعة أو فواتير الـ PDF للعملاء (مثال: شكراً لزيارتكم ونسعد بخدمتكم دائماً).
+                </div>
+              )}
               <input
                 type="text"
                 value={footerNote}

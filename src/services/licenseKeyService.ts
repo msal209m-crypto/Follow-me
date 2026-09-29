@@ -471,3 +471,40 @@ export async function verifyAndRedeemLicenseKey(
     cleanKey: cleanKey,
   };
 }
+
+/**
+ * Admin Function: Delete and purge ALL license keys from the entire system (Local, Firestore, Supabase)
+ */
+export async function deleteAllLicenseKeys(): Promise<boolean> {
+  try {
+    // 1. Wipe local cache
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+
+    // 2. Wipe from Supabase
+    try {
+      if (supabase) {
+        await supabase.from('license_keys').delete().neq('key', '___non_existent___');
+      }
+    } catch (err) {
+      console.warn('Supabase keys purge error:', err);
+    }
+
+    // 3. Wipe from Firestore
+    if (db) {
+      try {
+        const snap = await getDocs(collection(db, 'license_keys'));
+        for (const docSnap of snap.docs) {
+          await deleteDoc(doc(db, 'license_keys', docSnap.id));
+        }
+      } catch (err) {
+        console.warn('Firestore keys purge error:', err);
+      }
+    }
+
+    window.dispatchEvent(new CustomEvent('qaryati:license-keys-updated'));
+    return true;
+  } catch (e) {
+    console.error('Failed to purge license keys:', e);
+    return false;
+  }
+}

@@ -1,5 +1,6 @@
 import { Transaction, StoreSettings } from '../types';
 import { copyToClipboard } from './clipboardUtils';
+import * as XLSX from 'xlsx';
 
 /**
  * Universal safe execution of autoTable supporting both prototype attachment and direct invocation
@@ -75,7 +76,6 @@ export const exportReportToExcel = async (
   filenamePrefix = 'report',
   customLanguage?: 'ar' | 'en'
 ) => {
-  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   const lang = resolveReportLanguage(customLanguage, settings);
   const isAr = lang === 'ar';

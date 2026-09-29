@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Barcode, Sparkles, Package, DollarSign, Layers, Camera, Image as ImageIcon, Upload, Trash2, Check, Store, Loader2 } from 'lucide-react';
+import { X, Barcode, Sparkles, Package, DollarSign, Layers, Camera, Image as ImageIcon, Upload, Trash2, Check, Store, Loader2, HelpCircle } from 'lucide-react';
 import { Item, StoreSettings } from '../types';
 import { useApp } from '../context/AppContext';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
@@ -51,6 +51,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
   const [showCameraScanner, setShowCameraScanner] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompressingImage, setIsCompressingImage] = useState(false);
+  const [activeHelp, setActiveHelp] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -227,7 +228,15 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
           {/* Barcode with Camera Scan & Auto Generate Buttons */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-slate-300 font-bold block">الباركود (Barcode):</label>
+              <label className="text-slate-300 font-bold block flex items-center gap-1.5">
+                <span>الباركود (Barcode):</span>
+                <HelpCircle
+                  type="button"
+                  onClick={() => setActiveHelp(activeHelp === 'barcode' ? null : 'barcode')}
+                  className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                  title="تلميح المساعدة"
+                />
+              </label>
               <button
                 type="button"
                 id="btn-scan-camera-in-add-modal"
@@ -238,6 +247,11 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
                 <span>تصوير الباركود بالكاميرا</span>
               </button>
             </div>
+            {activeHelp === 'barcode' && (
+              <div className="mb-2 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                💡 <strong>تلميح الباركود:</strong> رقم مميز فريد للصنف للتعرف عليه فوراً عن طريق جهاز قارئ الباركود أو كاميرا الجوال لتسريع عمليات البيع.
+              </div>
+            )}
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Barcode className="w-4 h-4 text-emerald-400 absolute right-3 top-2.5" />
@@ -272,7 +286,20 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
 
           {/* Item Name */}
           <div>
-            <label className="text-slate-300 font-bold block mb-1">اسم الصنف:</label>
+            <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+              <span>اسم الصنف:</span>
+              <HelpCircle
+                type="button"
+                onClick={() => setActiveHelp(activeHelp === 'name' ? null : 'name')}
+                className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                title="تلميح المساعدة"
+              />
+            </label>
+            {activeHelp === 'name' && (
+              <div className="mb-2 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                💡 <strong>تلميح الاسم:</strong> الاسم التجاري للمنتج الذي يظهر للعملاء في المتجر، يفضل كتابة الحجم أو الوزن بدقة (مثال: حليب المراعي 1 لتر).
+              </div>
+            )}
             <input
               type="text"
               required
@@ -288,12 +315,23 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
             <div className="flex items-center justify-between mb-2">
               <label className="text-slate-300 font-bold text-xs flex items-center gap-1.5">
                 <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
-                <span>صورة الصنف (للعرض في متجر العملاء):</span>
+                <span>صورة الصنف:</span>
+                <HelpCircle
+                  type="button"
+                  onClick={() => setActiveHelp(activeHelp === 'image' ? null : 'image')}
+                  className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                  title="تلميح المساعدة"
+                />
               </label>
               <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
                 يعرض في المتجر
               </span>
             </div>
+            {activeHelp === 'image' && (
+              <div className="mb-2.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                💡 <strong>تلميح الصورة:</strong> صورة توضيحية تجذب العملاء وتساعدهم على تمييز صنفك في متجر القرية الإلكتروني.
+              </div>
+            )}
 
             <div className="flex items-start gap-3">
               {/* Image Preview */}
@@ -393,7 +431,20 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
           {/* Category & Unit */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-slate-300 font-bold block mb-1">التصنيف:</label>
+              <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                <span>التصنيف:</span>
+                <HelpCircle
+                  type="button"
+                  onClick={() => setActiveHelp(activeHelp === 'category' ? null : 'category')}
+                  className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                  title="تلميح المساعدة"
+                />
+              </label>
+              {activeHelp === 'category' && (
+                <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                  💡 <strong>التصنيف:</strong> يساعد في تجميع المنتجات المتشابهة لتسهيل تصفحها والبحث عنها (مثل: معلبات، منظفات).
+                </div>
+              )}
               <input
                 type="text"
                 placeholder="مواد غذائية / تموينية..."
@@ -403,7 +454,20 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
               />
             </div>
             <div>
-              <label className="text-slate-300 font-bold block mb-1">الوحدة:</label>
+              <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                <span>الوحدة:</span>
+                <HelpCircle
+                  type="button"
+                  onClick={() => setActiveHelp(activeHelp === 'unit' ? null : 'unit')}
+                  className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                  title="تلميح المساعدة"
+                />
+              </label>
+              {activeHelp === 'unit' && (
+                <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                  💡 <strong>الوحدة:</strong> طريقة قياس بيع الصنف (بالحبة، بالكيلو، بالكرتون) لتوضيح كمية المنتج للزبون.
+                </div>
+              )}
               <select
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
@@ -424,9 +488,20 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
           {/* Prices (سعر التكلفة & سعر البيع) */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-slate-300 font-bold block mb-1">
-                سعر التكلفة ({settings.currency}):
+              <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                <span>سعر التكلفة ({settings.currency}):</span>
+                <HelpCircle
+                  type="button"
+                  onClick={() => setActiveHelp(activeHelp === 'costPrice' ? null : 'costPrice')}
+                  className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                  title="تلميح المساعدة"
+                />
               </label>
+              {activeHelp === 'costPrice' && (
+                <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                  💡 <strong>سعر التكلفة:</strong> سعر شراء الصنف الأصلي من المورد، لحساب صافي أرباحك الحقيقية.
+                </div>
+              )}
               <input
                 type="number"
                 step="0.25"
@@ -438,9 +513,20 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
               />
             </div>
             <div>
-              <label className="text-slate-300 font-bold block mb-1">
-                سعر البيع ({settings.currency}):
+              <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                <span>سعر البيع ({settings.currency}):</span>
+                <HelpCircle
+                  type="button"
+                  onClick={() => setActiveHelp(activeHelp === 'salePrice' ? null : 'salePrice')}
+                  className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                  title="تلميح المساعدة"
+                />
               </label>
+              {activeHelp === 'salePrice' && (
+                <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                  💡 <strong>سعر البيع:</strong> السعر النهائي المعروض للزبون شاملاً الأرباح والضريبة.
+                </div>
+              )}
               <input
                 type="number"
                 step="0.25"
@@ -456,7 +542,20 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
           {/* Quantity & Min Stock Alert */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-slate-300 font-bold block mb-1">الكمية بالمخزون:</label>
+              <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                <span>الكمية بالمخزون:</span>
+                <HelpCircle
+                  type="button"
+                  onClick={() => setActiveHelp(activeHelp === 'quantity' ? null : 'quantity')}
+                  className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                  title="تلميح المساعدة"
+                />
+              </label>
+              {activeHelp === 'quantity' && (
+                <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                  💡 <strong>الكمية بالمخزون:</strong> كمية البضاعة المتوفرة حالياً بالرفوف، تُخصم تلقائياً عند كل بيع.
+                </div>
+              )}
               <input
                 type="number"
                 required
@@ -466,7 +565,20 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
               />
             </div>
             <div>
-              <label className="text-slate-300 font-bold block mb-1">حد تنبيه النقص:</label>
+              <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">
+                <span>حد التنبيه:</span>
+                <HelpCircle
+                  type="button"
+                  onClick={() => setActiveHelp(activeHelp === 'minStockAlert' ? null : 'minStockAlert')}
+                  className="w-3.5 h-3.5 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                  title="تلميح المساعدة"
+                />
+              </label>
+              {activeHelp === 'minStockAlert' && (
+                <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
+                  💡 <strong>حد التنبيه:</strong> ينبهك النظام فوراً لتوريد الصنف عند انخفاض الكمية لهذا الحد.
+                </div>
+              )}
               <input
                 type="number"
                 value={minStockAlert}

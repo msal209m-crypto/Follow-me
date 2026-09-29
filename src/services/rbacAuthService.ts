@@ -3,7 +3,7 @@ import { getStoresDirectory, saveStoresDirectory, saveDriverProfile, clearDriver
 import { getPlatformDeveloperSettings, verifyDeveloperCredentials, isAuthorizedDeveloperPhone } from './platformSettingsService';
 import { supabase } from '../lib/supabase';
 import { db } from '../lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
 import {
   syncSaveStore,
   syncDeleteStore,
@@ -1137,30 +1137,8 @@ export function getDeveloperNotifications(): DeveloperNotification[] {
   try {
     const raw = localStorage.getItem('qaryati_dev_notifications');
     if (!raw) {
-      const initial: DeveloperNotification[] = [
-        {
-          id: 'notif-1',
-          type: 'NEW_MERCHANT',
-          title: 'تسجيل متجر جديد 🏪',
-          message: 'تم تسجيل متجر جديد باسم "مخبز القرية التراثي" للتاجر سالم العتيبي في قرية الفصور',
-          senderName: 'سالم العتيبي',
-          senderPhone: '0501234567',
-          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-          isRead: false
-        },
-        {
-          id: 'notif-2',
-          type: 'TECH_SUPPORT',
-          title: 'طلب دعم فني من تاجر 🛠️',
-          message: 'أحتاج إلى مساعدة في تحديث أسعار المنتجات وإضافة تصنيف العسل البري الجديد.',
-          senderName: 'أبو محمد',
-          senderPhone: '0559876543',
-          timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-          isRead: false
-        }
-      ];
-      localStorage.setItem('qaryati_dev_notifications', JSON.stringify(initial));
-      return initial;
+      localStorage.setItem('qaryati_dev_notifications', JSON.stringify([]));
+      return [];
     }
     return JSON.parse(raw);
   } catch {
@@ -1310,30 +1288,33 @@ export function deleteMerchantAccount(id: string): void {
  */
 export async function cleanSlateResetAllData(): Promise<{ success: boolean; message: string }> {
   try {
-    const allMerchants = getMerchants();
-    // Wipe local storages
-    localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify([]));
-    localStorage.setItem('qaryati_stores_directory', JSON.stringify([]));
-    localStorage.setItem('village_merchants_accounts', JSON.stringify([]));
-    localStorage.setItem('qaryati_delivery_orders', JSON.stringify([]));
-    localStorage.setItem('village_delivery_orders', JSON.stringify([]));
-    localStorage.setItem('qaryati_clean_slate_v5_applied', 'true');
-
-    // Remove from Firestore & Supabase in parallel
-    for (const m of allMerchants) {
-      syncDeleteMerchant(m.id).catch(console.warn);
-      syncDeleteStore(m.id).catch(console.warn);
-    }
-
-    // Direct Supabase table purge
-    if (true) {
-      try {
-        await (supabase as any).from('merchants').delete().neq('id', '___non_existent___');
-        await (supabase as any).from('orders').delete().neq('id', '___non_existent___');
-      } catch (err) {
-        console.warn('Supabase clean slate notice:', err);
+    // 1. Direct Supabase table purge
+    try {
+      if (supabase) {
+        await supabase.from('merchants').delete().neq('id', '___non_existent___');
+        await supabase.from('orders').delete().neq('id', '___non_existent___');
+        await supabase.from('customers').delete().neq('id', '___non_existent___');
+        await supabase.from('drivers').delete().neq('id', '___non_existent___');
       }
+    } catch (err) {
+      console.warn('Supabase clean slate notice:', err);
     }
+
+    // 2. Comprehensive Firestore collections purge (deletes all remote records completely)
+    try {
+      const collectionsToPurge = ['stores', 'merchants', 'drivers', 'customers', 'delivery_orders'];
+      for (const colName of collectionsToPurge) {
+        const snap = await getDocs(collection(db, colName));
+        for (const docSnap of snap.docs) {
+          await deleteDoc(doc(db, colName, docSnap.id));
+        }
+      }
+    } catch (err) {
+      console.warn('Firestore comprehensive purge warning:', err);
+    }
+
+    // 3. Completely clear all local storage
+    localStorage.clear();
 
     window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
     window.dispatchEvent(new CustomEvent('qaryati:stores-updated'));
@@ -1341,7 +1322,7 @@ export async function cleanSlateResetAllData(): Promise<{ success: boolean; mess
 
     return {
       success: true,
-      message: 'تمت إعادة الضبط الشاملة بنجاح وبدء النظام على نظافة تامة (Clean Slate)!',
+      message: 'تمت تهيئة السحابة وقواعد البيانات ومسح كافة البيانات المدخلة في التطبيق بالكامل بنجاح! سيتم إطلاق التطبيق الآن كأنه جديد تماماً ونظيف وجاهز للمشاركة والتجربة 🧹✨',
     };
   } catch (err: any) {
     console.error('Clean slate error:', err);

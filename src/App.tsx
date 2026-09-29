@@ -723,6 +723,14 @@ const PortalRouter: React.FC = () => {
   useEffect(() => {
     const activeRole = getActiveSessionRole() as any;
     
+    // Enforce login for everyone after welcome splash. No guest allowed to browse or order.
+    if (!activeRole) {
+      if (portalMode !== 'landing') {
+        setPortalMode('landing');
+      }
+      return;
+    }
+
     // Skip if already authenticated as developer
     if (activeRole === 'DEVELOPER') return;
 
@@ -737,6 +745,10 @@ const PortalRouter: React.FC = () => {
     } else if (portalMode === 'merchant' && activeRole !== 'MERCHANT') {
       setPortalMode('landing');
       setRbacInitialRole('MERCHANT');
+      setShowRBACAuthModal(true);
+    } else if (portalMode === 'store' && activeRole !== 'CUSTOMER' && activeRole !== 'MERCHANT' && activeRole !== 'DRIVER' && activeRole !== 'DEVELOPER') {
+      setPortalMode('landing');
+      setRbacInitialRole('CUSTOMER');
       setShowRBACAuthModal(true);
     }
   }, [portalMode]);
