@@ -493,6 +493,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           )}
 
+          {/* EXCHANGE RATE CHANGE ALERT */}
+          {(settings.exchangeRate && Math.abs(settings.exchangeRate - 1.0) > 0.05) && (
+            <div className="bg-sky-950/40 border border-sky-500/40 rounded-xl px-3.5 py-2 flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <AlertTriangle className="w-4 h-4 text-sky-400 shrink-0" />
+                <span className="text-sky-200 font-bold truncate">
+                  {language === 'ar'
+                    ? `تنبيه: سعر الصرف الحالي (${settings.exchangeRate}) قد يتطلب مراجعة الأسعار`
+                    : `Alert: Current exchange rate (${settings.exchangeRate}) may require price review`}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onOpenSettings && onOpenSettings('GENERAL')}
+                className="px-2.5 py-1 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black rounded-lg text-[11px] shrink-0 transition-colors cursor-pointer"
+              >
+                {language === 'ar' ? 'ضبط الأسعار' : 'Adjust Prices'}
+              </button>
+            </div>
+          )}
+
           {/* 2-COLUMN BALANCED METRICS GRID (Smooth height transition animation on hover or click) */}
           <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
             {/* CARD 1: TODAY SALES */}

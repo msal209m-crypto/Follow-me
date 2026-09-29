@@ -715,16 +715,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
                 </div>
               </div>
 
-              {/* Custom Currency input field */}
-              <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2">
-                <span className="text-[11px] text-slate-400 shrink-0">{t.customSymbol}:</span>
-                <input
-                  type="text"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  placeholder="SAR, $, AED, EUR..."
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-amber-300 font-bold focus:outline-none focus:border-amber-500 text-center"
-                />
+              {/* Custom Currency & Exchange Rate */}
+              <div className="pt-2 border-t border-slate-800/80 grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[11px] text-slate-400 block mb-1">{t.customSymbol}:</span>
+                  <input
+                    type="text"
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    placeholder="SAR, $, AED..."
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-amber-300 font-bold focus:outline-none focus:border-amber-500 text-center"
+                  />
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-400 block mb-1">سعر الصرف:</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={settings.exchangeRate || 1.0}
+                    onChange={(e) => updateSettings({ exchangeRate: parseFloat(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-emerald-300 font-bold focus:outline-none focus:border-emerald-500 text-center"
+                  />
+                </div>
               </div>
             </div>
 

@@ -188,11 +188,19 @@ export const startMerchantOnboardingTour = (options: TourOptions): void => {
     },
     {
       element: '#tab-merchant-reports',
-      title: isAr ? '📊 التقارير اليومية والحسابات' : '📊 Daily Reports & Finance',
+      title: isAr ? '📊 التقارير المالية' : '📊 Financial Reports',
       intro: isAr
-        ? 'اطّلع على تقرير Z اليومي، صافي أرباح المبيعات، حركات الصندوق، وسجل ديون العملاء والموردين والسلف المالية بدقة متناهية.'
-        : 'View your daily Z-reports, net profits, cash register balance, customer debts, and supplier balances with accuracy.',
+        ? 'اطّلع على تقرير Z اليومي، صافي أرباح المبيعات، حركات الصندوق، وتقارير أداء المتجر بدقة متناهية.'
+        : 'View your daily Z-reports, net profits, cash register balance, and detailed store performance reports with accuracy.',
       position: 'bottom',
+    },
+    {
+      element: '#debts',
+      title: isAr ? '💰 دفتر الديون والآجل' : '💰 Debts & Credit Ledger',
+      intro: isAr
+        ? 'سجل ومتابعة ديون العملاء والمديونيات للموردين بدقة. يمكنك تسجيل السدادات الجزئية والكلية ومتابعة المبالغ المستحقة بوضوح.'
+        : 'Manage and track customer credit and supplier debts efficiently. Register partial or full payments and keep a clear record of outstanding balances.',
+      position: 'right',
     },
     {
       element: '#top-btn-tour',
@@ -272,4 +280,51 @@ export const startMerchantOnboardingTour = (options: TourOptions): void => {
   setTimeout(() => {
     setupMobileSwipeToDismiss(intro, () => markTourCompleted(activeMerchantId));
   }, 60);
+};
+
+export const runDebtsTour = (
+  isAr: boolean,
+  options: { onComplete: () => void }
+) => {
+  const intro = introJs();
+
+  const steps: any[] = [
+    {
+      title: isAr ? '💰 أهلاً بك في دفتر الديون!' : '💰 Welcome to the Debts Ledger!',
+      intro: isAr
+        ? 'هنا يمكنك إدارة ومتابعة ديون عملائك، مستحقات الموردين، والقروض الشخصية بكل سهولة.'
+        : 'Here you can manage and track customer credits, supplier payables, and personal loans easily.',
+    },
+    {
+      element: '#btn-new-debt-account',
+      title: isAr ? '➕ فتح حساب دين جديد' : '➕ Open New Debt Account',
+      intro: isAr
+        ? 'اضغط هنا لفتح حساب دين جديد لعميل، مورد، أو تسجيل سلفة شخصية جديدة.'
+        : 'Click here to open a new debt account for a customer, supplier, or to register a new personal loan.',
+      position: 'bottom' as any,
+    },
+    {
+      element: '#btn-record-debt-payment',
+      title: isAr ? '💵 تسجيل سداد دفعة' : '💵 Record Debt Payment',
+      intro: isAr
+        ? 'اختر أي حساب من القائمة، ثم اضغط هنا لتسجيل سداد دفعة (سواء كانت سداداً جزئياً أو كامل الدين).'
+        : 'Select an account from the list, then click here to record a payment (whether it is a partial or full repayment).',
+      position: 'bottom' as any,
+    },
+  ];
+
+  intro.setOptions({
+    steps: steps,
+    nextLabel: isAr ? 'التالي ←' : 'Next →',
+    prevLabel: isAr ? '→ السابق' : '← Back',
+    doneLabel: isAr ? 'فهمت! ✓' : 'Got it! ✓',
+    skipLabel: isAr ? 'تخطي ✕' : 'Skip ✕',
+    showProgress: true,
+    exitOnOverlayClick: false,
+  });
+
+  intro.oncomplete(options.onComplete);
+  intro.onexit(options.onComplete);
+
+  intro.start();
 };

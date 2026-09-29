@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CreditCard,
   UserCheck,
@@ -19,6 +19,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { DebtRecord, PaymentMethod, DebtPaymentHistoryItem, DebtAdvanceLoanItem } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
+import { runDebtsTour } from '../services/tourService';
 
 interface DebtsViewProps {
   onPrintDebtReceipt: (debt: DebtRecord, payment: DebtPaymentHistoryItem) => void;
@@ -72,6 +73,17 @@ export const DebtsView: React.FC<DebtsViewProps> = ({ onPrintDebtReceipt }) => {
 
   // Confirmation modal state for safe account deletion
   const [debtToDelete, setDebtToDelete] = useState<DebtRecord | null>(null);
+
+  useEffect(() => {
+    const hasCompleted = localStorage.getItem('qaryati_debts_tour_completed');
+    if (!hasCompleted) {
+      setTimeout(() => {
+        runDebtsTour(language === 'ar', {
+          onComplete: () => localStorage.setItem('qaryati_debts_tour_completed', 'true'),
+        });
+      }, 1000);
+    }
+  }, [language]);
 
   const selectedDebt = debts.find((d) => d.id === selectedDebtId) || null;
 

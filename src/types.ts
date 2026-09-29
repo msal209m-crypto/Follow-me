@@ -256,6 +256,7 @@ export interface StoreSettings {
   taxNumber: string;
   address: string;
   currency: string;
+  exchangeRate?: number; // Added for currency management
   footerNote: string;
   autoBackupEnabled?: boolean;
   autoBackupIntervalMinutes?: number; // e.g. 15, 30, 60 minutes

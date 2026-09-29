@@ -57,6 +57,7 @@ interface AppContextType {
   currentCashier: Cashier;
   setCurrentCashier: (cashier: Cashier) => void;
   isCashierMode: boolean;
+  toggleCashierMode: () => void;
   resetCashierPassword: (
     cashierIdOrName?: string,
     newPassword?: string

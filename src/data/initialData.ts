@@ -18,6 +18,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
   taxNumber: '',
   address: 'المملكة العربية السعودية',
   currency: 'ر.س',
+  exchangeRate: 1.0,
   footerNote: 'شكراً لتعاملكم معنا - نسعد بخدمتكم دائماً',
   multiCurrency: {
     enabled: true,
