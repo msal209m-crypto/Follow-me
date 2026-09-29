@@ -14,6 +14,7 @@ import {
   getDrivers,
   saveDrivers,
   addDeveloperNotification,
+  toggleCustomerApproval,
   MerchantAccountRecord,
   DriverAccountRecord,
 } from './rbacAuthService';
@@ -861,6 +862,9 @@ export async function updateCustomerStatus(
     localList[idx].updated_at = new Date().toISOString();
     saveCustomersLocalCache(localList);
   }
+
+  // Sync to rbac customers registry and active customer session
+  toggleCustomerApproval(customerId, isVerified);
 
   try {
     await setDoc(doc(db, 'customers', customerId), {

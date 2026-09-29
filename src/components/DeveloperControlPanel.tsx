@@ -187,6 +187,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
 
   // Edit Merchant Modal State
   const [editingMerchant, setEditingMerchant] = useState<any | null>(null);
+  const [selectedIdPreviewPhoto, setSelectedIdPreviewPhoto] = useState<string | null>(null);
   const [editMerchantForm, setEditMerchantForm] = useState({
     storeName: '',
     name: '',
@@ -1408,6 +1409,17 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+                        {m.idVerificationPhoto && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedIdPreviewPhoto(m.idVerificationPhoto)}
+                            className="px-3 py-2 rounded-xl bg-purple-950/60 hover:bg-purple-900 border border-purple-700/50 text-purple-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                            title="معاينة بطاقة الهوية الوطنية المرفوعة"
+                          >
+                            <IdCard className="w-3.5 h-3.5" />
+                            <span>عرض الهوية 🪪</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => openEditMerchantModal(m)}
@@ -2433,7 +2445,19 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
 
                       {/* Bottom Action Controls: Verify / Block / Delete */}
                       <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 gap-2 flex-wrap">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {(c.id_card_photo || c.idVerificationPhoto || c.house_photo || c.housePhoto) && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedIdPreviewPhoto(c.id_card_photo || c.idVerificationPhoto || c.house_photo || c.housePhoto)}
+                              className="py-1 px-2.5 bg-purple-950/70 hover:bg-purple-900 border border-purple-700/50 text-purple-300 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              title="معاينة بطاقة الهوية / المستند المرفوع للعميل"
+                            >
+                              <IdCard className="w-3 h-3" />
+                              <span>عرض الهوية 🪪</span>
+                            </button>
+                          )}
+
                           {isNew && (
                             <button
                               type="button"
@@ -3601,6 +3625,48 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
               >
                 <LogOut className="w-4 h-4" />
                 <span>نعم، تسجيل الخروج</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: ID CARD VERIFICATION PREVIEW (معاينة بطاقة الهوية) */}
+      {/* ========================================================= */}
+      {selectedIdPreviewPhoto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                <IdCard className="w-5 h-5 text-emerald-400" />
+                <span>معاينة وتدقيق بطاقة الهوية الوطنية (KYC)</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSelectedIdPreviewPhoto(null)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-center">
+              <div className="relative w-full h-64 rounded-2xl overflow-hidden border-2 border-emerald-500/60 bg-black shadow-xl">
+                <img src={selectedIdPreviewPhoto} alt="ID Card Verification" className="w-full h-full object-contain" />
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                قم بمطابقة الاسم ورقم الهوية الظاهر في البطاقة مع البيانات المدخلة في النظام قبل اعتماد الحساب رسمياً لضمان أمان القرية.
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedIdPreviewPhoto(null)}
+                className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs cursor-pointer"
+              >
+                إغلاق المعاينة
               </button>
             </div>
           </div>

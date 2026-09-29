@@ -63,6 +63,7 @@ import {
   getStoresDirectory,
   rateDeliveryOrder,
   getStoreProducts,
+  verifyAndCompleteDeliveryOrder,
 } from '../services/deliveryService';
 import { getPlatformAds, PlatformAd, getPlatformDeveloperSettings, setDeveloperRemembered } from '../services/platformSettingsService';
 import {
@@ -71,12 +72,14 @@ import {
   clearActiveCustomer,
   setActiveSessionRole,
   registerCustomerRecord,
+  getAllCustomers,
 } from '../services/rbacAuthService';
 import {
   getApprovedMerchantsByVillage,
   initSupabaseRealtime,
   FIXED_VILLAGES_LIST,
-  registerCustomerAccount
+  registerCustomerAccount,
+  getCustomersLocalCache,
 } from '../services/supabaseQaryatiService';
 import { subscribeToVillageStores, fetchAllStores } from '../services/crossDeviceSyncService';
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
@@ -156,6 +159,38 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       if (activeCustomer.village) setCustomerAddress(activeCustomer.village);
     }
   }, [activeCustomer]);
+
+  // Real-time synchronization of customer approval & KYC state
+  useEffect(() => {
+    const handleCustUpdate = () => {
+      setActiveCustomer(getActiveCustomer());
+    };
+    window.addEventListener('flowapp:customer-session-updated', handleCustUpdate);
+    window.addEventListener('qaryati:customer-status-updated', handleCustUpdate);
+    return () => {
+      window.removeEventListener('flowapp:customer-session-updated', handleCustUpdate);
+      window.removeEventListener('qaryati:customer-status-updated', handleCustUpdate);
+    };
+  }, []);
+
+  const isCustomerApproved = (cust: any) => {
+    if (!cust) return false;
+    if (cust.isApproved === true || cust.is_verified === true || cust.status === 'VERIFIED') return true;
+    const cleanPhone = (cust.phone || '').replace(/\D/g, '');
+    const supaCusts = getCustomersLocalCache();
+    const foundSupa = supaCusts.find((c) => {
+      const cPhone = (c.phone || '').replace(/\D/g, '');
+      return (cleanPhone && cPhone === cleanPhone) || (cust.nationalId && c.national_id === cust.nationalId);
+    });
+    if (foundSupa && (foundSupa.is_verified === true || foundSupa.status === 'VERIFIED')) return true;
+    const rbacCusts = getAllCustomers();
+    const foundRbac = rbacCusts.find((c) => {
+      const cPhone = (c.phone || '').replace(/\D/g, '');
+      return (cleanPhone && cPhone === cleanPhone) || (cust.nationalId && c.nationalId === cust.nationalId);
+    });
+    if (foundRbac && foundRbac.isApproved === true) return true;
+    return false;
+  };
 
   // Secret Developer Trigger (5 consecutive taps on logo within 2.5s)
   const [logoTapCount, setLogoTapCount] = useState(0);
@@ -449,6 +484,18 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     };
   }, [trackedOrderId]);
 
+  // Customer direct confirmation handler (تأكيد استلام الطلب من العميل مباشرة)
+  const handleCustomerConfirmReceipt = (orderId: string) => {
+    const res = verifyAndCompleteDeliveryOrder({
+      orderId,
+      isDirectCustomerConfirmation: true,
+      manualBypassReason: 'تأكيد مباشر من العميل في واجهة التطبيق',
+    });
+    if (res.success && res.order) {
+      setTrackedOrder(res.order);
+    }
+  };
+
   // Platform Promotional Ads from Developer / Owner Console
   const [platformAds, setPlatformAds] = useState<PlatformAd[]>(() =>
     getPlatformAds().filter((a) => a.isActive)
@@ -493,9 +540,15 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
   // Cart operations
   const addToCart = (item: Item, qty = 1) => {
-    if (!activeCustomer || !activeCustomer.name || !activeCustomer.phone || !activeCustomer.nationalId || !activeCustomer.housePhoto || !activeCustomer.passwordHash) {
-      alert('⚠️ تنبيه أمني: لا يمكن إضافة أي صنف إلى السلة إلا بعد تسجيل الحساب بالكامل (الاسم، رقم الجوال، رقم البطاقة الشخصية، صورة واجهة المنزل، وكلمة السر). يرجى إتمام التسجيل أولاً.');
+    if (!activeCustomer || !activeCustomer.name || !activeCustomer.phone) {
+      alert('⚠️ يرجى تسجيل الدخول أو إنشاء حساب عميل أولاً للتمكن من إضافة المنتجات إلى السلة والتسوق.');
       setShowCustomerAuthModal(true);
+      return;
+    }
+
+    // Strict Gatekeeping: Only approved/verified customers are permitted to buy or add to cart
+    if (!isCustomerApproved(activeCustomer)) {
+      alert('⏳ حسابك قيد مراجعة وتدقيق الهوية (KYC):\nتم تسجيل بياناتك بنجاح، وبمجرد اعتماد حسابك وتوثيق الهوية من قِبل إدارة القرية/المطور، سيُتاح لك فوراً إضافة المنتجات إلى السلة والشراء وإتمام الطلبات بأمان.');
       return;
     }
 
@@ -609,6 +662,11 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     }
 
     if (cartItemsList.length === 0) return;
+
+    if (!activeCustomer || !isCustomerApproved(activeCustomer)) {
+      alert('⏳ تنبيه: لا يمكن إتمام وإرسال الطلب إلا بعد اعتماد وتوثيق الهوية من قِبل إدارة المنصة. حسابك حالياً بانتظار الاعتماد الرسمي لضمان أمان القرية.');
+      return;
+    }
 
     const validName = customerName.trim() || 'عميل المتجر';
     const validPhone = customerPhone.trim() || (customStorePhone || '05xxxxxxxx');
@@ -851,16 +909,6 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               <span className="font-black font-mono text-emerald-300">{formatGlobalCurrency(walletBalance)}</span>
             </button>
 
-            {/* AI Commerce Assistant Button */}
-            <button
-              onClick={() => setIsAIModalOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-              title="فتح مساعد الذكاء الاصطناعي لتوليد العروض وتحليل المخزون"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="text-[11px] sm:text-xs">مساعد AI</span>
-            </button>
-
             {/* Share Link Button */}
             <button
               onClick={handleShareStoreLink}
@@ -885,29 +933,6 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                 </span>
               )}
             </button>
-
-            {/* Merchant / Admin Door Button */}
-            <button
-              onClick={onOpenMerchantPortal}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-emerald-400 transition-all border border-slate-700/80 flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-xs"
-              title="دخول التاجر والمدير لإدارة المنتجات والمبيعات"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-[11px] sm:text-xs">التاجر</span>
-            </button>
-
-            {/* Dedicated Roles & Auth Modal Button */}
-            {onOpenAuthModal && (
-              <button
-                type="button"
-                onClick={() => onOpenAuthModal('MERCHANT')}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-emerald-400 transition-all border border-slate-700/80 flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-xs"
-                title="فتح نافذة تبديل الأدوار وتجهيز حسابات التجار والسائقين"
-              >
-                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-[11px] sm:text-xs">الأدوار</span>
-              </button>
-            )}
           </div>
         </div>
       </header>
@@ -952,11 +977,19 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                   <UserCheck className="w-4 h-4" />
                 </div>
                 <div className="text-xs">
-                  <div className="font-bold text-white flex items-center gap-1.5">
+                  <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
                     <span>مرحباً، {activeCustomer.name}</span>
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold">
-                      عميل القرية
-                    </span>
+                    {isCustomerApproved(activeCustomer) ? (
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        <span>معتمد للشراء والطلب ✓</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-black flex items-center gap-1 animate-pulse">
+                        <Clock className="w-3 h-3 text-amber-400" />
+                        <span>قيد مراجعة وتدقيق الهوية ⏳</span>
+                      </span>
+                    )}
                   </div>
                   <div className="text-[10px] text-slate-400 font-mono" dir="ltr">
                     {activeCustomer.phone}
@@ -1180,18 +1213,18 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                     : `لا توجد بقالات مسجلة في ${selectedVillage} حتى الآن`}
                 </p>
                 <p className="text-xs text-slate-500">
-                  يمكنك أن تكون أول تاجر يسجل بقالته أو متجره لخدمة أهالي القرية
+                  يمكنك تصفح متاجر القرى المجاورة أو عرض كافة المتاجر بالمنظومة
                 </p>
                 <button
                   type="button"
                   onClick={() => {
-                    if (onOpenAuthModal) onOpenAuthModal('MERCHANT');
-                    else onOpenMerchantPortal();
+                    setSelectedVillage('ALL');
+                    setVillageSearchQuery('');
                   }}
-                  className="mt-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-md shadow-emerald-950"
+                  className="mt-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-emerald-400 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 border border-emerald-500/30 shadow-md"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>تسجيل متجر جديد الآن</span>
+                  <Store className="w-3.5 h-3.5" />
+                  <span>تصفح كافة القرى الأخرى</span>
                 </button>
               </div>
             ) : (
@@ -1267,6 +1300,47 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             )}
           </div>
         </div>
+
+        {/* Customer Verification Status Banner */}
+        {activeCustomer && (
+          <div className="animate-in fade-in duration-200">
+            {isCustomerApproved(activeCustomer) ? (
+              <div className="p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between gap-3 shadow-md shadow-emerald-950/20">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <strong className="text-white block text-xs">حسابك موثق ومعتمد رسمياً ✓</strong>
+                    <span className="text-[11px] text-emerald-300/90">
+                      يمكنك الآن تصفح كافة الأصناف وإضافتها إلى السلة وإتمام طلبك بكل سهولة وأمان.
+                    </span>
+                  </div>
+                </div>
+                <span className="hidden sm:inline-block px-2.5 py-1 rounded-xl bg-emerald-600/30 text-emerald-300 font-mono text-[10px] font-black border border-emerald-500/30">
+                  KYC VERIFIED
+                </span>
+              </div>
+            ) : (
+              <div className="p-3 rounded-2xl bg-amber-950/50 border border-amber-500/50 text-amber-200 text-xs flex items-center justify-between gap-3 shadow-md shadow-amber-950/20">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 animate-pulse">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <strong className="text-amber-300 block text-xs">حسابك قيد مراجعة وتدقيق الهوية (KYC) ⏳</strong>
+                    <span className="text-[11px] text-amber-200/90">
+                      تم استلام بياناتك بنجاح. بمجرد اعتماد حسابك وتوثيق الهوية من قِبل إدارة القرية/المطور، سيُتاح لك فوراً إضافة المنتجات إلى السلة والشراء.
+                    </span>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-xl bg-amber-600/30 text-amber-300 font-mono text-[10px] font-black border border-amber-500/40 shrink-0">
+                  بانتظار الاعتماد ⏳
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Search & Category Filter */}
         <div className="flex flex-col gap-3">
@@ -1792,6 +1866,55 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
             {/* Tracking Stepper Body */}
             <div className="p-4 sm:p-6 overflow-y-auto space-y-5">
+              {/* Customer Secure Handover PIN & Confirmation Card */}
+              {trackedOrder.status !== 'DELIVERED' ? (
+                <div className="bg-gradient-to-br from-amber-950/40 via-slate-950 to-emerald-950/30 border-2 border-amber-500/50 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
+                      <span className="text-xs sm:text-sm font-black text-white">
+                        كود تسليم الشحنة للسائق (Handover PIN)
+                      </span>
+                    </div>
+                    <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-black">
+                      خاص بك 🔐
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 text-center">
+                    <div className="text-[11px] text-slate-400 mb-1">
+                      أعطِ هذا الكود السري للسائق عند وصوله إلى باب بيتك لاستلام طلبك:
+                    </div>
+                    <div className="font-mono text-3xl sm:text-4xl font-black text-amber-400 tracking-[0.35em] py-1 select-all">
+                      {trackedOrder.deliveryPin || '---'}
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-300 text-center leading-relaxed">
+                    🛡️ هذا الكود يحميك ويحفظ حق السائق والتاجر، ولا تسلّمه إلا بعد معاينة الأغراض.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCustomerConfirmReceipt(trackedOrder.id)}
+                    className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition-all cursor-pointer active:scale-95"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>أؤكد أنني استلمت طلبي كاملاً وسليماً الآن ✅</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-emerald-950/60 border border-emerald-500/50 rounded-2xl p-4 text-center space-y-2 animate-in fade-in">
+                  <div className="w-10 h-10 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center mx-auto shadow-md">
+                    <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+                  </div>
+                  <h4 className="font-black text-sm text-white">تم تسليم وتأكيد استلام طلبك بنجاح! 🎉</h4>
+                  <p className="text-xs text-emerald-300/90">
+                    {trackedOrder.deliveryVerificationNotes || 'تم التحقق من اكتمال التوصيل وحفظ حقوق السائق والتاجر والعميل.'}
+                  </p>
+                </div>
+              )}
+
               {/* Stepper Steps */}
               <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 space-y-4">
                 {/* Step 1: Received */}
@@ -2374,6 +2497,15 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
             {settings.storeName || 'متجر قريتي'} © {new Date().getFullYear()} - منصة تصفح وطلب المنتجات
           </p>
           <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={onOpenLanding}
+              className="text-slate-400 hover:text-emerald-400 transition-colors text-xs cursor-pointer flex items-center gap-1.5"
+              title="دخول التجار ومندوبي التوصيل وإدارة المتاجر"
+            >
+              <Store className="w-3.5 h-3.5 text-slate-500" />
+              <span>بوابة التجار ومناديب التوصيل 🔑</span>
+            </button>
           </div>
         </div>
       </footer>

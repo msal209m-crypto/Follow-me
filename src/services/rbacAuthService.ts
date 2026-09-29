@@ -34,6 +34,8 @@ export interface CustomerAccountRecord {
   idVerificationPhoto?: string; // صورة الهوية الوطنية للعميل
   village?: string;
   isApproved?: boolean;
+  status?: 'NEW' | 'VERIFIED' | 'BLOCKED';
+  isVerified?: boolean;
   createdAt: string;
 }
 
@@ -135,12 +137,34 @@ export function getAllCustomers(): CustomerAccountRecord[] {
 export function toggleCustomerApproval(customerId: string, isApproved: boolean): void {
   try {
     const customers = getAllCustomers();
-    const idx = customers.findIndex(c => c.id === customerId);
+    const cleanId = customerId.replace(/\D/g, '');
+    const idx = customers.findIndex(c => c.id === customerId || c.phone === customerId || (cleanId && c.phone.replace(/\D/g, '') === cleanId));
     if (idx >= 0) {
       customers[idx].isApproved = isApproved;
       localStorage.setItem(CUSTOMERS_REGISTRY_KEY, JSON.stringify(customers));
       window.dispatchEvent(new CustomEvent('qaryati:customer-status-updated', { detail: { customerId, isApproved } }));
       syncSaveCustomer(customers[idx]).catch(console.warn);
+    }
+
+    // Also update active session if it belongs to this customer
+    const sessionRaw = localStorage.getItem(CUSTOMER_SESSION_KEY);
+    if (sessionRaw) {
+      try {
+        const session = JSON.parse(sessionRaw);
+        const sessionCleanPhone = (session.phone || '').replace(/\D/g, '');
+        if (
+          session.phone === customerId ||
+          (cleanId && sessionCleanPhone === cleanId) ||
+          session.nationalId === customerId
+        ) {
+          session.isApproved = isApproved;
+          session.status = isApproved ? 'VERIFIED' : 'NEW';
+          session.is_verified = isApproved;
+          localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(session));
+          window.dispatchEvent(new CustomEvent('flowapp:customer-session-updated', { detail: session }));
+          window.dispatchEvent(new CustomEvent('qaryati:customer-status-updated', { detail: { customerId, isApproved } }));
+        }
+      } catch {}
     }
   } catch (err) {
     console.warn('Failed to toggle customer approval:', err);
@@ -182,7 +206,7 @@ export async function registerCustomerRecord(params: {
     housePhoto: params.housePhoto,
     idVerificationPhoto: params.idVerificationPhoto,
     village: params.village || 'قرية الانهوم',
-    isApproved: true,
+    isApproved: false, // Strict Gatekeeping: Pending developer/admin review & approval
     createdAt: new Date().toISOString()
   };
 
@@ -202,12 +226,24 @@ export async function registerCustomerRecord(params: {
     passwordHash: newCust.passwordHash,
     village: newCust.village,
     savedAt: newCust.createdAt,
-    lastActiveAt: new Date().toISOString()
+    lastActiveAt: new Date().toISOString(),
+    status: 'NEW',
+    isVerified: false,
+    isApproved: false
+  });
+
+  // Notify Developer & Admin for instant KYC Verification
+  addDeveloperNotification({
+    type: 'NEW_CUSTOMER',
+    title: `👤 عميل جديد بانتظار الاعتماد وتدقيق الهوية: ${cleanName}`,
+    message: `سجل العميل "${cleanName}" (رقم الهوية: ${cleanNationalId}) من "${newCust.village}". الحساب معلق بانتظار الاعتماد للسماح له بالشراء وإضافة السلة.`,
+    senderName: cleanName,
+    senderPhone: cleanPhone,
   });
 
   return { 
     success: true, 
-    message: `أهلاً بك يا ${newCust.name}، تم تسجيل حسابك بنجاح!`, 
+    message: `أهلاً بك يا ${newCust.name}، تم تسجيل حسابك وبيانات الهوية بنجاح! حسابك حالياً (قيد المراجعة والتدقيق ⏳) وسيتم تفعيل الشراء فور اعتماده من الإدارة.`, 
     customer: newCust 
   };
 }
@@ -245,7 +281,10 @@ export async function loginCustomerRecord(phoneOrId: string, passwordInput: stri
     passwordHash: customer.passwordHash,
     village: customer.village,
     savedAt: customer.createdAt,
-    lastActiveAt: new Date().toISOString()
+    lastActiveAt: new Date().toISOString(),
+    isApproved: customer.isApproved ?? (customer.status === 'VERIFIED'),
+    status: customer.status || (customer.isApproved ? 'VERIFIED' : 'NEW'),
+    isVerified: customer.isApproved === true || customer.isVerified === true || customer.status === 'VERIFIED'
   });
 
   return { success: true, message: `أهلاً بعودتك يا ${customer.name}`, customer };

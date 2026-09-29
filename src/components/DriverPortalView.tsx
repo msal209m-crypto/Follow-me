@@ -20,6 +20,8 @@ import {
   LogOut,
   Edit3,
   Save,
+  KeyRound,
+  ShieldCheck,
   X
 } from 'lucide-react';
 import { DeliveryOrder, DriverProfile, StoreSettings } from '../types';
@@ -30,7 +32,8 @@ import {
   saveDriverProfile,
   clearDriverProfile,
   playNotificationChime,
-  saveDeliveryOrders
+  saveDeliveryOrders,
+  verifyAndCompleteDeliveryOrder
 } from '../services/deliveryService';
 import { clearAllSystemSessions } from '../services/rbacAuthService';
 import { DriverInteractiveMap } from './DriverInteractiveMap';
@@ -54,6 +57,10 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
   const [pickupAlert, setPickupAlert] = useState<DeliveryOrder | null>(null);
   const [viewMode, setViewMode] = useState<'MAP' | 'LIST'>('MAP');
   const [confirmations, setConfirmations] = useState<Record<string, { checked: boolean; name: string }>>({});
+  const [handoverPinInputs, setHandoverPinInputs] = useState<Record<string, string>>({});
+  const [handoverErrors, setHandoverErrors] = useState<Record<string, string>>({});
+  const [showManualBypass, setShowManualBypass] = useState<Record<string, boolean>>({});
+  const [manualBypassReasons, setManualBypassReasons] = useState<Record<string, string>>({});
 
   // Driver Login/Registration form state
   const [driverName, setDriverName] = useState('');
@@ -190,30 +197,36 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
   };
 
   const handleCompleteDelivery = (orderId: string, recipientName?: string) => {
+    handleVerifyDelivery(orderId, false);
+  };
+
+  const handleVerifyDelivery = (orderId: string, isManual = false) => {
     if (!profile) return;
-    
-    if (recipientName) {
-      const ordersList = getDeliveryOrders();
-      const idx = ordersList.findIndex((o) => o.id === orderId);
-      if (idx !== -1) {
-        const current = ordersList[idx];
-        ordersList[idx] = {
-          ...current,
-          notes: current.notes 
-            ? `${current.notes} (تم تأكيد الاستلام بواسطة: ${recipientName})` 
-            : `(تم تأكيد الاستلام بواسطة: ${recipientName})`,
-        };
-        saveDeliveryOrders(ordersList);
-      }
+    const pin = handoverPinInputs[orderId] || '';
+    const recipient = confirmations[orderId]?.name || 'المستلم الفعلي';
+    const reason = manualBypassReasons[orderId] || '';
+
+    if (isManual && !reason.trim()) {
+      setHandoverErrors((prev) => ({
+        ...prev,
+        [orderId]: 'يرجى كتابة سبب التوثيق اليدوي (مثلاً: تم التسليم وهاتف العميل مغلق أو بدون إنترنت)',
+      }));
+      return;
     }
 
-    updateOrderStatus(orderId, 'DELIVERED');
-    const updatedProfile: DriverProfile = {
-      ...profile,
-      totalDelivered: (profile.totalDelivered || 0) + 1,
-    };
-    saveDriverProfile(updatedProfile);
-    refreshData();
+    const res = verifyAndCompleteDeliveryOrder({
+      orderId,
+      providedPin: isManual ? undefined : pin,
+      recipientName: recipient,
+      manualBypassReason: isManual ? reason : undefined,
+    });
+
+    if (!res.success) {
+      setHandoverErrors((prev) => ({ ...prev, [orderId]: res.message }));
+    } else {
+      setHandoverErrors((prev) => ({ ...prev, [orderId]: '' }));
+      refreshData();
+    }
   };
 
   const handleCancelDelivery = (orderId: string) => {
@@ -753,69 +766,149 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
                       ))}
                     </div>
 
-                    {/* Recipient Confirmation Panel */}
-                    <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-850 space-y-3">
-                      <div className="text-[10px] font-bold text-slate-300 flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5 text-amber-500" />
-                        <span>مربع تأكيد التحقق والمستلم (الزبون):</span>
-                      </div>
-                      
-                      <div className="space-y-2.5">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-[9px] text-slate-400 mb-1">اسم الشخص المستلم للطلب فعلياً:</label>
-                            <input
-                              type="text"
-                              value={recipientName}
-                              onChange={(e) => handleNameChange(order.id, e.target.value)}
-                              placeholder="مثال: صاحب الطلب نفسه / العائلة"
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:border-amber-500"
-                            />
+                    {/* Triple-Party Secure Delivery Verification Panel (نظام التحقق العالمي للتسليم) */}
+                    <div className="bg-slate-950/90 p-4 rounded-2xl border border-slate-800 space-y-3.5 shadow-inner">
+                      {order.customerReceived || order.status === 'DELIVERED' ? (
+                        <div className="bg-emerald-950/60 p-3.5 rounded-xl border border-emerald-500/50 space-y-2">
+                          <div className="flex items-center gap-2 text-emerald-300 font-black text-xs">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                            <span>تم تأكيد استلام الشحنة رسمياً من قِبل العميل! ✅</span>
                           </div>
-                          <div className="flex items-center h-full pt-3.5 sm:pt-4">
-                            <label className="flex items-center gap-2 text-[10px] text-slate-400 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={isConfirmed}
-                                onChange={(e) => handleCheckboxChange(order.id, e.target.checked)}
-                                className="rounded border-slate-800 bg-slate-900 text-amber-500 focus:ring-0 w-4 h-4"
-                              />
-                              <span>تأكيد المستلم أن الطلب وصله كاملاً وسليماً ✅</span>
-                            </label>
-                          </div>
+                          <p className="text-[11px] text-emerald-200/90 leading-relaxed">
+                            {order.deliveryVerificationNotes || 'تم التحقق من استلام الطلب وتوثيقه، وأرباح التوصيل وحقوق الجميع محفوظة نظامياً.'}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => refreshData()}
+                            className="w-full mt-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-xs transition-colors cursor-pointer"
+                          >
+                            نقل إلى سجل الطلبات المكتملة ✓
+                          </button>
                         </div>
-                      </div>
-                    </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between pb-1 border-b border-slate-850">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                              <span className="text-xs font-black text-white">
+                                نظام التحقق من التسليم والأمان (Handover PIN)
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
+                              إلزامي لحفظ الحقوق 🔐
+                            </span>
+                          </div>
 
-                    {/* Action Buttons */}
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!isConfirmed) {
-                            alert('يرجى تفعيل خيار "تأكيد المستلم أن الطلب وصله كاملاً وسليماً" لإكمال توصيل الشحنة!');
-                            return;
-                          }
-                          handleCompleteDelivery(order.id, recipientName || 'صاحب الطلب نفسه');
-                        }}
-                        className={`py-2.5 px-3 font-black rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer ${
-                          isConfirmed
-                            ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-400'
-                            : 'bg-slate-850 text-slate-500 border border-slate-800 cursor-not-allowed'
-                        }`}
-                        title={!isConfirmed ? 'يتطلب تأكيد استلام المستلم بالأسفل أولاً' : 'اضغط لإتمام وإغلاق الشحنة'}
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>تم التسليم وتأكيد المستلم 👥</span>
-                      </button>
+                          <p className="text-[11px] text-slate-300 leading-relaxed">
+                            لحفظ حقك في أجرة التوصيل وحق التاجر والعميل ومنع أي إنكار؛ اطلب من العميل المستلم <strong className="text-amber-400">كود الاستلام السري (4 أرقام)</strong> الظاهر في شاشة متابعة طلبه وأدخله هنا:
+                          </p>
 
-                      <button
-                        type="button"
-                        onClick={() => handleCancelDelivery(order.id)}
-                        className="py-2.5 px-3 bg-slate-800 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 border border-slate-700 hover:border-rose-800 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        <span>تعذر التسليم / إلغاء ❌</span>
-                      </button>
+                          {/* Error Banner */}
+                          {handoverErrors[order.id] && (
+                            <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                              <span>{handoverErrors[order.id]}</span>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                                كود التسليم السري للعميل (4 أرقام):
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  maxLength={6}
+                                  value={handoverPinInputs[order.id] || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setHandoverPinInputs((prev) => ({ ...prev, [order.id]: val }));
+                                    if (handoverErrors[order.id]) {
+                                      setHandoverErrors((prev) => ({ ...prev, [order.id]: '' }));
+                                    }
+                                  }}
+                                  placeholder="أدخل الكود (مثال: 4821)"
+                                  className="w-full bg-slate-900 border border-slate-750 focus:border-amber-400 rounded-xl px-3 py-2 text-sm text-center font-mono font-black text-amber-300 tracking-widest focus:outline-hidden"
+                                />
+                                <KeyRound className="w-4 h-4 text-slate-500 absolute top-1/2 -translate-y-1/2 left-3 pointer-events-none" />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                                اسم الشخص المستلم فعلياً:
+                              </label>
+                              <input
+                                type="text"
+                                value={recipientName}
+                                onChange={(e) => handleNameChange(order.id, e.target.value)}
+                                placeholder="مثال: صاحب الطلب / قريب له"
+                                className="w-full bg-slate-900 border border-slate-750 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Emergency manual bypass toggle */}
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setShowManualBypass((prev) => ({ ...prev, [order.id]: !prev[order.id] }))
+                              }
+                              className="text-[11px] text-slate-400 hover:text-amber-400 underline cursor-pointer"
+                            >
+                              {showManualBypass[order.id]
+                                ? 'إخفاء خيار التسليم الاستثنائي ▲'
+                                : 'تعذر الحصول على الكود من العميل (هاتفه مغلق أو بدون شحن)؟ اضغط هنا ▼'}
+                            </button>
+
+                            {showManualBypass[order.id] && (
+                              <div className="mt-2 p-3 rounded-xl bg-slate-900/90 border border-amber-500/30 space-y-2 animate-in fade-in">
+                                <label className="block text-[10px] font-bold text-amber-300">
+                                  سبب التسليم اليدوي الاستثنائي (يُسجل بالأرشيف للتدقيق):
+                                </label>
+                                <input
+                                  type="text"
+                                  value={manualBypassReasons[order.id] || ''}
+                                  onChange={(e) =>
+                                    setManualBypassReasons((prev) => ({ ...prev, [order.id]: e.target.value }))
+                                  }
+                                  placeholder="اكتب السبب، مثال: هاتف العميل طافي وتم تسليم الأغراض يداً بيد بحضور المستلم"
+                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerifyDelivery(order.id, true)}
+                                  className="w-full py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-black transition-colors cursor-pointer"
+                                >
+                                  توثيق التسليم الاستثنائي مع تدوين السبب 📝
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-850">
+                            <button
+                              type="button"
+                              onClick={() => handleVerifyDelivery(order.id, false)}
+                              className="py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/40 cursor-pointer active:scale-95"
+                            >
+                              <ShieldCheck className="w-4 h-4" />
+                              <span>تحقق من الكود وإتمام التسليم ✅</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleCancelDelivery(order.id)}
+                              className="py-2.5 px-3 bg-slate-850 hover:bg-rose-950/50 text-slate-300 hover:text-rose-400 border border-slate-750 hover:border-rose-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              <span>تعذر التسليم / إلغاء ❌</span>
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 );

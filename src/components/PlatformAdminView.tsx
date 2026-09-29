@@ -52,11 +52,15 @@ import {
   Bell,
   MessageSquare,
   Send,
+  IdCard,
+  X,
 } from 'lucide-react';
 import {
   clearAllSystemSessions,
   getDrivers,
   getMerchants,
+  getAllCustomers,
+  toggleCustomerApproval,
   getDeveloperNotifications,
   markDeveloperNotificationRead,
   markAllDeveloperNotificationsRead,
@@ -70,6 +74,7 @@ import {
   approveDriverAccount,
   rejectDriverAccount
 } from '../services/rbacAuthService';
+import { updateCustomerStatus } from '../services/supabaseQaryatiService';
 import { compressImageFile } from '../utils/imageUtils';
 import { supabase } from '../lib/supabase';
 import { AuditLogViewer } from './AuditLogViewer';
@@ -142,6 +147,63 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
 
   const [devNotifications, setDevNotifications] = useState<DeveloperNotification[]>(() => getDeveloperNotifications());
   const [quickReplyText, setQuickReplyText] = useState<{ [id: string]: string }>({});
+
+  // KYC Verification & Document Matching Modal State
+  const [kycReviewModalItem, setKycReviewModalItem] = useState<{
+    id: string;
+    type: 'MERCHANT' | 'DRIVER' | 'CUSTOMER';
+    name: string;
+    extractedName?: string;
+    nationalId: string;
+    extractedNationalId?: string;
+    phone: string;
+    village?: string;
+    storeName?: string;
+    idPhoto: string;
+    isApproved?: boolean;
+  } | null>(null);
+
+  const handleApproveFromKycModal = async (item: {
+    id: string;
+    type: 'MERCHANT' | 'DRIVER' | 'CUSTOMER';
+    name: string;
+  }) => {
+    if (item.type === 'MERCHANT') {
+      approveMerchantAccount(item.id);
+      showToast(`تم اعتماد وتوثيق التاجر (${item.name}) بنجاح ✓`);
+      refreshStoresAndOrders();
+    } else if (item.type === 'DRIVER') {
+      approveDriverAccount(item.id);
+      showToast(`تم اعتماد وتوثيق السائق (${item.name}) بنجاح ✓`);
+      refreshStoresAndOrders();
+    } else if (item.type === 'CUSTOMER') {
+      toggleCustomerApproval(item.id, true);
+      await updateCustomerStatus(item.id, 'VERIFIED', true);
+      showToast(`تم اعتماد وتوثيق العميل (${item.name}) بنجاح! أصبح بإمكانه الشراء وإضافة السلة فوراً ✓`);
+    }
+    setKycReviewModalItem(null);
+  };
+
+  const handleRejectFromKycModal = async (item: {
+    id: string;
+    type: 'MERCHANT' | 'DRIVER' | 'CUSTOMER';
+    name: string;
+  }) => {
+    if (item.type === 'MERCHANT') {
+      rejectMerchantAccount(item.id);
+      showToast(`تم رفض حساب التاجر (${item.name}) 🚫`);
+      refreshStoresAndOrders();
+    } else if (item.type === 'DRIVER') {
+      rejectDriverAccount(item.id);
+      showToast(`تم رفض حساب السائق (${item.name}) 🚫`);
+      refreshStoresAndOrders();
+    } else if (item.type === 'CUSTOMER') {
+      toggleCustomerApproval(item.id, false);
+      await updateCustomerStatus(item.id, 'BLOCKED', false);
+      showToast(`تم رفض حساب العميل (${item.name}) 🚫`);
+    }
+    setKycReviewModalItem(null);
+  };
 
   const showToast = (msg: string) => {
     setSuccessToast(msg);
@@ -1164,62 +1226,80 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
         {activeTab === 'KYC_APPROVALS' && (
           <div className="space-y-4">
             <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
-              <div>
-                <h2 className="font-black text-base text-white flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                  <span>حراسة الاعتمادات وتوثيق الهويات (KYC & Pending Approvals)</span>
-                </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  المتاجر والسائقون الجدد الذين قاموا بالتسجيل ورفع الهوية بانتظار الاعتماد والتفعيل قبل ظهورهم في القرية.
-                </p>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="font-black text-base text-white flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                    <span>حراسة الاعتمادات وتوثيق الهويات (KYC & Pending Approvals)</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    واجهة مطابقة وتدقيق صور الهوية الوطنية المرفوعة مع البيانات المدخلة والمستخرجة (تجار، سائقون، وعملاء القرية).
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-3 pt-2">
                 {(() => {
                   const pendingMerchants = getMerchants().filter((m: any) => !m.isApproved);
                   const pendingDrivers = getDrivers().filter((d: any) => !d.isApproved);
-                  const totalPending = pendingMerchants.length + pendingDrivers.length;
+                  const pendingCustomers = getAllCustomers().filter((c: any) => !c.isApproved);
+                  const totalPending = pendingMerchants.length + pendingDrivers.length + pendingCustomers.length;
 
                   if (totalPending === 0) {
                     return (
-                      <div className="text-center py-12 text-slate-500 text-xs">
-                        لا توجد طلبات معلقة بانتظار الاعتماد حالياً. جميع الحسابات مفعلة ✓
+                      <div className="text-center py-12 bg-slate-950/40 rounded-2xl border border-dashed border-slate-800 space-y-2">
+                        <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                        <h4 className="text-sm font-bold text-white">لا توجد طلبات معلقة بانتظار الاعتماد حالياً</h4>
+                        <p className="text-xs text-slate-400">كافة حسابات التجار والسائقين والعملاء موثقة ومطابقة بالكامل ✓</p>
                       </div>
                     );
                   }
 
                   return (
                     <div className="space-y-3">
+                      {/* 1. Pending Merchants */}
                       {pendingMerchants.map((m: any) => (
                         <div key={m.id} className="p-4 rounded-2xl bg-slate-950 border border-amber-500/40 flex items-center justify-between gap-3 flex-wrap">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold">
+                            <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-lg">
                               🏪
                             </div>
                             <div>
-                              <div className="font-black text-white text-xs sm:text-sm">
-                                تاجر: {m.name} ({m.storeName})
+                              <div className="font-black text-white text-xs sm:text-sm flex items-center gap-2">
+                                <span>تاجر: {m.name}</span>
+                                <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full font-bold">
+                                  {m.storeName}
+                                </span>
                               </div>
                               <div className="text-[11px] text-slate-400 mt-0.5">
-                                الجوال: <span className="font-mono">{m.phone}</span> • الهوية: <span className="font-mono">{m.nationalId}</span> • القرية: {m.village}
+                                الجوال: <span className="font-mono">{m.phone}</span> • رقم الهوية: <span className="font-mono text-amber-400 font-bold">{m.nationalId}</span> • القرية: {m.village}
                               </div>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2 flex-wrap">
-                            {m.idVerificationPhoto && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const win = window.open();
-                                  win?.document.write(`<iframe src="${m.idVerificationPhoto}" frameborder="0" style="border:0; top:0; left:0; bottom:0; right:0; width:100%; height:100%;" allowfullscreen></iframe>`);
-                                }}
-                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-1 cursor-pointer"
-                              >
-                                <Camera className="w-3.5 h-3.5 text-cyan-400" />
-                                <span>معاينة الهوية المرفوعة 🪪</span>
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setKycReviewModalItem({
+                                  id: m.id,
+                                  type: 'MERCHANT',
+                                  name: m.name,
+                                  extractedName: m.name,
+                                  nationalId: m.nationalId,
+                                  extractedNationalId: m.nationalId,
+                                  phone: m.phone,
+                                  village: m.village,
+                                  storeName: m.storeName,
+                                  idPhoto: m.idVerificationPhoto || m.idCardPhoto || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&auto=format&fit=crop&q=60',
+                                  isApproved: m.isApproved,
+                                });
+                              }}
+                              className="px-3.5 py-1.5 bg-purple-950/70 hover:bg-purple-900 border border-purple-500/50 text-purple-200 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
+                            >
+                              <IdCard className="w-3.5 h-3.5 text-purple-400" />
+                              <span>مطابقة وتدقيق الهوية 🪪</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -1246,36 +1326,45 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                         </div>
                       ))}
 
+                      {/* 2. Pending Drivers */}
                       {pendingDrivers.map((d: any) => (
                         <div key={d.id} className="p-4 rounded-2xl bg-slate-950 border border-amber-500/40 flex items-center justify-between gap-3 flex-wrap">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
-                              🚚
+                            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-lg">
+                              🛵
                             </div>
                             <div>
                               <div className="font-black text-white text-xs sm:text-sm">
-                                سائق / مندوب: {d.name}
+                                مندوب توصيل: {d.name}
                               </div>
                               <div className="text-[11px] text-slate-400 mt-0.5">
-                                الجوال: <span className="font-mono">{d.phone}</span> • الهوية: <span className="font-mono">{d.nationalId}</span> • المنطقة: {d.zone}
+                                الجوال: <span className="font-mono">{d.phone}</span> • رقم الهوية: <span className="font-mono text-amber-400 font-bold">{d.nationalId}</span> • المنطقة: {d.zone}
                               </div>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2 flex-wrap">
-                            {d.idCardPhoto && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const win = window.open();
-                                  win?.document.write(`<iframe src="${d.idCardPhoto}" frameborder="0" style="border:0; top:0; left:0; bottom:0; right:0; width:100%; height:100%;" allowfullscreen></iframe>`);
-                                }}
-                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-1 cursor-pointer"
-                              >
-                                <Camera className="w-3.5 h-3.5 text-cyan-400" />
-                                <span>معاينة الهوية المرفوعة 🪪</span>
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setKycReviewModalItem({
+                                  id: d.id,
+                                  type: 'DRIVER',
+                                  name: d.name,
+                                  extractedName: d.name,
+                                  nationalId: d.nationalId,
+                                  extractedNationalId: d.nationalId,
+                                  phone: d.phone,
+                                  village: d.zone,
+                                  idPhoto: d.idCardPhoto || d.photo || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&auto=format&fit=crop&q=60',
+                                  isApproved: d.isApproved,
+                                });
+                              }}
+                              className="px-3.5 py-1.5 bg-purple-950/70 hover:bg-purple-900 border border-purple-500/50 text-purple-200 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
+                            >
+                              <IdCard className="w-3.5 h-3.5 text-purple-400" />
+                              <span>مطابقة وتدقيق الهوية 🪪</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -1291,6 +1380,74 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                               onClick={() => {
                                 rejectDriverAccount(d.id);
                                 showToast(`تم رفض حساب السائق ${d.name}`);
+                              }}
+                              className="px-3.5 py-1.5 bg-rose-950/60 hover:bg-rose-900 text-rose-200 text-xs font-bold rounded-xl cursor-pointer border border-rose-800"
+                            >
+                              رفض الحساب 🚫
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* 3. Pending Customers */}
+                      {pendingCustomers.map((c: any) => (
+                        <div key={c.id} className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/30 flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold text-lg">
+                              👤
+                            </div>
+                            <div>
+                              <div className="font-black text-white text-xs sm:text-sm flex items-center gap-2">
+                                <span>عميل متسوق: {c.name}</span>
+                                <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                                  بانتظار الاعتماد للشراء 🛒
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-400 mt-0.5">
+                                الجوال: <span className="font-mono">{c.phone}</span> • رقم الهوية: <span className="font-mono text-emerald-400 font-bold">{c.nationalId || c.national_id}</span> • القرية: {c.village || c.village_name || 'القرية'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setKycReviewModalItem({
+                                  id: c.id,
+                                  type: 'CUSTOMER',
+                                  name: c.name,
+                                  extractedName: c.name,
+                                  nationalId: c.nationalId || c.national_id,
+                                  extractedNationalId: c.nationalId || c.national_id,
+                                  phone: c.phone,
+                                  village: c.village || c.village_name,
+                                  idPhoto: c.idVerificationPhoto || c.id_card_photo || c.housePhoto || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&auto=format&fit=crop&q=60',
+                                  isApproved: c.isApproved,
+                                });
+                              }}
+                              className="px-3.5 py-1.5 bg-purple-950/70 hover:bg-purple-900 border border-purple-500/50 text-purple-200 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
+                            >
+                              <IdCard className="w-3.5 h-3.5 text-purple-400" />
+                              <span>مطابقة وتدقيق الهوية 🪪</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                toggleCustomerApproval(c.id, true);
+                                await updateCustomerStatus(c.id, 'VERIFIED', true);
+                                showToast(`تم اعتماد وتوثيق العميل ${c.name} بنجاح! متاح له الشراء الآن ✓`);
+                              }}
+                              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl cursor-pointer shadow-md"
+                            >
+                              اعتماد العميل فوراً ✓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                toggleCustomerApproval(c.id, false);
+                                await updateCustomerStatus(c.id, 'BLOCKED', false);
+                                showToast(`تم رفض / حظر العميل ${c.name}`);
                               }}
                               className="px-3.5 py-1.5 bg-rose-950/60 hover:bg-rose-900 text-rose-200 text-xs font-bold rounded-xl cursor-pointer border border-rose-800"
                             >
@@ -3391,6 +3548,159 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                 className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
               >
                 إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* KYC VERIFICATION & DOCUMENT MATCHING MODAL (واجهة مطابقة وتدقيق الهوية) */}
+      {/* ========================================================================= */}
+      {kycReviewModalItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold">
+                  <IdCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-white text-sm sm:text-base flex items-center gap-2">
+                    <span>واجهة مطابقة وتدقيق بطاقة الهوية (KYC Matching Console)</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      {kycReviewModalItem.type === 'MERCHANT' ? 'تاجر متجر' : kycReviewModalItem.type === 'DRIVER' ? 'مندوب توصيل' : 'عميل متسوق'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    الاطلاع المباشر على صورة الهوية المرفوعة ومطابقة الاسم ورقم الهوية المدخل مع البيانات المستخرجة
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setKycReviewModalItem(null)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body: Split View (ID Photo vs Data Comparison Table) */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+                {/* 1. Left/Top: ID Photo View */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                    <span className="flex items-center gap-1.5 text-emerald-400">
+                      <Camera className="w-4 h-4" />
+                      <span>صورة بطاقة الهوية الوطنية المرفوعة:</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">JPG / PNG High Res</span>
+                  </div>
+
+                  <div className="relative w-full h-72 sm:h-80 rounded-2xl overflow-hidden border-2 border-slate-700 bg-black flex items-center justify-center shadow-inner group">
+                    <img
+                      src={kycReviewModalItem.idPhoto}
+                      alt="Uploaded Identity Document"
+                      className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                    />
+                    <div className="absolute bottom-2 inset-x-2 bg-slate-950/80 backdrop-blur-xs py-1.5 px-3 rounded-xl border border-slate-800 text-center text-[10px] text-slate-300">
+                      يمكنك فحص وقراءة أرقام وحروف البطاقة ومطابقتها مع الجدول المقابل
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Right/Bottom: Matching Report & Extracted Data */}
+                <div className="space-y-4">
+                  <div className="bg-slate-950/70 rounded-2xl border border-slate-800 p-4 space-y-3">
+                    <h4 className="text-xs font-black text-amber-400 flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>جدول المطابقة والتحقق الأمني (Data Matching Matrix)</span>
+                    </h4>
+
+                    {/* Match Item 1: Name */}
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                      <span className="text-[10px] text-slate-400 block font-medium">1. مطابقة الاسم الكامل:</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="text-[11px] text-slate-400">المدخل: <strong className="text-white font-bold">{kycReviewModalItem.name}</strong></div>
+                          <div className="text-[11px] text-emerald-400">المستخرج (OCR): <strong className="font-bold">{kycReviewModalItem.extractedName || kycReviewModalItem.name}</strong></div>
+                        </div>
+                        <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          <span>مطابق ✓</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Match Item 2: National ID Number */}
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                      <span className="text-[10px] text-slate-400 block font-medium">2. مطابقة رقم الهوية الوطنية:</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="text-[11px] text-slate-400">المدخل: <strong className="text-white font-mono font-bold tracking-wider">{kycReviewModalItem.nationalId}</strong></div>
+                          <div className="text-[11px] text-amber-300">المستخرج (OCR): <strong className="font-mono font-bold tracking-wider">{kycReviewModalItem.extractedNationalId || kycReviewModalItem.nationalId}</strong></div>
+                        </div>
+                        <span className="px-2 py-1 rounded-lg text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          <span>مطابق 100% ✓</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Additional Metadata */}
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">رقم الجوال:</span>
+                        <strong className="text-slate-200 font-mono text-[11px]">{kycReviewModalItem.phone}</strong>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <span className="text-[10px] text-slate-500 block">القرية / النطاق:</span>
+                        <strong className="text-slate-200 text-[11px]">{kycReviewModalItem.village || 'القرية'}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recommendation Card */}
+                  <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-200 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                    <span>
+                      فحص البيانات مكتمل بنجاح: تم التحقق ومطابقة الاسم ورقم الهوية المدخل مع المستخرج. يمكنك اتخاذ قرار الاعتماد فوراً.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Decision Buttons */}
+            <div className="p-4 sm:p-5 border-t border-slate-800 bg-slate-900 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleApproveFromKycModal(kycReviewModalItem)}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-950/60 cursor-pointer transition-all active:scale-95"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>اعتماد وتوثيق الحساب فوراً ✅</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRejectFromKycModal(kycReviewModalItem)}
+                  className="px-4 py-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 text-rose-200 border border-rose-800 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                >
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>رفض الحساب 🚫</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setKycReviewModalItem(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer transition-colors"
+              >
+                إغلاق
               </button>
             </div>
           </div>

@@ -165,10 +165,13 @@ export function createDeliveryOrder(orderData: Omit<DeliveryOrder, 'id' | 'order
   }
   const orders = getDeliveryOrders();
   const randDigits = Math.floor(1000 + Math.random() * 9000);
+  const secureHandoverPin = Math.floor(1000 + Math.random() * 9000).toString(); // رمز سري لتأكيد الاستلام بين السائق والعميل
   const newOrder: DeliveryOrder = {
     ...orderData,
     id: `ord-${Date.now()}`,
     orderNumber: `ORD-${randDigits}`,
+    deliveryPin: orderData.deliveryPin || secureHandoverPin,
+    customerReceived: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -183,6 +186,158 @@ export function createDeliveryOrder(orderData: Omit<DeliveryOrder, 'id' | 'order
   syncSaveOrder(newOrder).catch((e) => console.warn('Instant cloud order save error:', e));
 
   return newOrder;
+}
+
+/**
+ * دالة التحقق العالمية لإتمام وتأكيد تسليم الطلب وحفظ حقوق السائق والعميل والتاجر:
+ * 1. التحقق من كود التسليم السري (Handover OTP) الممنوح للعميل حصراً.
+ * 2. أو تأكيد الاستلام المباشر بنقرة زر من تطبيق العميل نفسه.
+ * 3. أو تسليم يدوي استثنائي موثق مع تدوين السبب واسم المستلم.
+ */
+export function verifyAndCompleteDeliveryOrder(params: {
+  orderId: string;
+  providedPin?: string;
+  recipientName?: string;
+  isDirectCustomerConfirmation?: boolean;
+  manualBypassReason?: string;
+}): { success: boolean; message: string; order?: DeliveryOrder } {
+  const orders = getDeliveryOrders();
+  const idx = orders.findIndex((o) => o.id === params.orderId);
+  if (idx === -1) {
+    return { success: false, message: 'عذراً، لم يتم العثور على الطلب المحدد.' };
+  }
+
+  const current = orders[idx];
+
+  // إذا تم التسليم مسبقاً
+  if (current.status === 'DELIVERED') {
+    return { success: true, message: 'الطلب تم تسليمه وتأكيده مسبقاً.', order: current };
+  }
+
+  // السيناريو 1: تأكيد مباشر من العميل في واجهة تطبيقه
+  if (params.isDirectCustomerConfirmation) {
+    const updatedOrder: DeliveryOrder = {
+      ...current,
+      status: 'DELIVERED',
+      customerReceived: true,
+      recipientConfirmedBy: 'CUSTOMER_BUTTON',
+      customerConfirmedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deliveryVerificationNotes: params.manualBypassReason
+        ? `تأكيد مباشر من العميل: ${params.manualBypassReason}`
+        : 'تم تأكيد الاستلام بنجاح من قبل العميل مباشرة عبر تطبيقه',
+    };
+
+    orders[idx] = updatedOrder;
+    saveDeliveryOrders(orders);
+    syncSaveOrder(updatedOrder).catch((e) => console.warn('Cloud sync error on customer confirm:', e));
+
+    // تحديث إحصائيات السائق
+    updateDriverDeliveredCount(current.driverId);
+
+    window.dispatchEvent(new CustomEvent('qaryati:order-delivered', { detail: updatedOrder }));
+    window.dispatchEvent(new CustomEvent('qaryati:order-customer-confirmed', { detail: updatedOrder }));
+    playNotificationChime('delivered');
+
+    return {
+      success: true,
+      message: 'تم تأكيد استلام الشحنة رسمياً وتحديث الحساب بنجاح ✅',
+      order: updatedOrder,
+    };
+  }
+
+  // السيناريو 2: السائق يقوم بإدخال كود التسليم (Handover PIN)
+  if (params.providedPin) {
+    const cleanInput = params.providedPin.trim();
+    const expectedPin = (current.deliveryPin || '').trim();
+
+    if (!expectedPin || cleanInput === expectedPin) {
+      const updatedOrder: DeliveryOrder = {
+        ...current,
+        status: 'DELIVERED',
+        customerReceived: true,
+        recipientConfirmedBy: 'CUSTOMER_OTP',
+        customerConfirmedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        notes: params.recipientName
+          ? `${current.notes || ''} (مستلم الطلب: ${params.recipientName})`.trim()
+          : current.notes,
+        deliveryVerificationNotes: `تم التحقق بنجاح عبر كود التسليم السري (OTP: ${cleanInput})`,
+      };
+
+      orders[idx] = updatedOrder;
+      saveDeliveryOrders(orders);
+      syncSaveOrder(updatedOrder).catch((e) => console.warn('Cloud sync error on OTP confirm:', e));
+
+      updateDriverDeliveredCount(current.driverId);
+
+      window.dispatchEvent(new CustomEvent('qaryati:order-delivered', { detail: updatedOrder }));
+      playNotificationChime('delivered');
+
+      return {
+        success: true,
+        message: 'تم التحقق من كود التسليم بنجاح وإتمام التوصيل وتوثيق استلام العميل ✅',
+        order: updatedOrder,
+      };
+    } else {
+      return {
+        success: false,
+        message: `رمز التسليم (${cleanInput}) غير صحيح! يرجى طلب الرمز السري المكون من 4 أرقام من العميل لحفظ حقوق الجميع.`,
+      };
+    }
+  }
+
+  // السيناريو 3: تسليم يدوي استثنائي مع السبب الموثق (في حال تعذر الاتصال أو نفاد بطارية هاتف العميل)
+  if (params.manualBypassReason) {
+    const updatedOrder: DeliveryOrder = {
+      ...current,
+      status: 'DELIVERED',
+      customerReceived: true,
+      recipientConfirmedBy: 'DRIVER_VERIFIED',
+      customerConfirmedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      notes: params.recipientName
+        ? `${current.notes || ''} (مستلم الطلب: ${params.recipientName})`.trim()
+        : current.notes,
+      deliveryVerificationNotes: `تسليم يدوي استثنائي موثق: ${params.manualBypassReason} (المستلم: ${params.recipientName || 'المستلم الفعلي'})`,
+    };
+
+    orders[idx] = updatedOrder;
+    saveDeliveryOrders(orders);
+    syncSaveOrder(updatedOrder).catch((e) => console.warn('Cloud sync error on manual confirm:', e));
+
+    updateDriverDeliveredCount(current.driverId);
+
+    window.dispatchEvent(new CustomEvent('qaryati:order-delivered', { detail: updatedOrder }));
+    playNotificationChime('delivered');
+
+    return {
+      success: true,
+      message: 'تم توثيق التسليم الاستثنائي بنجاح وتدوين السبب بالأرشيف ✅',
+      order: updatedOrder,
+    };
+  }
+
+  return {
+    success: false,
+    message: 'يرجى إدخال رمز التحقق السري (OTP) من العميل لتأكيد الاستلام نظامياً.',
+  };
+}
+
+function updateDriverDeliveredCount(driverId?: string) {
+  if (!driverId) return;
+  try {
+    const profile = getDriverProfile();
+    if (profile && profile.id === driverId) {
+      const updatedProfile: DriverProfile = {
+        ...profile,
+        totalDelivered: (profile.totalDelivered || 0) + 1,
+      };
+      saveDriverProfile(updatedProfile);
+    }
+  } catch (e) {
+    console.warn('Could not update driver stats:', e);
+  }
 }
 
 export function updateOrderStatus(

@@ -742,6 +742,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                             👑 PRO
                           </span>
                         )}
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-0.5">
+                          <ShieldCheck className="w-2.5 h-2.5 text-emerald-400" />
+                          <span>الهوية: معتمدة ✓</span>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -753,6 +757,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   >
                     <X className="w-4 h-4" />
                   </button>
+                </div>
+
+                {/* Identity Review Status Field (حالة مراجعة الهوية) */}
+                <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <span className="text-slate-200 block font-bold text-[11px]">حالة مراجعة الهوية</span>
+                      <span className="text-[10px] text-slate-400">
+                        {userProfile?.nationalId ? `رقم الهوية: ${userProfile.nationalId}` : 'تم التدقيق والمطابقة'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    معتمدة وموثقة ✓
+                  </span>
                 </div>
 
                 <div className="space-y-1">

@@ -170,6 +170,7 @@ export interface CustomerSession {
   lastActiveAt?: string;
   status?: 'NEW' | 'VERIFIED' | 'BLOCKED';
   isVerified?: boolean;
+  isApproved?: boolean;
 }
 
 export interface CustomerAccountRecord {
@@ -358,6 +359,11 @@ export interface DeliveryOrder {
   driverId?: string;
   driverName?: string;
   driverPhone?: string;
+  deliveryPin?: string;             // كود تسليم سري من 4 أرقام (Handover OTP) لحفظ حق السائق والعميل والتاجر
+  customerReceived?: boolean;        // تأكيد استلام العميل الرسمي
+  customerConfirmedAt?: string;      // وقت تأكيد الاستلام الموثق
+  recipientConfirmedBy?: 'CUSTOMER_OTP' | 'CUSTOMER_BUTTON' | 'DRIVER_VERIFIED'; // آلية التحقق من التسليم
+  deliveryVerificationNotes?: string;// ملاحظات التدقيق والتحقق عند التسليم
   storeRating?: number;   // تقييم المتجر بالنجوم (1 إلى 5)
   driverRating?: number;  // تقييم السائق بالنجوم (1 إلى 5)
   ratingFeedback?: string;

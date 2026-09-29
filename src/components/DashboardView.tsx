@@ -50,6 +50,7 @@ import { NavigationTab, Transaction, Item } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
 import { DashboardLowStockAlert } from './DashboardLowStockAlert';
 import { getStoresDirectory } from '../services/deliveryService';
+import { getMerchants } from '../services/rbacAuthService';
 
 interface DashboardViewProps {
   onOpenAddItem: () => void;
@@ -118,6 +119,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const stores = getStoresDirectory();
     return stores.find((s) => s.phone === phone);
   }, [settings.phone]);
+
+  const merchantRecord = useMemo(() => {
+    const merchants = getMerchants();
+    const phone = (settings.phone || '').replace(/\D/g, '');
+    return merchants.find((m) => {
+      const mPhone = (m.phone || '').replace(/\D/g, '');
+      return (phone && mPhone === phone) || m.storeName === settings.storeName || m.name === settings.ownerName;
+    });
+  }, [settings.phone, settings.storeName, settings.ownerName]);
+
+  const isKycApproved = useMemo(() => {
+    if (merchantRecord) return merchantRecord.isApproved !== false;
+    if (merchantStoreRecord) return (merchantStoreRecord as any).isApproved !== false;
+    return true;
+  }, [merchantRecord, merchantStoreRecord]);
 
   const todayTransactions = useMemo(() => {
     return transactions.filter(
@@ -356,7 +372,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-        {/* Quick Action Navigation Bar */}
+      {/* Merchant Identity Review Status Field (حقل حالة مراجعة الهوية في واجهة التاجر) */}
+      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+              isKycApproved
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse'
+            }`}
+          >
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] text-slate-400 font-bold flex items-center gap-1.5">
+              <span>حالة مراجعة الهوية (Identity Review Status):</span>
+            </div>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {isKycApproved ? (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>معتمدة وموثقة رسمياً ✓</span>
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 animate-pulse">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>قيد المراجعة والتدقيق ⏳</span>
+                </span>
+              )}
+              <span className="text-[11px] text-slate-400">
+                {isKycApproved
+                  ? 'تم تدقيق ومطابقة صورة بطاقة الهوية والبيانات بنجاح - المتجر معتمد ونشط بالقرية.'
+                  : 'طلبك قيد مراجعة المطور ومطابقة الاسم ورقم الهوية مع صورة البطاقة المرفوعة.'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs">
+          <div className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 flex items-center gap-2">
+            <span className="text-[10px] text-slate-500">التاجر:</span>
+            <strong className="text-white font-mono text-[11px]">
+              {settings.ownerName || merchantRecord?.name || 'التاجر المسؤول'}
+            </strong>
+            {merchantRecord?.nationalId && (
+              <>
+                <span className="text-slate-700">|</span>
+                <span className="text-[10px] text-slate-500">رقم الهوية:</span>
+                <strong className="text-amber-400 font-mono text-[11px]">{merchantRecord.nationalId}</strong>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Action Navigation Bar */}
           <div className="bg-slate-900/90 border border-slate-800 p-2 rounded-2xl flex items-center justify-between gap-2 overflow-x-auto no-scrollbar shadow-sm">
             <button
               type="button"
