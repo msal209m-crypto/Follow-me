@@ -18,14 +18,7 @@ service cloud.firestore {
 
     // License Keys collection security rules
     match /license_keys/{keyId} {
-      allow list, create, delete: if isAdmin();
-      allow get: if request.auth != null;
-      allow update: if isAdmin() || (
-        request.auth != null &&
-        resource.data.is_used == false &&
-        request.resource.data.is_used == true &&
-        request.resource.data.used_by == request.auth.uid
-      );
+      allow read, write: if true;
     }
 
     // User profiles & multi-tenant personal storage

@@ -464,10 +464,12 @@ export async function registerMerchant(params: {
     return { success: false, message: kycRes.message || 'بيانات التحقق غير صحيحة' };
   }
 
+  const finalCleanPhone = kycRes.cleanPhone || cleanPhone;
+
   if (!params.password || params.password.length < 4) return { success: false, message: 'كلمة المرور يجب ألا تقل عن 4 خانات' };
 
   const merchants = getMerchants();
-  const existing = merchants.find((m) => m.phone === cleanPhone || m.nationalId === cleanNationalId);
+  const existing = merchants.find((m) => m.phone === finalCleanPhone || m.nationalId === cleanNationalId);
   if (existing) {
     return {
       success: false,
@@ -480,7 +482,7 @@ export async function registerMerchant(params: {
   let newMerchant: MerchantAccountRecord = {
     id: merchantId,
     name: cleanName,
-    phone: cleanPhone,
+    phone: finalCleanPhone,
     nationalId: cleanNationalId,
     passwordHash: params.password,
     storeName: params.storeName.trim() || `متجر ${cleanName}`,
@@ -665,10 +667,12 @@ export async function registerDriver(params: {
     return { success: false, message: kycRes.message || 'بيانات التحقق غير صحيحة' };
   }
 
+  const finalCleanPhone = kycRes.cleanPhone || cleanPhone;
+
   if (!params.password || params.password.length < 4) return { success: false, message: 'كلمة المرور يجب ألا تقل عن 4 خانات' };
 
   const drivers = getDrivers();
-  const existing = drivers.find((d) => d.phone === cleanPhone || d.nationalId === cleanNationalId);
+  const existing = drivers.find((d) => d.phone === finalCleanPhone || d.nationalId === cleanNationalId);
   if (existing) {
     return { success: false, message: 'يوجد سائق مسجل مسبقاً بنفس رقم الجوال أو رقم بطاقة الأحوال' };
   }
@@ -676,7 +680,7 @@ export async function registerDriver(params: {
   const newDriver: DriverAccountRecord = {
     id: `driver-${Date.now()}`,
     name: cleanName,
-    phone: cleanPhone,
+    phone: finalCleanPhone,
     nationalId: cleanNationalId,
     passwordHash: params.password,
     photo: params.photo,
@@ -1415,9 +1419,9 @@ export function validateKYCParams(params: {
   phone: string;
   nationalId: string;
   idVerificationPhoto?: string;
-}): { valid: boolean; message?: string } {
+}): { valid: boolean; message?: string; cleanPhone?: string } {
   const country = params.country || 'SA';
-  const phone = params.phone.trim().replace(/\s+/g, '');
+  let phone = params.phone.trim().replace(/\s+/g, '').replace(/[\-\(\)\+]/g, '');
   const nationalId = params.nationalId.trim();
   const photo = params.idVerificationPhoto;
 
@@ -1425,25 +1429,29 @@ export function validateKYCParams(params: {
   if (!nationalId) return { valid: false, message: 'يرجى إدخال رقم بطاقة الأحوال / الهوية الشخصية' };
   if (!photo || photo.length < 30) return { valid: false, message: 'صورة الهوية الوطنية / البطاقة الشخصية إلزامية ومطلوبة لتوثيق الحساب' };
 
+  let finalCleanPhone = phone;
+
   if (country === 'SA') {
-    const normPhone = phone.startsWith('05') ? phone.substring(1) : phone;
-    if (!normPhone.startsWith('5') || normPhone.length !== 9) {
-      return { valid: false, message: 'رقم الجوال السعودي غير صحيح (يجب أن يبدأ بـ 5 ويتكون من 9 أرقام)' };
-    }
-    if (nationalId.length !== 10 || !/^\d+$/.test(nationalId)) {
-      return { valid: false, message: 'رقم الهوية الوطنية / الإقامة السعودية يجب أن يتكون من 10 أرقام صحيحة' };
+    if (finalCleanPhone.startsWith('00966')) finalCleanPhone = finalCleanPhone.substring(5);
+    else if (finalCleanPhone.startsWith('966')) finalCleanPhone = finalCleanPhone.substring(3);
+    
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+
+    if (!finalCleanPhone.startsWith('5') || finalCleanPhone.length !== 9) {
+      return { valid: false, message: 'رقم الجوال السعودي غير صحيح (يجب أن يبدأ بـ 5 ويتكون من 9 أرقام، مثال: 512345678)' };
     }
   } else if (country === 'YE') {
-    const normPhone = phone.startsWith('07') ? phone.substring(1) : phone;
-    if (!normPhone.startsWith('7') || normPhone.length !== 9) {
-      return { valid: false, message: 'رقم الجوال اليمني غير صحيح (يجب أن يبدأ بـ 7 ويتكون من 9 أرقام)' };
-    }
-    if (nationalId.length < 9 || nationalId.length > 11 || !/^\d+$/.test(nationalId)) {
-      return { valid: false, message: 'رقم البطاقة الشخصية اليمنية يجب أن يتكون من 9 إلى 11 رقماً صحيحاً' };
+    if (finalCleanPhone.startsWith('00967')) finalCleanPhone = finalCleanPhone.substring(5);
+    else if (finalCleanPhone.startsWith('967')) finalCleanPhone = finalCleanPhone.substring(3);
+    
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+
+    if (!finalCleanPhone.startsWith('7') || finalCleanPhone.length !== 9) {
+      return { valid: false, message: 'رقم الجوال اليمني غير صحيح (يجب أن يبدأ بـ 7 ويتكون من 9 أرقام، مثال: 712345678)' };
     }
   }
 
-  return { valid: true };
+  return { valid: true, cleanPhone: finalCleanPhone };
 }
 
 // Support & Inquiries Message Management

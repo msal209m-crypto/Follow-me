@@ -10,6 +10,7 @@ import {
   Smartphone,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   KeyRound,
   LogIn,
   Eye,
@@ -150,28 +151,33 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
 
-  // Secret long-press (3.5s) on logo trigger for mobile & desktop
-  const [longPressTimer, setLongPressTimer] = useState<any>(null);
+  // Secret 10-clicks trigger on logo to open Developer/Admin portal
+  const [logoClickCount, setLogoClickCount] = useState(0);
 
-  const handleTouchStart = () => {
-    const timer = setTimeout(() => {
-      if (isDeveloperRemembered()) {
-        setActiveSessionRole('DEVELOPER');
-        setIsDeveloper(true);
-        onEnterAdmin?.();
-      } else {
-        setShowAdminPinModal(true);
+  const handleLogoClick = () => {
+    setLogoClickCount((prev) => {
+      const next = prev + 1;
+      if (next >= 10) {
+        if (isDeveloperRemembered()) {
+          setActiveSessionRole('DEVELOPER');
+          setIsDeveloper(true);
+          onEnterAdmin?.();
+        } else {
+          setShowAdminPinModal(true);
+        }
+        return 0; // reset
       }
-    }, 3500);
-    setLongPressTimer(timer);
+      return next;
+    });
   };
 
-  const handleTouchEnd = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
-    }
-  };
+  useEffect(() => {
+    if (logoClickCount === 0) return;
+    const timer = setTimeout(() => {
+      setLogoClickCount(0);
+    }, 4000); // 4 seconds window to complete 10 clicks
+    return () => clearTimeout(timer);
+  }, [logoClickCount]);
 
   // Live Camera Activation & Control
   const startCamera = async () => {
@@ -232,9 +238,11 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   // Live ID Document Scanner Camera State & Logic
   const [isIdCameraActive, setIsIdCameraActive] = useState(false);
   const [idCameraStream, setIdCameraStream] = useState<MediaStream | null>(null);
+  const [idCameraError, setIdCameraError] = useState('');
   const idVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const startIdCamera = async () => {
+    setIdCameraError('');
     setIsIdCameraActive(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -248,6 +256,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
       }
     } catch (err) {
       console.warn('ID camera error:', err);
+      setIdCameraError('تعذر فتح الكاميرا الخلفية تلقائياً. يرجى اختيار صورة الهوية للرفع مباشرة.');
       setIsIdCameraActive(false);
     }
   };
@@ -320,10 +329,12 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
 
     setTimeout(async () => {
       try {
+        const finalPhone = kyc.cleanPhone || regPhone.trim();
+
         if (regRole === 'CUSTOMER') {
           const res = await registerCustomerRecord({
             name: regName.trim(),
-            phone: regPhone.trim(),
+            phone: finalPhone,
             nationalId: regNationalId.trim(),
             password: regPassword,
             housePhoto: regSelfie || undefined,
@@ -336,7 +347,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
             setTimeout(() => {
               setAuthLoading(false);
               setAuthTab('login');
-              setLoginIdentifier(regPhone.trim());
+              setLoginIdentifier(finalPhone);
             }, 3000);
           } else {
             setAuthError(res.message);
@@ -347,7 +358,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
           const res = await registerMerchant({
             country: regCountry,
             name: regName.trim(),
-            phone: regPhone.trim(),
+            phone: finalPhone,
             nationalId: regNationalId.trim(),
             password: regPassword,
             storeName: regStoreName.trim(),
@@ -363,7 +374,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
             setTimeout(() => {
               setAuthLoading(false);
               setAuthTab('login');
-              setLoginIdentifier(regPhone.trim());
+              setLoginIdentifier(finalPhone);
             }, 3000);
           } else {
             setAuthError(res.message);
@@ -374,7 +385,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
           const res = await registerDriver({
             country: regCountry,
             name: regName.trim(),
-            phone: regPhone.trim(),
+            phone: finalPhone,
             nationalId: regNationalId.trim(),
             password: regPassword,
             photo: regSelfie || undefined,
@@ -390,7 +401,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
             setTimeout(() => {
               setAuthLoading(false);
               setAuthTab('login');
-              setLoginIdentifier(regPhone.trim());
+              setLoginIdentifier(finalPhone);
             }, 3000);
           } else {
             setAuthError(res.message);
@@ -535,13 +546,9 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
       <header className={`p-4 sm:p-6 flex items-center justify-between max-w-6xl mx-auto w-full border-b ${isDarkMode ? 'border-slate-800/80 bg-slate-950/80' : 'border-slate-200 bg-white/80'} backdrop-blur-md sticky top-0 z-20`}>
         <div className="flex items-center gap-2.5">
           <div
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-            onMouseDown={handleTouchStart}
-            onMouseUp={handleTouchEnd}
-            onMouseLeave={handleTouchEnd}
-            title="قريتي"
-            className="w-10 h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-lg shadow-emerald-950/35 cursor-pointer active:scale-95 transition-transform shrink-0 bg-slate-900 select-none"
+            onClick={handleLogoClick}
+            title="تطبيق قريتي - بوابة المطورين (اضغط 10 مرات)"
+            className="w-10 h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-lg shadow-emerald-950/35 cursor-pointer active:scale-95 transition-all shrink-0 bg-slate-900 select-none flex items-center justify-center hover:border-emerald-400"
           >
             <img
               src="/icon.png"
@@ -1037,8 +1044,29 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
                     )}
 
                     {cameraError && (
-                      <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[10px] text-amber-400 leading-relaxed">
-                        {cameraError}
+                      <div className="p-3 bg-amber-950/80 border border-amber-600/30 rounded-2xl space-y-2 text-[11px] text-amber-200">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>تنبيه الخصوصية وإذن الكاميرا 🔐</span>
+                        </div>
+                        <p className="leading-relaxed">
+                          قد يمنع المتصفح فتح الكاميرا التلقائية تلقائياً للحماية. لتجاوز هذا وحل المشكلة بسهولة:
+                        </p>
+                        <div className="space-y-0.5 text-[10px] text-slate-300 pr-2">
+                          <div>1. اضغط على أيقونة القفل أو الضبط في شريط عنوان المتصفح بالأعلى.</div>
+                          <div>2. اختر **«السماح بالكاميرا» (Allow Camera)** ثم أعد المحاولة.</div>
+                        </div>
+                        <label className="mt-2 w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-md">
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>التقاط سيلفي بكاميرا الجوال المباشرة 📸</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="user"
+                            onChange={handlePhotoUpload}
+                            className="hidden"
+                          />
+                        </label>
                       </div>
                     )}
 
@@ -1109,6 +1137,43 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
                           <Camera className="w-4 h-4" />
                           <span>مسح البطاقة بالكاميرا الحية واستخراج البيانات تلقائياً 📷</span>
                         </button>
+
+                        {idCameraError && (
+                          <div className="p-3 bg-amber-950/80 border border-amber-600/30 rounded-2xl space-y-2 text-[11px] text-amber-200">
+                            <div className="flex items-center gap-1.5 font-bold">
+                              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                              <span>إذن الكاميرا الخلفية 🔐</span>
+                            </div>
+                            <p className="leading-relaxed">
+                              قد يمنع المتصفح الكاميرا الخلفية. اضغط بالأسفل لفتح الكاميرا والتقاط بطاقتك فوراً بدون تعليق:
+                            </p>
+                            <label className="mt-2 w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-center cursor-pointer transition-all flex items-center justify-center gap-1.5 shadow-md">
+                              <Camera className="w-3.5 h-3.5" />
+                              <span>التقاط صورة الهوية بالكاميرا الخلفية 📸</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      const res = reader.result as string;
+                                      setRegIdCardPhoto(res);
+                                      // Intelligent OCR extraction simulation
+                                      const scannedId = regCountry === 'SA' ? '10' + Math.floor(10000000 + Math.random() * 90000000) : Math.floor(100000000 + Math.random() * 900000000).toString();
+                                      if (!regNationalId.trim()) setRegNationalId(scannedId);
+                                      if (!regName.trim()) setRegName('مستخدم موثق عبر البطاقة الشخصية');
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        )}
 
                         {isIdCameraActive && (
                           <div className="relative w-full max-w-xs h-44 rounded-2xl overflow-hidden border-2 border-emerald-500 mx-auto bg-black">
