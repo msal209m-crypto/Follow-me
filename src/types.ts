@@ -262,6 +262,7 @@ export interface StoreSettings {
   autoBackupIntervalMinutes?: number; // e.g. 15, 30, 60 minutes
   lastAutoBackupTimestamp?: string;
   multiCurrency?: MultiCurrencyConfig;
+  powerSavingMode?: boolean;
   stickerSettings: {
     showStoreName: boolean;
     showPrice: boolean;

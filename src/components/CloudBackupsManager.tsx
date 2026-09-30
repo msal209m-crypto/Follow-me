@@ -87,6 +87,45 @@ export const CloudBackupsManager: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleForcePurgeCache = () => {
+    try {
+      const keysToKeep = ['qaryati_active_role', 'flowapp_user_prefix', 'qaryati_remember_developer'];
+      const preserved: Record<string, string | null> = {};
+      
+      // 1. Preserve essential credentials & keys
+      keysToKeep.forEach((key) => {
+        preserved[key] = localStorage.getItem(key);
+      });
+
+      // 2. Clear all cached collections, offline store directory, products caches
+      localStorage.clear();
+
+      // 3. Restore essential credentials
+      keysToKeep.forEach((key) => {
+        if (preserved[key] !== null) {
+          localStorage.setItem(key, preserved[key]!);
+        }
+      });
+
+      showNotification(
+        language === 'ar'
+          ? '🔄 تم تطهير الذاكرة المؤقتة بالكامل! جاري إعادة المزامنة مع السحاب...'
+          : '🔄 Local cache purged completely! Re-syncing with Cloud Firestore...',
+        'success'
+      );
+
+      // 4. Force reload page to grab clean data
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err) {
+      showNotification(
+        language === 'ar' ? '❌ حدث خطأ أثناء تطهير الكاش' : '❌ Error purging local cache',
+        'error'
+      );
+    }
+  };
+
   const autoBackupEnabled = settings.autoBackupEnabled !== false;
   const autoBackupInterval = settings.autoBackupIntervalMinutes || 30;
 
@@ -161,6 +200,31 @@ export const CloudBackupsManager: React.FC = () => {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* Force Cloud Re-sync & Cache Purge Section */}
+      <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" style={{ animationDuration: '6s' }} />
+            <span className="font-extrabold text-sm text-white">
+              {language === 'ar' ? 'تطهير الذاكرة ومزامنة السحاب القصوى' : 'Force Cloud Re-sync & Cache Purge'}
+            </span>
+          </div>
+          <p className="text-[10px] sm:text-xs text-slate-400 leading-normal max-w-lg">
+            {language === 'ar'
+              ? '💡 في حال حدوث بطء في المتصفح أو تعارض بيانات بين الأجهزة، سيقوم هذا الزر بمسح الكاش المحلي كاملاً وسحب أحدث نسخة سليمة من قاعدة البيانات السحابية مباشرة.'
+              : '💡 If you notice slow loading or sync conflicts between phones, this will clear local cache and download fresh clean data from the cloud database.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleForcePurgeCache}
+          className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-950/40 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>{language === 'ar' ? 'تطهير ومزامنة السحاب 🔄' : 'Purge & Re-sync 🔄'}</span>
+        </button>
       </div>
 
       {/* Auto Backup Configuration Controls */}

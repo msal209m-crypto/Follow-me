@@ -2253,8 +2253,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Don't auto-backup if there's no data at all
     if (items.length === 0 && transactions.length === 0 && debts.length === 0) return;
 
-    const intervalMinutes = settings.autoBackupIntervalMinutes || 30;
-    const intervalMs = Math.max(intervalMinutes, 5) * 60 * 1000;
+    const intervalMinutes = settings.powerSavingMode ? (settings.autoBackupIntervalMinutes || 30) * 2 : (settings.autoBackupIntervalMinutes || 30);
+    const intervalMs = Math.max(intervalMinutes, 10) * 60 * 1000;
 
     const timer = setInterval(() => {
       console.log('Running automatic cloud backup snapshot...');

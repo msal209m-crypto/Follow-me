@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { initializeFirestore, getFirestore } from 'firebase/firestore';
+import { getMessaging, isSupported } from 'firebase/messaging';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase SDK
@@ -31,5 +32,17 @@ try {
 }
 
 export const db = firestoreInstance;
+
+// Safe FCM Messaging initialization
+let messagingInstance: any = null;
+isSupported().then((supported) => {
+  if (supported) {
+    messagingInstance = getMessaging(app);
+  }
+}).catch((err) => {
+  console.warn('FCM Messaging is not supported or failed to initialize:', err);
+});
+
+export const messaging = messagingInstance;
 
 export default app;

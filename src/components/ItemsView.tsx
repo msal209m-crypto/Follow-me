@@ -34,6 +34,7 @@ import { Item } from '../types';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
 import { ItemMovementModal } from './ItemMovementModal';
 import { ConfirmationModal } from './ConfirmationModal';
+import { BulkPriceUpdateModal } from './BulkPriceUpdateModal';
 import {
   computeAllItemMovements,
   ItemMovementSummary,
@@ -58,12 +59,14 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
   const {
     items,
     transactions,
+    updateItem,
     deleteItem,
     resetToSampleData,
     settings,
     inventoryStats,
     getPendingOrderQtyForItem,
     setActiveTab,
+    showNotification,
     t,
     isRTL,
     language,
@@ -78,6 +81,17 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
   const [showCameraScanner, setShowCameraScanner] = useState(false);
   const [selectedItemForTracking, setSelectedItemForTracking] = useState<Item | null>(null);
   const [itemToDelete, setItemToDelete] = useState<Item | null>(null);
+  const [showBulkPriceModal, setShowBulkPriceModal] = useState<boolean>(false);
+
+  const handleBulkUpdatePrices = async (updates: { id: string; salePrice: number; costPrice?: number }[]) => {
+    for (const u of updates) {
+      const payload: Partial<Item> = { salePrice: u.salePrice };
+      if (u.costPrice !== undefined) {
+        payload.costPrice = u.costPrice;
+      }
+      updateItem(u.id, payload);
+    }
+  };
 
   // Real-time synchronization for items of all stores in the same village
   const [realTimeItems, setRealTimeItems] = useState<Item[]>(items);
@@ -372,6 +386,18 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Smart Bulk Price Update Button */}
+          <button
+            id="btn-bulk-price-update"
+            type="button"
+            onClick={() => setShowBulkPriceModal(true)}
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-400 text-white font-bold px-3.5 sm:px-4 py-2.5 rounded-xl shadow-md shadow-amber-950/50 transition-all cursor-pointer text-xs sm:text-sm active:scale-95 border border-amber-400/50"
+            title={language === 'ar' ? 'تحديث وتعديل أسعار المخزون جماعياً بناءً على سعر الصرف أو النسبة المئوية' : 'Bulk Price Update'}
+          >
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-200" />
+            <span className="font-bold">{language === 'ar' ? 'تحديث الأسعار ⚡' : 'Bulk Prices ⚡'}</span>
+          </button>
+
           {/* Inventory Audit Report Shortcut */}
           <button
             id="btn-goto-inventory-audit"
@@ -1091,6 +1117,18 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
           ]}
         />
       )}
+
+      {/* Smart Bulk Price Update Modal */}
+      <BulkPriceUpdateModal
+        isOpen={showBulkPriceModal}
+        onClose={() => setShowBulkPriceModal(false)}
+        items={items}
+        settings={settings}
+        onApplyUpdate={handleBulkUpdatePrices}
+        showNotification={showNotification}
+        language={language}
+        isRTL={isRTL}
+      />
     </div>
   );
 };

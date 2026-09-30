@@ -86,6 +86,7 @@ import {
   getStoresDirectory,
   saveStoresDirectory,
   addStoreToDirectory,
+  deleteStoreDirectoryRecord,
   toggleStoreProStatus,
   getDeliveryOrders,
   createDeliveryOrder
@@ -552,12 +553,10 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
     showToast('تم إلغاء الحظر وإعادة تنشيط المتجر بنجاح');
   };
 
-  const handleDeleteStorePermanent = (storeId: string, storeName: string) => {
+  const handleDeleteStorePermanent = async (storeId: string, storeName: string) => {
     if (confirm(`⚠️ هل أنت متأكد من الحذف النهائي للمتجر "${storeName}"؟ سيتم إزالته تماماً من المنصة ولن يظهر في تطبيق العملاء أبداً.`)) {
-      const currentStores = getStoresDirectory();
-      const updated = currentStores.filter((s) => s.id !== storeId);
-      saveStoresDirectory(updated);
-      setStores(updated);
+      await deleteStoreDirectoryRecord(storeId);
+      setStores(getStoresDirectory());
       showToast(`تم الحذف النهائي للمتجر ${storeName}`);
     }
   };

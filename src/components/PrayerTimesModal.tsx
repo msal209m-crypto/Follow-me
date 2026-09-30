@@ -24,7 +24,8 @@ import {
   Store,
   Radio,
   Music,
-  Check
+  Check,
+  Trash2
 } from 'lucide-react';
 import {
   calculateVillagePrayerTimes,
@@ -43,6 +44,7 @@ import {
   PrayerTimesDay,
 } from '../services/adhanService';
 import { VillageMapPickerModal } from './VillageMapPickerModal';
+import { useApp } from '../context/AppContext';
 
 export interface PrayerTimesModalProps {
   isOpen: boolean;
@@ -57,6 +59,7 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
   isDarkMode = true,
   isRTL = true,
 }) => {
+  const { language } = useApp();
   const [settings, setSettings] = useState<AdhanSettings>(getAdhanSettings());
   const [prayerData, setPrayerData] = useState<PrayerTimesDay>(() =>
     calculateVillagePrayerTimes(new Date(), settings)
@@ -66,6 +69,63 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
   const [activeTab, setActiveTab] = useState<'times' | 'mosques' | 'qibla' | 'settings'>('times');
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
+
+  // Custom user-managed village mosques states
+  const [mosques, setMosques] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('qaryati_custom_mosques_v1');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_VILLAGE_MOSQUES;
+  });
+
+  const [showAddMosqueForm, setShowAddMosqueForm] = useState(false);
+  const [newMosqueName, setNewMosqueName] = useState('');
+  const [newMosqueImam, setNewMosqueImam] = useState('');
+  const [newMosqueMuezzin, setNewMosqueMuezzin] = useState('');
+  const [newMosqueDistance, setNewMosqueDistance] = useState('0.5');
+  const [mosqueFajrOffset, setMosqueFajrOffset] = useState('20');
+  const [mosqueDhuhrOffset, setMosqueDhuhrOffset] = useState('15');
+  const [mosqueAsrOffset, setMosqueAsrOffset] = useState('15');
+  const [mosqueMaghribOffset, setMosqueMaghribOffset] = useState('10');
+  const [mosqueIshaOffset, setMosqueIshaOffset] = useState('15');
+
+  const handleAddMosque = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMosqueName.trim()) return;
+
+    const newMosque = {
+      id: `mosque-custom-${Date.now()}`,
+      name: newMosqueName.trim(),
+      imamName: newMosqueImam.trim() || 'غير محدد',
+      muezzinName: newMosqueMuezzin.trim() || 'غير محدد',
+      distanceKm: parseFloat(newMosqueDistance) || 0.5,
+      iqamahOffsets: {
+        fajr: parseInt(mosqueFajrOffset) || 20,
+        sunrise: 0,
+        dhuhr: parseInt(mosqueDhuhrOffset) || 15,
+        asr: parseInt(mosqueAsrOffset) || 15,
+        maghrib: parseInt(mosqueMaghribOffset) || 10,
+        isha: parseInt(mosqueIshaOffset) || 15,
+      }
+    };
+
+    const updated = [newMosque, ...mosques];
+    setMosques(updated);
+    localStorage.setItem('qaryati_custom_mosques_v1', JSON.stringify(updated));
+
+    // Reset inputs
+    setNewMosqueName('');
+    setNewMosqueImam('');
+    setNewMosqueMuezzin('');
+    setShowAddMosqueForm(false);
+  };
+
+  const handleDeleteMosque = (id: string) => {
+    const updated = mosques.filter(m => m.id !== id);
+    setMosques(updated);
+    localStorage.setItem('qaryati_custom_mosques_v1', JSON.stringify(updated));
+  };
 
   // Update clock & countdown every second
   useEffect(() => {
@@ -467,36 +527,179 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
 
         {/* TAB 2: Village Mosques */}
         {activeTab === 'mosques' && (
-          <div className="space-y-3">
-            {DEFAULT_VILLAGE_MOSQUES.map((mosque) => (
-              <div
-                key={mosque.id}
-                className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-800/40 border-slate-700/60' : 'bg-slate-50 border-slate-200'}`}
+          <div className="space-y-4">
+            {/* Header / Add Button */}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] text-slate-400">
+                {language === 'ar' ? 'مساجد قريتي النشطة والمعتمدة:' : 'Active village mosques:'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAddMosqueForm(!showAddMosqueForm)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-1.5 px-3 rounded-lg text-xs cursor-pointer active:scale-95 transition-all flex items-center gap-1.5"
               >
-                <div className="flex items-start justify-between gap-3 mb-2">
+                <span>{showAddMosqueForm ? 'إلغاء' : '➕ إضافة مسجد بالقرية'}</span>
+              </button>
+            </div>
+
+            {/* Add Mosque Form */}
+            {showAddMosqueForm && (
+              <form onSubmit={handleAddMosque} className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <div className="text-xs font-bold text-slate-200">إضافة مسجد مخصص لقريتك:</div>
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <h4 className="font-extrabold text-sm text-emerald-400">{mosque.name}</h4>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      الإمام: <strong className="text-slate-300">{mosque.imamName}</strong> • المؤذن: <strong className="text-slate-300">{mosque.muezzinName}</strong>
-                    </p>
+                    <label className="text-[10px] text-slate-400 block mb-1">اسم المسجد:</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="مثال: مسجد الفصور الكبير"
+                      value={newMosqueName}
+                      onChange={(e) => setNewMosqueName(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
                   </div>
-                  {mosque.distanceKm && (
-                    <span className="px-2 py-1 rounded-xl text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                      تبعد {mosque.distanceKm} كم
-                    </span>
-                  )}
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">المسافة (كم):</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      required
+                      value={newMosqueDistance}
+                      onChange={(e) => setNewMosqueDistance(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
                 </div>
 
-                <div className="mt-3 pt-3 border-t border-slate-700/40 grid grid-cols-5 gap-1.5 text-center">
-                  {(['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'] as PrayerName[]).map((pName) => (
-                    <div key={pName} className="p-1.5 rounded-xl bg-slate-900/60 border border-slate-800 text-[10px]">
-                      <span className="text-slate-400 block">{pName === 'fajr' ? 'الفجر' : pName === 'dhuhr' ? 'الظهر' : pName === 'asr' ? 'العصر' : pName === 'maghrib' ? 'المغرب' : 'العشاء'}</span>
-                      <strong className="text-emerald-400 block mt-0.5">+{mosque.iqamahOffsets[pName]} د</strong>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">اسم الإمام:</label>
+                    <input
+                      type="text"
+                      placeholder="اختياري"
+                      value={newMosqueImam}
+                      onChange={(e) => setNewMosqueImam(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">اسم المؤذن:</label>
+                    <input
+                      type="text"
+                      placeholder="اختياري"
+                      value={newMosqueMuezzin}
+                      onChange={(e) => setNewMosqueMuezzin(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
                 </div>
+
+                {/* Iqamah offsets */}
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 block">فارق الإقامة عن الأذان (بالدقائق):</label>
+                  <div className="grid grid-cols-5 gap-1.5 text-center">
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">الفجر</span>
+                      <input
+                        type="number"
+                        value={mosqueFajrOffset}
+                        onChange={(e) => setMosqueFajrOffset(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-center text-xs text-white focus:outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">الظهر</span>
+                      <input
+                        type="number"
+                        value={mosqueDhuhrOffset}
+                        onChange={(e) => setMosqueDhuhrOffset(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-center text-xs text-white focus:outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">العصر</span>
+                      <input
+                        type="number"
+                        value={mosqueAsrOffset}
+                        onChange={(e) => setMosqueAsrOffset(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-center text-xs text-white focus:outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">المغرب</span>
+                      <input
+                        type="number"
+                        value={mosqueMaghribOffset}
+                        onChange={(e) => setMosqueMaghribOffset(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-center text-xs text-white focus:outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">العشاء</span>
+                      <input
+                        type="number"
+                        value={mosqueIshaOffset}
+                        onChange={(e) => setMosqueIshaOffset(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-1 text-center text-xs text-white focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2 rounded-xl text-xs cursor-pointer shadow-md shadow-emerald-950"
+                >
+                  حفظ وتثبيت المسجد بالقرية ✓
+                </button>
+              </form>
+            )}
+
+            {mosques.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 bg-slate-900/40 rounded-2xl border border-slate-800">
+                لم يتم إدخال أي مساجد لهذه المنطقة بعد. يمكنك إضافة مساجد قريتك مباشرة وبسهولة!
               </div>
-            ))}
+            ) : (
+              mosques.map((mosque) => (
+                <div
+                  key={mosque.id}
+                  className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-800/40 border-slate-700/60' : 'bg-slate-50 border-slate-200'}`}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div>
+                      <h4 className="font-extrabold text-sm text-emerald-400">{mosque.name}</h4>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        الإمام: <strong className="text-slate-300">{mosque.imamName}</strong> • المؤذن: <strong className="text-slate-300">{mosque.muezzinName}</strong>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {mosque.distanceKm && (
+                        <span className="px-2 py-1 rounded-xl text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                          تبعد {mosque.distanceKm} كم
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMosque(mosque.id)}
+                        className="p-1 rounded-lg hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                        title="حذف هذا المسجد"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-slate-700/40 grid grid-cols-5 gap-1.5 text-center">
+                    {(['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'] as PrayerName[]).map((pName) => (
+                      <div key={pName} className="p-1.5 rounded-xl bg-slate-900/60 border border-slate-800 text-[10px]">
+                        <span className="text-slate-400 block">{pName === 'fajr' ? 'الفجر' : pName === 'dhuhr' ? 'الظهر' : pName === 'asr' ? 'العصر' : pName === 'maghrib' ? 'المغرب' : 'العشاء'}</span>
+                        <strong className="text-emerald-400 block mt-0.5">+{mosque.iqamahOffsets[pName]} د</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
 

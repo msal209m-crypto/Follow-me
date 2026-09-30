@@ -120,10 +120,10 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
         return;
       }
 
-      const cost = parseFloat(costPrice) || 0;
-      const sale = parseFloat(salePrice) || 0;
-      const qty = parseInt(quantity) || 0;
-      const minAlert = parseInt(minStockAlert) || 5;
+      const cost = Math.max(0, parseFloat(costPrice) || 0);
+      const sale = Math.max(0, parseFloat(salePrice) || 0);
+      const qty = Math.max(0, parseInt(quantity) || 0);
+      const minAlert = Math.max(0, parseInt(minStockAlert) || 5);
 
       // Ensure image is safe and compressed, never exceeding localStorage threshold
       let finalImage = sanitizeProductImage(image, DEFAULT_PRODUCT_IMAGE);
@@ -206,19 +206,22 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
   const totalValue = (parseInt(quantity) || 0) * (parseFloat(salePrice) || 0);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-slate-900 border-t-2 sm:border border-emerald-500/40 sm:border-slate-700 rounded-t-3xl sm:rounded-2xl max-w-lg w-full max-h-[88vh] overflow-y-auto p-4 sm:p-6 shadow-2xl space-y-3.5 animate-in slide-in-from-bottom duration-300">
+        {/* Mobile Drag Indicator Handle */}
+        <div className="sm:hidden w-10 h-1 bg-slate-700 rounded-full mx-auto mb-0.5" />
+
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <Package className="w-5 h-5 text-emerald-400" />
-            <h3 className="font-extrabold text-lg text-white">
+            <h3 className="font-extrabold text-base sm:text-lg text-white">
               {itemToEdit ? 'تعديل بيانات الصنف' : 'إضافة صنف جديد للمخزون'}
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white rounded-lg p-1"
+            className="text-slate-400 hover:text-white rounded-lg p-1 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -505,6 +508,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
               <input
                 type="number"
                 step="0.25"
+                min="0"
                 required
                 placeholder="0.00"
                 value={costPrice}
@@ -530,6 +534,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
               <input
                 type="number"
                 step="0.25"
+                min="0"
                 required
                 placeholder="0.00"
                 value={salePrice}
@@ -558,6 +563,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
               )}
               <input
                 type="number"
+                min="0"
                 required
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}

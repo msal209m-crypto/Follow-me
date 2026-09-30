@@ -112,12 +112,12 @@ export const GlobalSettingsModal: React.FC<GlobalSettingsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-fadeIn overflow-y-auto"
       onClick={onClose}
       dir={prefs.isRTL ? 'rtl' : 'ltr'}
     >
       <div
-        className={`w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl p-5 sm:p-6 shadow-2xl relative border transition-all ${
+        className={`w-full max-w-md sm:max-w-xl max-h-[85vh] sm:max-h-[90vh] overflow-y-auto rounded-3xl p-4 sm:p-6 shadow-2xl relative border transition-all my-auto ${
           isDarkMode
             ? 'bg-slate-900 border-indigo-500/30 text-white shadow-indigo-950/50'
             : 'bg-white border-indigo-200 text-slate-900 shadow-xl'

@@ -76,7 +76,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   cartCount,
   cartTotal,
 }) => {
-  const { language, isRTL } = useApp();
+  const { language, isRTL, settings } = useApp();
   const [scannerError, setScannerError] = useState<{
     message: string;
     isPermissionDenied: boolean;
@@ -272,9 +272,9 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         });
         html5QrCodeRef.current = qr;
 
-        // Optimized scan loop config: 15 fps to eliminate lag and freezing
+        // Optimized scan loop config: 15 fps or 6 fps if power saving mode is active
         const scanConfig = {
-          fps: 15, // 15 frames per second as requested
+          fps: settings.powerSavingMode ? 6 : 15, // 6 fps saves significant battery on mobile phones!
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const w = Math.min(300, Math.floor(viewfinderWidth * 0.88));
             const h = Math.min(180, Math.floor(viewfinderHeight * 0.65));

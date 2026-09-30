@@ -20,6 +20,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
   currency: 'ر.س',
   exchangeRate: 1.0,
   footerNote: 'شكراً لتعاملكم معنا - نسعد بخدمتكم دائماً',
+  powerSavingMode: false,
   multiCurrency: {
     enabled: true,
     baseCurrencyCode: 'SAR',

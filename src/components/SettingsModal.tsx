@@ -28,6 +28,7 @@ import {
   MessageCircle,
   Bell,
   Key,
+  Battery
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { usePWA } from '../context/PWAContext';
@@ -132,6 +133,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
   const [address, setAddress] = useState(settings.address);
   const [currency, setCurrency] = useState(settings.currency);
   const [footerNote, setFooterNote] = useState(settings.footerNote);
+  const [powerSavingMode, setPowerSavingMode] = useState(settings.powerSavingMode || false);
   const [activeHelp, setActiveHelp] = useState<string | null>(null);
 
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -146,6 +148,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
       address,
       currency: currency.trim() || 'ر.س',
       footerNote,
+      powerSavingMode,
     });
     onClose();
   };
@@ -762,6 +765,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
                 onChange={(e) => setFooterNote(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none"
               />
+            </div>
+
+            {/* Battery/Power Saving Mode Card */}
+            <div className="p-4 bg-slate-950/85 border border-slate-800 rounded-2xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
+                    <Battery className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-extrabold text-xs text-white block">
+                      {language === 'ar' ? 'وضع توفير الطاقة (إطالة عمر البطارية)' : 'Power Saving Mode'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block leading-none mt-0.5">
+                      {language === 'ar' ? 'تقليل التحديثات بالخلفية لزيادة عمر البطارية بالسوق' : 'Reduce background updates to prolong battery'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPowerSavingMode(!powerSavingMode)}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-all cursor-pointer flex items-center ${
+                    powerSavingMode ? 'bg-amber-500 justify-end' : 'bg-slate-800 justify-start'
+                  }`}
+                >
+                  <span className="w-5 h-5 rounded-full bg-slate-950 shadow-md transition-transform" />
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 leading-normal">
+                {language === 'ar'
+                  ? '💡 عند تفعيل هذا الوضع، سيتم تقليل معدل تحديثات الكاش وقاعدة البيانات التلقائية، وإلغاء الرسوم المتحركة العالية بالواجهة، وتخفيض فريمات الباركود وإيقاف أي تنبيهات ثانوية غير ضرورية لحماية معالج وهاتف التاجر.'
+                  : '💡 When enabled, background updates are throttled, barcode frame rate is optimized, and secondary non-essential alerts are disabled to reduce CPU & battery usage in hot/busy markets.'}
+              </p>
             </div>
 
             {/* Pro Subscription & License Management Card */}

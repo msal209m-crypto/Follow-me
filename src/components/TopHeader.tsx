@@ -49,6 +49,7 @@ import { getGlobalPreferences } from '../services/globalizationService';
 import { Item } from '../types';
 import { clearAllSystemSessions, getActiveSessionRole } from '../services/rbacAuthService';
 import { getDismissedAlertIds } from '../utils/alertUtils';
+import { requestNotificationPermission } from '../services/notificationService';
 import { getDeliveryOrders } from '../services/deliveryService';
 import { getPlatformDeveloperSettings } from '../services/platformSettingsService';
 
@@ -281,6 +282,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   };
 
   const handleToggleAlertsDropdown = () => {
+    requestNotificationPermission(currentUser?.uid).catch(console.warn);
     setShowAlertsDropdown((prev) => {
       const next = !prev;
       if (next) {

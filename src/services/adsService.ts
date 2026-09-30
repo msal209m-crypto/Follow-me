@@ -1,6 +1,12 @@
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, getDocs, collection } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { AdRecord, AdPackage, AdThemeType } from '../types';
+import {
+  syncSaveAd,
+  syncDeleteAd,
+  syncClearAllAds,
+  syncUpdateAllAdsStatus
+} from './crossDeviceSyncService';
 
 const ADS_STORAGE_KEY = 'qaryati_ads_directory';
 
@@ -72,9 +78,8 @@ const INITIAL_FESTIVE_ADS: AdRecord[] = [
 export function getAds(): AdRecord[] {
   try {
     const raw = localStorage.getItem(ADS_STORAGE_KEY);
-    if (raw === null) {
-      localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(INITIAL_FESTIVE_ADS));
-      return INITIAL_FESTIVE_ADS;
+    if (!raw) {
+      return [];
     }
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -84,38 +89,11 @@ export function getAds(): AdRecord[] {
 }
 
 export function saveAdRecord(ad: AdRecord) {
-  try {
-    const ads = getAds();
-    const idx = ads.findIndex((item) => item.id === ad.id);
-    if (idx >= 0) {
-      ads[idx] = ad;
-    } else {
-      ads.unshift(ad);
-    }
-    localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(ads));
-    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: ads }));
-
-    // Sync to Firestore
-    setDoc(doc(db, 'ads', ad.id), ad, { merge: true })
-      .catch((e) => console.warn('Firestore ads sync error:', e));
-  } catch (e) {
-    console.warn('Failed to save ad locally:', e);
-  }
+  syncSaveAd(ad).catch((e) => console.warn('syncSaveAd failed:', e));
 }
 
 export function deleteAdRecord(id: string) {
-  try {
-    const ads = getAds();
-    const filtered = ads.filter((item) => item.id !== id);
-    localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(filtered));
-    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: filtered }));
-
-    // Delete from Firestore
-    deleteDoc(doc(db, 'ads', id))
-      .catch((e) => console.warn('Firestore ads delete error:', e));
-  } catch (e) {
-    console.warn('Failed to delete ad locally:', e);
-  }
+  syncDeleteAd(id).catch((e) => console.warn('syncDeleteAd failed:', e));
 }
 
 export function toggleAdActiveStatus(id: string): AdRecord | null {
@@ -137,41 +115,15 @@ export function toggleAdActiveStatus(id: string): AdRecord | null {
 }
 
 export function pauseAllAds(): void {
-  try {
-    const ads = getAds();
-    const updated = ads.map((ad) => ({
-      ...ad,
-      status: 'REJECTED' as const
-    }));
-    localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: updated }));
-  } catch (e) {
-    console.warn('Failed to pause all ads:', e);
-  }
+  syncUpdateAllAdsStatus('REJECTED').catch((e) => console.warn('pauseAllAds failed:', e));
 }
 
 export function resumeAllAds(): void {
-  try {
-    const ads = getAds();
-    const updated = ads.map((ad) => ({
-      ...ad,
-      status: 'APPROVED' as const,
-      approvedBy: 'المطور المعتمد'
-    }));
-    localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: updated }));
-  } catch (e) {
-    console.warn('Failed to resume all ads:', e);
-  }
+  syncUpdateAllAdsStatus('APPROVED').catch((e) => console.warn('resumeAllAds failed:', e));
 }
 
 export function clearAllAds(): void {
-  try {
-    localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify([]));
-    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: [] }));
-  } catch (e) {
-    console.warn('Failed to clear all ads:', e);
-  }
+  syncClearAllAds().catch((e) => console.warn('clearAllAds failed:', e));
 }
 
 export function submitAdRequest(params: {

@@ -147,35 +147,26 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
 
-  // Secret 5-tap on logo trigger
-  const [secretTapCount, setSecretTapCount] = useState(0);
-  const [secretTapTimer, setSecretTapTimer] = useState<any>(null);
+  // Secret long-press (3.5s) on logo trigger for mobile & desktop
+  const [longPressTimer, setLongPressTimer] = useState<any>(null);
 
-  const handleLogoSecretTap = () => {
-    setSecretTapCount((prev) => {
-      const next = prev + 1;
-      if (next >= 5) {
-        setDeveloperRemembered(true);
+  const handleTouchStart = () => {
+    const timer = setTimeout(() => {
+      if (isDeveloperRemembered()) {
         setActiveSessionRole('DEVELOPER');
         setIsDeveloper(true);
         onEnterAdmin?.();
-        return 0;
+      } else {
+        setShowAdminPinModal(true);
       }
-      return next;
-    });
-
-    if (secretTapTimer) clearTimeout(secretTapTimer);
-    const timer = setTimeout(() => setSecretTapCount(0), 2000);
-    setSecretTapTimer(timer);
+    }, 3500);
+    setLongPressTimer(timer);
   };
 
-  const handleDeveloperPortalClick = () => {
-    if (isDeveloperRemembered()) {
-      setActiveSessionRole('DEVELOPER');
-      setIsDeveloper(true);
-      onEnterAdmin?.();
-    } else {
-      setShowAdminPinModal(true);
+  const handleTouchEnd = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
     }
   };
 
@@ -541,26 +532,26 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
       <header className={`p-4 sm:p-6 flex items-center justify-between max-w-6xl mx-auto w-full border-b ${isDarkMode ? 'border-slate-800/80 bg-slate-950/80' : 'border-slate-200 bg-white/80'} backdrop-blur-md sticky top-0 z-20`}>
         <div className="flex items-center gap-2.5">
           <div
-            onClick={handleLogoSecretTap}
-            title="شعار قريتي (5 نقرات متتالية لفتح لوحة المطور)"
-            className="w-10 h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-lg shadow-emerald-950/30 cursor-pointer active:scale-90 transition-transform shrink-0 bg-slate-900"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onMouseDown={handleTouchStart}
+            onMouseUp={handleTouchEnd}
+            onMouseLeave={handleTouchEnd}
+            title="قريتي"
+            className="w-10 h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-lg shadow-emerald-950/35 cursor-pointer active:scale-95 transition-transform shrink-0 bg-slate-900 select-none"
           >
             <img
               src="/icon.png"
               alt="قريتي"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover pointer-events-none"
             />
           </div>
           <div>
             <h1 className={`font-extrabold text-base sm:text-lg ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-              {settings.storeName || 'تطبيق قريتي'}
+              تطبيق قريتي
             </h1>
-            <p
-              onClick={handleDeveloperPortalClick}
-              className="text-xs text-emerald-500 font-medium cursor-pointer hover:underline"
-              title="انقر لتسجيل دخول المطور"
-            >
-              المنظومة الرقمية الموحدة {isDeveloper ? '(المطور نشط)' : ''}
+            <p className="text-xs text-slate-400 font-medium">
+              المنظومة الرقمية الموحدة للقرى
             </p>
           </div>
         </div>
@@ -673,7 +664,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
           })()}
 
           <h2 className={`text-2xl sm:text-4xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} tracking-tight leading-tight`}>
-            مرحباً بكم في منصة {settings.storeName || 'قريتي'}
+            مرحباً بكم في تطبيق قريتي
           </h2>
           <p className={`text-xs sm:text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'} mt-2 max-w-md mx-auto`}>
             بوابة رقمية آمنة تخدم أهالي ومتاجر القرية. سجل حسابك الآن في ثوانٍ وتوجه مباشرة لواجهتك المخصصة.

@@ -8,7 +8,8 @@ import {
   getDoc,
   query,
   where,
-  orderBy
+  orderBy,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { safeSetDoc, sanitizeForFirestore, handleFirestoreError, OperationType } from '../lib/firestoreUtils';
@@ -93,6 +94,7 @@ export function initGlobalCloudSync(): void {
   testFirestoreConnection().catch(console.warn);
 
   // 1. Sync Stores Directory from Cloud
+  let initialStoresSync = true;
   try {
     onSnapshot(collection(db, 'stores'), (snapshot) => {
       const stores: StoreDirectoryRecord[] = [];
@@ -108,6 +110,22 @@ export function initGlobalCloudSync(): void {
       localStorage.setItem('qaryati_stores_directory', JSON.stringify(stores));
       localStorage.setItem('village_stores_directory', JSON.stringify(stores));
       window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: stores }));
+
+      if (!initialStoresSync) {
+        window.dispatchEvent(
+          new CustomEvent('qaryati:cloud-sync-reload-prompt', {
+            detail: {
+              type: 'stores',
+              message: 'تم تحديث بيانات المتاجر في السحابة',
+              timestamp: Date.now(),
+            },
+          })
+        );
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_DATA_CACHE' });
+        }
+      }
+      initialStoresSync = false;
     }, (error) => {
       console.warn('Stores cloud sync listener notice:', error);
     });
@@ -215,6 +233,40 @@ export function initGlobalCloudSync(): void {
   } catch (e) {
     console.warn('Orders sync init error:', e);
   }
+
+  // 6. Sync Ads (Village Bulletin & Sponsored Ads) from Cloud in Real-Time
+  let initialAdsSync = true;
+  try {
+    onSnapshot(collection(db, 'ads'), (snapshot) => {
+      const ads: any[] = [];
+      snapshot.forEach((docSnap) => {
+        ads.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      ads.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      localStorage.setItem('qaryati_ads_directory', JSON.stringify(ads));
+      window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: ads }));
+
+      if (!initialAdsSync) {
+        window.dispatchEvent(
+          new CustomEvent('qaryati:cloud-sync-reload-prompt', {
+            detail: {
+              type: 'ads',
+              message: 'تم تحديث الإعلانات أو حذفها في السحابة',
+              timestamp: Date.now(),
+            },
+          })
+        );
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_DATA_CACHE' });
+        }
+      }
+      initialAdsSync = false;
+    }, (error) => {
+      console.warn('Ads cloud sync listener notice:', error);
+    });
+  } catch (e) {
+    console.warn('Ads sync init error:', e);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -259,8 +311,101 @@ export async function syncDeleteStore(storeId: string): Promise<void> {
 
   try {
     await deleteDoc(doc(db, 'stores', storeId));
+    // Also delete any subcollection items of this store
+    const itemsSnap = await getDocs(collection(db, 'stores', storeId, 'items'));
+    if (!itemsSnap.empty) {
+      const batch = writeBatch(db);
+      itemsSnap.forEach((itDoc) => batch.delete(itDoc.ref));
+      await batch.commit();
+    }
   } catch (err) {
     console.warn('Firestore syncDeleteStore error:', err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2.1 ADVERTISEMENTS CLOUD CRUD (Instant Real-time Cross-device Sync)
+// ---------------------------------------------------------------------------
+
+export async function syncSaveAd(ad: any): Promise<void> {
+  // 1. Update local cache
+  try {
+    const raw = localStorage.getItem('qaryati_ads_directory');
+    const list: any[] = raw ? JSON.parse(raw) : [];
+    const index = list.findIndex((a) => a.id === ad.id);
+    if (index >= 0) list[index] = ad;
+    else list.unshift(ad);
+    localStorage.setItem('qaryati_ads_directory', JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: list }));
+  } catch {}
+
+  // 2. Cloud Firestore Write
+  try {
+    const adRef = doc(db, 'ads', ad.id);
+    await safeSetDoc(adRef, {
+      ...ad,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore syncSaveAd error:', err);
+  }
+}
+
+export async function syncDeleteAd(adId: string): Promise<void> {
+  // 1. Local Cache
+  try {
+    const raw = localStorage.getItem('qaryati_ads_directory');
+    if (raw) {
+      const list = JSON.parse(raw).filter((a: any) => a.id !== adId);
+      localStorage.setItem('qaryati_ads_directory', JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: list }));
+    }
+  } catch {}
+
+  // 2. Cloud Firestore Delete
+  try {
+    await deleteDoc(doc(db, 'ads', adId));
+  } catch (err) {
+    console.warn('Firestore syncDeleteAd error:', err);
+  }
+}
+
+export async function syncClearAllAds(): Promise<void> {
+  // 1. Local Cache
+  try {
+    localStorage.setItem('qaryati_ads_directory', JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: [] }));
+  } catch {}
+
+  // 2. Cloud Firestore Delete All Docs
+  try {
+    const snap = await getDocs(collection(db, 'ads'));
+    if (!snap.empty) {
+      const batch = writeBatch(db);
+      snap.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+  } catch (err) {
+    console.warn('Firestore syncClearAllAds error:', err);
+  }
+}
+
+export async function syncUpdateAllAdsStatus(newStatus: 'APPROVED' | 'REJECTED'): Promise<void> {
+  try {
+    const snap = await getDocs(collection(db, 'ads'));
+    const updatedLocal: any[] = [];
+    if (!snap.empty) {
+      const batch = writeBatch(db);
+      snap.forEach((d) => {
+        batch.update(d.ref, { status: newStatus, updatedAt: new Date().toISOString() });
+        updatedLocal.push({ id: d.id, ...d.data(), status: newStatus });
+      });
+      await batch.commit();
+    }
+    localStorage.setItem('qaryati_ads_directory', JSON.stringify(updatedLocal));
+    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: updatedLocal }));
+  } catch (err) {
+    console.warn('Firestore syncUpdateAllAdsStatus error:', err);
   }
 }
 
@@ -633,6 +778,26 @@ export async function syncDeleteOrder(orderId: string): Promise<void> {
     await deleteDoc(doc(db, 'delivery_orders', orderId));
   } catch (err) {
     console.warn('Firestore order delete error:', err);
+  }
+}
+
+export async function syncClearAllOrders(): Promise<void> {
+  try {
+    localStorage.setItem('qaryati_delivery_orders', JSON.stringify([]));
+    localStorage.setItem('village_delivery_orders', JSON.stringify([]));
+    localStorage.setItem('village_orders', JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent('qaryati:orders-updated', { detail: [] }));
+  } catch {}
+
+  try {
+    const snap = await getDocs(collection(db, 'delivery_orders'));
+    if (!snap.empty) {
+      const batch = writeBatch(db);
+      snap.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+  } catch (err) {
+    console.warn('Firestore syncClearAllOrders error:', err);
   }
 }
 

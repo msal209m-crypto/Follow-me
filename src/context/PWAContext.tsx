@@ -20,7 +20,7 @@ export interface PWAContextType {
   refreshOfflineCache: () => Promise<number>;
 }
 
-const CURRENT_VERSION = '2.1.0';
+const CURRENT_VERSION = '3.0.0';
 const PWAContext = createContext<PWAContextType | undefined>(undefined);
 
 interface BeforeInstallPromptEvent extends Event {
@@ -203,9 +203,38 @@ export const PWAProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
-    // Listen to service worker controller change or new worker waiting
+    // Listen to cloud Firestore data updates (stores, ads, etc.)
+    const handleCloudSyncPrompt = (e: any) => {
+      const detail = e?.detail;
+      try {
+        sessionStorage.removeItem('flowapp_update_banner_dismissed');
+      } catch {}
+      setUpdateAvailable(true);
+      setNewVersionInfo({
+        version: detail?.version || 'تحديث سحابي فوري ☁️',
+        description: detail?.message || 'تم تحديث بيانات المتجر والإعلانات في السحابة',
+      });
+    };
+    window.addEventListener('qaryati:cloud-sync-reload-prompt', handleCloudSyncPrompt);
+
+    // Listen to service worker controller change, new worker waiting, or messages
+    let handleSWMessage: ((e: MessageEvent) => void) | null = null;
     if ('serviceWorker' in navigator) {
       try {
+        handleSWMessage = (e: MessageEvent) => {
+          if (e.data?.type === 'SW_VERSION_UPDATED' || e.data?.type === 'NEW_VERSION_AVAILABLE') {
+            try {
+              sessionStorage.removeItem('flowapp_update_banner_dismissed');
+            } catch {}
+            setUpdateAvailable(true);
+            setNewVersionInfo({
+              version: e.data?.version || 'إصدار جديد 🚀',
+              description: 'تحديث برمجي جديد متاح للتطبيق الفوري',
+            });
+          }
+        };
+        navigator.serviceWorker.addEventListener('message', handleSWMessage);
+
         const isEmbeddedInIframe = (() => {
           try {
             return window.self !== window.top;
@@ -227,6 +256,9 @@ export const PWAProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (newWorker) {
                   newWorker.addEventListener('statechange', () => {
                     if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      try {
+                        sessionStorage.removeItem('flowapp_update_banner_dismissed');
+                      } catch {}
                       setUpdateAvailable(true);
                       setNewVersionInfo({
                         version: 'أحدث إصدار',
@@ -247,6 +279,10 @@ export const PWAProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('qaryati:cloud-sync-reload-prompt', handleCloudSyncPrompt);
+      if (handleSWMessage && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+      }
     };
   }, [checkForUpdates]);
 
@@ -269,11 +305,18 @@ export const PWAProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const applyUpdate = async () => {
+    try {
+      sessionStorage.removeItem('flowapp_update_banner_dismissed');
+    } catch {}
+
     if ('serviceWorker' in navigator) {
       try {
         const reg = await navigator.serviceWorker.getRegistration();
         if (reg?.waiting) {
           reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'INVALIDATE_ALL_CACHES' });
         }
       } catch (e) {
         console.warn('SW skip waiting error:', e);
@@ -290,6 +333,7 @@ export const PWAProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
+    // Instant reload
     window.location.reload();
   };
 

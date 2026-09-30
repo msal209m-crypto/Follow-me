@@ -44,11 +44,13 @@ import {
   Check,
   Bell,
   Compass,
+  Coins,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { NavigationTab, Transaction, Item } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
 import { DashboardLowStockAlert } from './DashboardLowStockAlert';
+import { ExchangeRateModal } from './ExchangeRateModal';
 import { getStoresDirectory } from '../services/deliveryService';
 import { getMerchants } from '../services/rbacAuthService';
 
@@ -109,6 +111,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Search filter for invoices or low-stock modals
   const [modalSearch, setModalSearch] = useState('');
+  const [showExchangeRateModal, setShowExchangeRateModal] = useState(false);
 
   // 1. Current Date & Today's Transactions
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -467,6 +470,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <FileText className="w-3.5 h-3.5 text-indigo-400" />
               <span>{language === 'ar' ? 'فواتير اليوم' : 'Invoices'}</span>
             </button>
+            <button
+              type="button"
+              id="dashboard-btn-exchange-rate"
+              onClick={() => setShowExchangeRateModal(true)}
+              className="flex-1 min-w-[110px] py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95 transition-all cursor-pointer"
+            >
+              <Coins className="w-3.5 h-3.5 text-amber-400" />
+              <span>{language === 'ar' ? 'سعر الصرف 💱' : 'Exchange Rate'}</span>
+            </button>
           </div>
 
           {/* CRITICAL SHORTAGE MINI-ALERT (Sleek & Unobtrusive) */}
@@ -495,22 +507,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           {/* EXCHANGE RATE CHANGE ALERT */}
           {(settings.exchangeRate && Math.abs(settings.exchangeRate - 1.0) > 0.05) && (
-            <div className="bg-sky-950/40 border border-sky-500/40 rounded-xl px-3.5 py-2 flex items-center justify-between gap-2 text-xs">
+            <div className="bg-sky-950/40 border border-sky-500/40 rounded-xl px-3.5 py-2 flex items-center justify-between gap-2 text-xs flex-wrap">
               <div className="flex items-center gap-2 min-w-0">
                 <AlertTriangle className="w-4 h-4 text-sky-400 shrink-0" />
                 <span className="text-sky-200 font-bold truncate">
                   {language === 'ar'
-                    ? `تنبيه: سعر الصرف الحالي (${settings.exchangeRate}) قد يتطلب مراجعة الأسعار`
+                    ? `تنبيه: سعر الصرف الحالي (${settings.exchangeRate}) قد يتطلب مراجعة وتحديث أسعار المخزون`
                     : `Alert: Current exchange rate (${settings.exchangeRate}) may require price review`}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => onOpenSettings && onOpenSettings('GENERAL')}
-                className="px-2.5 py-1 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black rounded-lg text-[11px] shrink-0 transition-colors cursor-pointer"
-              >
-                {language === 'ar' ? 'ضبط الأسعار' : 'Adjust Prices'}
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('items')}
+                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[11px] shrink-0 transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>{language === 'ar' ? 'تحديث أسعار المخزون ⚡' : 'Update Prices'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenSettings && onOpenSettings('GENERAL')}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[11px] shrink-0 transition-colors cursor-pointer"
+                >
+                  {language === 'ar' ? 'ضبط الصرف' : 'Settings'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -1583,6 +1605,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               value: txToDelete.timestamp ? new Date(txToDelete.timestamp).toLocaleString('ar-SA') : '—',
             },
           ]}
+        />
+      )}
+
+      {showExchangeRateModal && (
+        <ExchangeRateModal
+          isOpen={showExchangeRateModal}
+          onClose={() => setShowExchangeRateModal(false)}
         />
       )}
     </div>

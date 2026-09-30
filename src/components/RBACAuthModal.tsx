@@ -377,8 +377,8 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
             </p>
           </div>
 
-          {/* 4 Role Tabs */}
-          <div className="px-4 pt-3 pb-2 grid grid-cols-4 gap-1.5 bg-slate-950/60 border-b border-slate-800">
+          {/* 3 Role Tabs (Developer is strictly hidden and secret) */}
+          <div className="px-4 pt-3 pb-2 grid grid-cols-3 gap-2 bg-slate-950/60 border-b border-slate-800">
             {/* Merchant Tab */}
             <button
               type="button"
@@ -419,20 +419,6 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
             >
               <ShoppingBag className="w-4 h-4" />
               <span className="text-[11px] font-bold">العميل</span>
-            </button>
-
-            {/* Developer Tab */}
-            <button
-              type="button"
-              onClick={() => handleTabChange('DEVELOPER')}
-              className={`p-2 rounded-2xl flex flex-col items-center gap-1 text-center transition-all cursor-pointer ${
-                activeTab === 'DEVELOPER'
-                  ? 'bg-purple-500/20 border border-purple-500/50 text-purple-300 shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-850 border border-transparent'
-              }`}
-            >
-              <Code2 className="w-4 h-4" />
-              <span className="text-[11px] font-bold">المطور</span>
             </button>
           </div>
 

@@ -315,12 +315,16 @@ export const runDebtsTour = (
 
   intro.setOptions({
     steps: steps,
+    tooltipClass: 'custom-introjs-tooltip',
+    highlightClass: 'custom-introjs-highlight',
     nextLabel: isAr ? 'التالي ←' : 'Next →',
     prevLabel: isAr ? '→ السابق' : '← Back',
     doneLabel: isAr ? 'فهمت! ✓' : 'Got it! ✓',
     skipLabel: isAr ? 'تخطي ✕' : 'Skip ✕',
-    showProgress: true,
-    exitOnOverlayClick: false,
+    showProgress: false,
+    showBullets: false,
+    exitOnOverlayClick: true,
+    exitOnEsc: true,
   });
 
   intro.oncomplete(options.onComplete);

@@ -1,9 +1,9 @@
 // ==========================================
 // Advanced Service Worker for FlowApp PWA
-// Cache Version v2 (Forced Refresh & Update)
+// Cache Version v3 (Instant Cloud Data Sync & Cache Invalidation)
 // ==========================================
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const STATIC_CACHE = `flowapp-static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `flowapp-runtime-${CACHE_VERSION}`;
 const FONTS_CACHE = `flowapp-fonts-${CACHE_VERSION}`;
@@ -85,6 +85,17 @@ self.addEventListener('activate', (event) => {
         );
       })
       .then(() => self.clients.claim())
+      .then(() => {
+        // Broadcast new version active to all connected windows
+        return self.clients.matchAll({ type: 'window' }).then((clients) => {
+          clients.forEach((client) => {
+            client.postMessage({
+              type: 'SW_VERSION_UPDATED',
+              version: CACHE_VERSION,
+            });
+          });
+        });
+      })
   );
 });
 
@@ -151,6 +162,29 @@ self.addEventListener('message', (event) => {
   if (event.data) {
     if (event.data.type === 'SKIP_WAITING') {
       self.skipWaiting();
+    } else if (event.data.type === 'CLEAR_DATA_CACHE') {
+      // Clear dynamic runtime and images caches when Firestore data updates
+      caches.keys().then((keys) => {
+        return Promise.all(
+          keys.map((key) => {
+            if (key === RUNTIME_CACHE || key === IMAGES_CACHE) {
+              return caches.delete(key);
+            }
+          })
+        );
+      }).then(() => {
+        if (event.source && event.source.postMessage) {
+          event.source.postMessage({ type: 'DATA_CACHE_CLEARED' });
+        }
+      });
+    } else if (event.data.type === 'INVALIDATE_ALL_CACHES') {
+      caches.keys().then((keys) => {
+        return Promise.all(keys.map((k) => caches.delete(k)));
+      }).then(() => {
+        if (event.source && event.source.postMessage) {
+          event.source.postMessage({ type: 'ALL_CACHES_INVALIDATED' });
+        }
+      });
     } else if (event.data.type === 'GET_CACHE_INFO') {
       caches.keys().then(async (keys) => {
         let totalCount = 0;

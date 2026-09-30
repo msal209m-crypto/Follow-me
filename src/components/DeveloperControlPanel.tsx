@@ -112,6 +112,7 @@ import {
   subscribeToAllDrivers,
   subscribeToAllOrders,
   syncDeleteOrder,
+  syncClearAllOrders,
   syncSaveMerchant,
   syncSaveDriver,
   syncDeleteMerchant,
@@ -748,13 +749,12 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     }
   };
 
-  const handlePurgeDemoOrders = () => {
-    if (!window.confirm('هل تريد مسح وتطهير جميع الطلبات التجريبية وتصفير سجل التوصيل؟')) return;
+  const handlePurgeDemoOrders = async () => {
+    if (!window.confirm('هل تريد مسح وتطهير جميع الطلبات التجريبية وتصفير سجل التوصيل في السحابة؟')) return;
     try {
-      localStorage.setItem('village_delivery_orders', JSON.stringify([]));
+      await syncClearAllOrders();
       setCloudOrders([]);
-      window.dispatchEvent(new CustomEvent('qaryati:orders-updated'));
-      setActionSuccessMsg('تم تطهير وحذف كافة الطلبات التجريبية بنجاح 🧹');
+      setActionSuccessMsg('تم تطهير وحذف كافة الطلبات التجريبية بنجاح من السحابة والمنظومة 🧹');
       setTimeout(() => setActionSuccessMsg(null), 3500);
     } catch {}
   };
@@ -767,14 +767,14 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     setIsResetting(true);
     try {
       // 1. Purge orders
-      localStorage.setItem('village_delivery_orders', JSON.stringify([]));
+      await syncClearAllOrders();
       setCloudOrders([]);
       
       // 2. Reset logs
       clearAccessLogs();
       setLogs([]);
 
-      // 3. Clear demo ads
+      // 3. Clear demo ads from cloud and local
       clearAllAds();
       setAds([]);
 

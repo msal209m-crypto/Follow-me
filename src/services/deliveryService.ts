@@ -3,6 +3,7 @@ import { db } from '../lib/firebase';
 import { isCustomerBlockedByMerchant } from './rbacAuthService';
 import {
   syncSaveStore,
+  syncDeleteStore,
   syncSaveOrder,
   syncSaveStoreProduct,
   syncSaveDriver
@@ -455,6 +456,21 @@ export function addStoreToDirectory(store: Omit<StoreDirectoryRecord, 'id' | 'jo
   saveStoresDirectory(updated);
   syncSaveStore(newStore).catch(console.warn);
   return newStore;
+}
+
+export async function deleteStoreDirectoryRecord(storeId: string): Promise<void> {
+  try {
+    const stores = getStoresDirectory().filter((s) => s.id !== storeId);
+    localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify(stores));
+    localStorage.setItem('village_stores_directory', JSON.stringify(stores));
+    window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: stores }));
+  } catch {}
+
+  try {
+    await syncDeleteStore(storeId);
+  } catch (e) {
+    console.warn('Failed to delete store in cloud:', e);
+  }
 }
 
 export function toggleStoreProStatus(storeId: string): StoreDirectoryRecord | null {

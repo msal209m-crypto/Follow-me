@@ -48,11 +48,27 @@
             window.addEventListener('load', function() {
               navigator.serviceWorker.register('/sw.js', { scope: '/' })
                 .then(function(registration) {
+                  registration.onupdatefound = function() {
+                    var installingWorker = registration.installing;
+                    if (installingWorker) {
+                      installingWorker.onstatechange = function() {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                          window.dispatchEvent(new CustomEvent('qaryati:cloud-sync-reload-prompt', {
+                            detail: {
+                              version: 'إصدار جديد جاهز 🚀',
+                              message: 'تم تجهيز تحديث جديد للمنظومة، اضغط لتطبيق التحديث فوراً'
+                            }
+                          }));
+                        }
+                      };
+                    }
+                  };
+
                   setInterval(function() {
                     try {
                       registration.update().catch(function() {});
                     } catch (e) {}
-                  }, 120000);
+                  }, 45000);
                 })
                 .catch(function(err) {
                   console.info('ServiceWorker registration deferred:', err && err.message ? err.message : err);

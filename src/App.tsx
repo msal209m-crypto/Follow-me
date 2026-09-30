@@ -7,7 +7,6 @@ import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import { AppUpdateBanner } from './components/AppUpdateBanner';
 import { PWAInstallModal } from './components/PWAInstallModal';
-import { DirectLoginBanner } from './components/DirectLoginBanner';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { DashboardView } from './components/DashboardView';
 import { ItemsView } from './components/ItemsView';
@@ -23,7 +22,6 @@ import { PrintReceiptModal } from './components/PrintReceiptModal';
 import { QuickItemModal } from './components/QuickItemModal';
 import { SettingsModal, SettingsTabType } from './components/SettingsModal';
 import { OrderGoodsModal } from './components/OrderGoodsModal';
-import { AuthModal } from './components/AuthModal';
 import { RBACAuthModal } from './components/RBACAuthModal';
 import { SessionInactivityGuard } from './components/SessionInactivityGuard';
 import { clearAllSystemSessions, getActiveSessionRole } from './services/rbacAuthService';
@@ -60,12 +58,14 @@ interface MainAppContentProps {
   onSwitchToStore?: () => void;
   onOpenLanding?: () => void;
   onNavigateToAdmin?: () => void;
+  onOpenRBACAuth?: (role?: 'MERCHANT' | 'CUSTOMER' | 'DRIVER' | 'DEVELOPER') => void;
 }
 
 const MainAppContent: React.FC<MainAppContentProps> = ({
   onSwitchToStore,
   onOpenLanding,
   onNavigateToAdmin,
+  onOpenRBACAuth,
 }) => {
   const {
     activeTab,
@@ -91,7 +91,6 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
   const [initialBarcodeForNewItem, setInitialBarcodeForNewItem] = useState<string | undefined>(undefined);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabType>('GENERAL');
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showMerchantOrdersModal, setShowMerchantOrdersModal] = useState(false);
 
@@ -185,7 +184,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
           setSettingsInitialTab(tab || 'GENERAL');
           setShowSettingsModal(true);
         }}
-        onOpenAuthModal={() => setShowAuthModal(true)}
+        onOpenAuthModal={() => (onOpenRBACAuth ? onOpenRBACAuth('MERCHANT') : undefined)}
         onOpenShareModal={() => setShowShareModal(true)}
         onSwitchToStore={onSwitchToStore}
         onOpenLanding={onOpenLanding}
@@ -214,7 +213,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
                   setShowSettingsModal(true);
                 }
           }
-          onOpenAuthModal={() => setShowAuthModal(true)}
+          onOpenAuthModal={() => (onOpenRBACAuth ? onOpenRBACAuth('MERCHANT') : undefined)}
           onOpenShareModal={() => setShowShareModal(true)}
           onSwitchToStore={onSwitchToStore}
           onOpenLanding={onOpenLanding}
@@ -454,9 +453,6 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
         {/* Content views */}
         <main className="main-content-container flex-1 p-3 sm:p-5 lg:p-6 overflow-y-auto pb-20 sm:pb-6">
           <div className="max-w-7xl mx-auto w-full">
-            {/* Direct & Prominent User Presence / Login Banner */}
-            <DirectLoginBanner onOpenAuthModal={() => setShowAuthModal(true)} />
-
             {/* صلاحيات الكاشير: عند تفعيل حساب الكاشير، إخفاء الحسابات والأرباح والمخزون، والاكتفاء بشاشة نقاط البيع فقط */}
             {isCashierMode ? (
               <TransactionsView
@@ -596,13 +592,6 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
       </div>
 
       {/* Modals */}
-      {showAuthModal && (
-        <AuthModal
-          isOpen={showAuthModal}
-          onClose={() => setShowAuthModal(false)}
-        />
-      )}
-
       {showItemModal && (
         <QuickItemModal
           itemToEdit={itemToEdit}
@@ -718,6 +707,18 @@ const PortalRouter: React.FC = () => {
   const [showRBACAuthModal, setShowRBACAuthModal] = useState(false);
   const [rbacInitialRole, setRbacInitialRole] = useState<'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER'>('MERCHANT');
   const [activeAdminTab, setActiveAdminTab] = useState<'dashboard' | 'manage-merchants' | 'manage-drivers'>('dashboard');
+
+  // Secret Developer Keyboard Shortcut listener (Ctrl + Shift + D)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        handleOpenRBACAuth('DEVELOPER');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Security Guard: Check if trying to access protected portals without active session role
   useEffect(() => {
@@ -949,14 +950,6 @@ const PortalRouter: React.FC = () => {
         <div id="merchant-dashboard" style={{ display: 'none' }} className="hidden" />
         <div id="main-store-view" style={{ display: 'none' }} className="hidden" />
 
-        {showGlobalAuthModal && (
-          <AuthModal
-            isOpen={showGlobalAuthModal}
-            onClose={handleCloseAuthAndGoToStore}
-            onCloseToStore={handleCloseAuthAndGoToStore}
-          />
-        )}
-
         {showRBACAuthModal && (
           <RBACAuthModal
             isOpen={showRBACAuthModal}
@@ -1093,6 +1086,7 @@ const PortalRouter: React.FC = () => {
           onSwitchToStore={handleSwitchToStore}
           onOpenLanding={handleSwitchToLanding}
           onNavigateToAdmin={handleSwitchToAdmin}
+          onOpenRBACAuth={(role) => handleOpenRBACAuth(role || 'MERCHANT')}
         />
       </div>
 
@@ -1110,14 +1104,6 @@ const PortalRouter: React.FC = () => {
           onOpenAuthModal={(role) => handleOpenRBACAuth(role)}
         />
       </div>
-
-      {showGlobalAuthModal && (
-        <AuthModal
-          isOpen={showGlobalAuthModal}
-          onClose={handleCloseAuthAndGoToStore}
-          onCloseToStore={handleCloseAuthAndGoToStore}
-        />
-      )}
 
       {showRBACAuthModal && (
         <RBACAuthModal
@@ -1140,6 +1126,7 @@ export default function App() {
       <AuthProvider>
         <AppProvider>
           <SubscriptionProvider>
+            <AppUpdateBanner />
             <PortalRouter />
           </SubscriptionProvider>
         </AppProvider>

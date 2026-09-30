@@ -126,6 +126,7 @@ export const AVAILABLE_ADHAN_SOUNDS: AdhanSoundOption[] = [
 ];
 
 export const PRESET_VILLAGE_LOCATIONS: VillageLocation[] = [
+  { id: 'al_fasoor', name: 'قرية الفصور (إب - اليمن) 🇾🇪', region: 'إب - اليمن', latitude: 13.9667, longitude: 44.1833 },
   { id: 'faifa', name: 'قرى جبال فيفاء (جازان)', region: 'جازان', latitude: 17.257, longitude: 43.125 },
   { id: 'makkah', name: 'مكة المكرمة - الحرم المكي', region: 'مكة المكرمة', latitude: 21.389, longitude: 39.857 },
   { id: 'madinah', name: 'المدينة المنورة - الحرم النبوي', region: 'المدينة المنورة', latitude: 24.524, longitude: 39.569 },
@@ -174,7 +175,7 @@ export const DEFAULT_ADHAN_SETTINGS: AdhanSettings = {
   autoPlayAdhan: true,
   selectedAdhanSound: 'makkah',
   volume: 1.0, // 100% full clear volume
-  selectedVillageId: 'faifa',
+  selectedVillageId: 'al_fasoor',
   customCoords: null,
   notifyBeforeMinutes: 10,
   enablePreAdhanNotification: true,
@@ -557,6 +558,7 @@ export async function playAdhanAudio(
       audio.src = url;
       audio.volume = Math.max(0.1, Math.min(1.0, volume || 1.0));
       audio.preload = 'auto';
+      audio.loop = false;
       globalAudioElement = audio;
 
       const playPromise = audio.play();

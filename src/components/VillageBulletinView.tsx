@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { getActiveSessionRole } from '../services/rbacAuthService';
 
 export interface BulletinNotice {
   id: string;
@@ -86,7 +87,7 @@ const INITIAL_NOTICES: BulletinNotice[] = [
 ];
 
 export const VillageBulletinView: React.FC = () => {
-  const { language, settings } = useApp();
+  const { language, settings, showNotification } = useApp();
   const { currentUser, userProfile } = useAuth();
 
   const [notices, setNotices] = useState<BulletinNotice[]>(() => {
@@ -110,6 +111,7 @@ export const VillageBulletinView: React.FC = () => {
   const [newCategory, setNewCategory] = useState<'GENERAL' | 'EVENTS' | 'SERVICES' | 'AGRICULTURE'>('GENERAL');
   const [newAuthor, setNewAuthor] = useState(userProfile?.displayName || settings.ownerName || 'أحد أهالي القرية');
   const [newPhone, setNewPhone] = useState(settings.phone || '');
+  const [adCode, setAdCode] = useState('');
 
   useEffect(() => {
     try {
@@ -122,6 +124,20 @@ export const VillageBulletinView: React.FC = () => {
   const handlePostNotice = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newContent.trim()) return;
+
+    // Check if the poster is either the developer OR has entered the correct subscription code
+    const isDeveloper = getActiveSessionRole() === 'DEVELOPER';
+    const hasValidCode = adCode.trim().toUpperCase() === 'QARYATI-ADS-2026';
+
+    if (!isDeveloper && !hasValidCode) {
+      showNotification(
+        language === 'ar'
+          ? '❌ عذراً، نشر الإعلانات محصور للمطور أو يتطلب إدخال كود تفعيل اشتراك معتمد!'
+          : '❌ Sorry, bulletin posting is restricted to developers or requires a valid subscription code!',
+        'error'
+      );
+      return;
+    }
 
     const notice: BulletinNotice = {
       id: `notice-${Date.now()}`,
@@ -140,7 +156,12 @@ export const VillageBulletinView: React.FC = () => {
     setNotices([notice, ...notices]);
     setNewTitle('');
     setNewContent('');
+    setAdCode('');
     setShowAddModal(false);
+    showNotification(
+      language === 'ar' ? '✅ تم نشر إعلانك بنجاح في لوحة القرية!' : '✅ Notice posted successfully!',
+      'success'
+    );
   };
 
   const handleLike = (id: string) => {
@@ -431,6 +452,26 @@ _مرسل عبر تطبيق قريتي للتجارة المحلية والقر�
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
                   />
                 </div>
+              </div>
+
+              {/* Ad Subscription Activation Key Gatekeeper */}
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
+                <label className="block text-xs font-bold text-amber-300 flex items-center justify-between">
+                  <span>{language === 'ar' ? 'كود تفعيل اشتراك الإعلانات:' : 'Ad Subscription Activation Code:'}</span>
+                  <span className="text-[10px] text-amber-400 font-mono">بوابة المطور 🔑</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder={language === 'ar' ? 'أدخل كود الاشتراك لتأكيد النشر المباشر...' : 'Enter your activation key...'}
+                  value={adCode}
+                  onChange={(e) => setAdCode(e.target.value)}
+                  className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-3.5 py-2 text-xs text-amber-300 font-mono placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+                <p className="text-[10px] text-slate-400 leading-normal">
+                  {language === 'ar'
+                    ? '💡 المطورون ينشرون تلقائياً دون أكواد. للمستخدمين الآخرين، يتطلب كود اشتراك إعلاني صالح ومستمر.'
+                    : '💡 Developers bypass this. Other users require a valid active ad subscription code.'}
+                </p>
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-2">
