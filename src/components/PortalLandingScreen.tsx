@@ -58,6 +58,7 @@ import {
 } from '../services/rbacAuthService';
 import { VillageBulletinView } from './VillageBulletinView';
 import { DeveloperAuthModal } from './DeveloperAuthModal';
+import { usePWA } from '../context/PWAContext';
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
 import { OTPPasswordResetModal } from './OTPPasswordResetModal';
 import { AdBannerWidget } from './AdBannerWidget';
@@ -104,6 +105,8 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   const devSettings = getPlatformDeveloperSettings();
   const heroImg = devSettings.heroImageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1200';
   
+  const { isInstalled, isIOS, promptInstall } = usePWA();
+
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isDeveloper, setIsDeveloper] = useState(() => isDeveloperRemembered() || localStorage.getItem('qaryati_is_developer') === 'true');
   const [showBulletinModal, setShowBulletinModal] = useState(false);
@@ -1195,6 +1198,51 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
 
           </div>
         </div>
+
+        {/* PWA Install Card on Welcome screen */}
+        {!isInstalled && (
+          <div className="w-full max-w-lg mt-6">
+            {isIOS ? (
+              <div className="w-full p-5 rounded-3xl border bg-gradient-to-r from-blue-950/40 to-slate-900/90 border-blue-500/30 text-right space-y-2.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                    <Smartphone className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-white">📲 تثبيت تطبيق قريتي على الآيفون</h4>
+                    <p className="text-[10px] text-slate-400">تابع الخطوات البسيطة التالية لإضافة الأيقونة لشاشتك</p>
+                  </div>
+                </div>
+                <div className="p-3 bg-slate-950/80 border border-blue-900/40 rounded-2xl text-[11px] text-slate-300 space-y-1">
+                  <div>1. انقر على زر **المشاركة (Share)** أسفل متصفح Safari.</div>
+                  <div>2. اسحب للأعلى واختر **«إضافة للشاشة الرئيسية» (Add to Home Screen)**.</div>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={promptInstall}
+                className={`w-full p-4 rounded-3xl border shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-between cursor-pointer ${
+                  isDarkMode
+                    ? 'bg-gradient-to-r from-blue-950/40 to-slate-900/90 border-blue-500/30 hover:border-blue-400'
+                    : 'bg-gradient-to-r from-blue-50 to-white border-blue-200 hover:border-blue-300 shadow-sm'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-500/20 text-blue-500 dark:text-blue-400 flex items-center justify-center shadow-inner">
+                    <Smartphone className="w-5 h-5 animate-bounce" />
+                  </div>
+                  <div className="text-right">
+                    <h4 className="text-sm font-black">📲 تثبيت تطبيق قريتي (جوال وحاسوب)</h4>
+                    <p className="text-[10px] text-slate-400">تصفح أسرع، تشغيل أوفلاين، وبدون استهلاك للبيانات</p>
+                  </div>
+                </div>
+                <div className="w-7 h-7 rounded-xl bg-blue-500/20 text-blue-600 dark:text-blue-300 flex items-center justify-center">
+                  {isRTL ? <ArrowLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
+                </div>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Floating Bulletin Board Option below Card */}
         <div className="w-full max-w-lg mt-6">
