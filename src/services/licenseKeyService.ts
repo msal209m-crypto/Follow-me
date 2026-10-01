@@ -364,35 +364,10 @@ export async function verifyAndRedeemLicenseKey(
     }
   }
 
-  // If still not found, check if it matches the legacy algorithmic offline pattern
-  // (e.g. FLOW-PRO-1Y-XXXX-XXXX) for backwards compatibility with previously distributed cards
   if (!keyRecord) {
-    if (cleanKey.startsWith('FLOW-PRO-')) {
-      const parts = cleanKey.split('-');
-      if (parts.length >= 4) {
-        const planCode = (parts[2] as LicenseKeyRecord['plan']) || '1Y';
-        const meta = PLAN_CONFIGS[planCode] || PLAN_CONFIGS['1Y'];
-        const isLifetime = planCode === 'LIFE';
-        const now = new Date();
-        const expiresAt = isLifetime
-          ? null
-          : new Date(now.getTime() + meta.durationDays * 24 * 60 * 60 * 1000).toISOString();
-
-        return {
-          success: true,
-          message: `تم التحقق وتفعيل ${meta.nameAr} بنجاح!`,
-          planName: meta.nameAr,
-          planCode: planCode,
-          durationDays: meta.durationDays,
-          expiresAt: expiresAt,
-          cleanKey: cleanKey,
-        };
-      }
-    }
-
     return {
       success: false,
-      message: 'كود التفعيل غير صالح أو غير مسجل في قاعدة البيانات. تأكد من إدخال الكود بصيغة FLOW-XXXX-XXXX-XXXX.',
+      message: 'كود التفعيل غير صالح أو غير مسجل في قاعدة البيانات. تأكد من إدخال الكود الصحيح الذي قمت بتوليده.',
     };
   }
 

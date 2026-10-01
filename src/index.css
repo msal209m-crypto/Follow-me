@@ -503,3 +503,89 @@
   }
 }
 
+/* ==========================================================================
+   Professional High-Contrast A4 Print Engine
+   Optimized for Official Inventory Audit Sheets, Invoices, and Reports
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 8mm 8mm 8mm;
+  }
+
+  /* Reset global backgrounds and enforce pure paper white */
+  html, body, #root {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    min-height: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Universal hide for non-printable UI components */
+  .no-print,
+  nav,
+  aside,
+  header:not(.print-header),
+  button:not(.print-only),
+  #sidebar,
+  .sidebar-container,
+  .mobile-bottom-nav,
+  .toast-container,
+  .introjs-overlay,
+  .introjs-helperLayer,
+  .introjs-tooltipReferenceLayer {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* High fidelity print table styling */
+  .print-sheet {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .print-sheet table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+
+  .print-sheet tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  .print-sheet thead {
+    display: table-header-group !important;
+  }
+
+  .print-sheet tfoot {
+    display: table-footer-group !important;
+  }
+
+  .print-sheet th,
+  .print-sheet td {
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+    background: transparent !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .print-sheet th {
+    background-color: #f1f5f9 !important;
+    font-weight: 800 !important;
+  }
+}
+
+

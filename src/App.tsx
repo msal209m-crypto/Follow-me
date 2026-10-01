@@ -720,39 +720,7 @@ const PortalRouter: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Security Guard: Check if trying to access protected portals without active session role
-  useEffect(() => {
-    const activeRole = getActiveSessionRole() as any;
-    
-    // Enforce login for everyone after welcome splash. No guest allowed to browse or order.
-    if (!activeRole) {
-      if (portalMode !== 'landing') {
-        setPortalMode('landing');
-      }
-      return;
-    }
 
-    // Skip if already authenticated as developer
-    if (activeRole === 'DEVELOPER') return;
-
-    if (portalMode === 'admin' && activeRole !== 'DEVELOPER') {
-      setPortalMode('landing');
-      setRbacInitialRole('DEVELOPER');
-      setShowRBACAuthModal(true);
-    } else if (portalMode === 'driver' && activeRole !== 'DRIVER') {
-      setPortalMode('landing');
-      setRbacInitialRole('DRIVER');
-      setShowRBACAuthModal(true);
-    } else if (portalMode === 'merchant' && activeRole !== 'MERCHANT') {
-      setPortalMode('landing');
-      setRbacInitialRole('MERCHANT');
-      setShowRBACAuthModal(true);
-    } else if (portalMode === 'store' && activeRole !== 'CUSTOMER' && activeRole !== 'MERCHANT' && activeRole !== 'DRIVER' && activeRole !== 'DEVELOPER') {
-      setPortalMode('landing');
-      setRbacInitialRole('CUSTOMER');
-      setShowRBACAuthModal(true);
-    }
-  }, [portalMode]);
 
   const handleOpenRBACAuth = (role?: 'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER') => {
     if (role) {
@@ -794,11 +762,6 @@ const PortalRouter: React.FC = () => {
       url.searchParams.set('portal', 'store');
       window.history.replaceState(null, '', url.toString());
     } catch {}
-
-    const merchantEl = document.getElementById('merchant-dashboard');
-    const storeEl = document.getElementById('main-store-view');
-    if (merchantEl) merchantEl.style.display = 'none';
-    if (storeEl) storeEl.style.display = 'block';
   };
 
   const handleSwitchToMerchant = (storeInfo?: { name?: string; village?: string; isPro?: boolean; merchantPin?: string }) => {
@@ -822,11 +785,6 @@ const PortalRouter: React.FC = () => {
       url.searchParams.set('portal', 'merchant');
       window.history.replaceState(null, '', url.toString());
     } catch {}
-
-    const merchantEl = document.getElementById('merchant-dashboard');
-    const storeEl = document.getElementById('main-store-view');
-    if (merchantEl) merchantEl.style.display = 'block';
-    if (storeEl) storeEl.style.display = 'none';
   };
 
   const handleSwitchToDriver = () => {
@@ -894,31 +852,10 @@ const PortalRouter: React.FC = () => {
     };
     window.addEventListener('popstate', onPopState);
 
-    // MutationObserver to watch if external script toggles style.display directly
-    const merchantEl = document.getElementById('merchant-dashboard');
-    const storeEl = document.getElementById('main-store-view');
-    let observer: MutationObserver | null = null;
-    if (merchantEl || storeEl) {
-      observer = new MutationObserver(() => {
-        const currentMerchant = document.getElementById('merchant-dashboard');
-        const currentStore = document.getElementById('main-store-view');
-        if (currentMerchant && currentStore) {
-          if (currentMerchant.style.display === 'none' && currentStore.style.display === 'block') {
-            setPortalMode('store');
-          } else if (currentMerchant.style.display === 'block' && currentStore.style.display === 'none') {
-            setPortalMode('merchant');
-          }
-        }
-      });
-      if (merchantEl) observer.observe(merchantEl, { attributes: true, attributeFilter: ['style', 'class'] });
-      if (storeEl) observer.observe(storeEl, { attributes: true, attributeFilter: ['style', 'class'] });
-    }
-
     return () => {
       window.removeEventListener('store:return-to-main', onCustomReturnEvent);
       window.removeEventListener('flowapp:global-logout', onGlobalLogout);
       window.removeEventListener('popstate', onPopState);
-      if (observer) observer.disconnect();
     };
   }, []);
 
@@ -946,9 +883,6 @@ const PortalRouter: React.FC = () => {
           onEnterAdmin={handleSwitchToAdmin}
           onOpenAuthModal={(role) => handleOpenRBACAuth(role)}
         />
-        {/* Placeholder containers with id so document.getElementById queries never fail */}
-        <div id="merchant-dashboard" style={{ display: 'none' }} className="hidden" />
-        <div id="main-store-view" style={{ display: 'none' }} className="hidden" />
 
         {showRBACAuthModal && (
           <RBACAuthModal

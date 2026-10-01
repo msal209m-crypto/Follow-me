@@ -39,6 +39,39 @@ export interface CustomerAccountRecord {
   createdAt: string;
 }
 
+export function normalizePhone(input: string): { raw: string; digits: string; withoutLeadingZero: string; withLeadingZero: string } {
+  const digits = (input || '').replace(/\D/g, '');
+  let core = digits;
+  if (digits.startsWith('966')) {
+    core = digits.slice(3);
+  } else if (digits.startsWith('00966')) {
+    core = digits.slice(5);
+  }
+  
+  if (core.startsWith('0')) {
+    core = core.slice(1);
+  }
+
+  return {
+    raw: input,
+    digits,
+    withoutLeadingZero: core,
+    withLeadingZero: core ? '0' + core : '',
+  };
+}
+
+export function phonesMatch(p1: string, p2: string): boolean {
+  if (!p1 || !p2) return false;
+  const n1 = normalizePhone(p1);
+  const n2 = normalizePhone(p2);
+  return (
+    n1.digits === n2.digits ||
+    n1.withoutLeadingZero === n2.withoutLeadingZero ||
+    n1.withLeadingZero === n2.withLeadingZero ||
+    p1.trim() === p2.trim()
+  );
+}
+
 const CUSTOMERS_REGISTRY_KEY = 'flowapp_rbac_customers_v1';
 const BLOCKED_CUSTOMERS_KEY = 'flowapp_merchant_blocked_customers_v1';
 
@@ -248,10 +281,10 @@ export async function registerCustomerRecord(params: {
   };
 }
 
-export async function loginCustomerRecord(phoneOrId: string, passwordInput: string): Promise<{ success: boolean; message: string; customer?: CustomerAccountRecord }> {
+export async function loginCustomerRecord(phoneOrId: string, passwordInput: string, rememberMe: boolean = false): Promise<{ success: boolean; message: string; customer?: CustomerAccountRecord }> {
   const cleanId = phoneOrId.trim().replace(/\s+/g, '');
   let customers = getAllCustomers();
-  let customer = customers.find(c => c.phone === cleanId || c.nationalId === cleanId);
+  let customer = customers.find(c => c.phone === cleanId || phonesMatch(c.phone, cleanId) || c.nationalId === cleanId);
 
   // If not found in local cache, query Firestore directly
   if (!customer) {
@@ -285,7 +318,7 @@ export async function loginCustomerRecord(phoneOrId: string, passwordInput: stri
     isApproved: customer.isApproved ?? (customer.status === 'VERIFIED'),
     status: customer.status || (customer.isApproved ? 'VERIFIED' : 'NEW'),
     isVerified: customer.isApproved === true || customer.isVerified === true || customer.status === 'VERIFIED'
-  });
+  }, rememberMe);
 
   return { success: true, message: `أهلاً بعودتك يا ${customer.name}`, customer };
 }
@@ -358,18 +391,28 @@ export function setInactivityTimeoutMinutes(mins: number): void {
 // ----------------------------------------------------
 export function getActiveSessionRole(): UserRole | null {
   try {
-    return (localStorage.getItem(ACTIVE_ROLE_KEY) as UserRole) || null;
+    return (sessionStorage.getItem(ACTIVE_ROLE_KEY) as UserRole) || (localStorage.getItem(ACTIVE_ROLE_KEY) as UserRole) || null;
   } catch {
     return null;
   }
 }
 
-export function setActiveSessionRole(role: UserRole | null): void {
+export function setActiveSessionRole(role: UserRole | null, persist: boolean = false): void {
   try {
     if (role) {
-      localStorage.setItem(ACTIVE_ROLE_KEY, role);
+      if (persist) {
+        localStorage.setItem(ACTIVE_ROLE_KEY, role);
+        localStorage.setItem('qaryati_remember_me', 'true');
+        sessionStorage.removeItem(ACTIVE_ROLE_KEY);
+      } else {
+        sessionStorage.setItem(ACTIVE_ROLE_KEY, role);
+        localStorage.removeItem(ACTIVE_ROLE_KEY);
+        localStorage.removeItem('qaryati_remember_me');
+      }
     } else {
+      sessionStorage.removeItem(ACTIVE_ROLE_KEY);
       localStorage.removeItem(ACTIVE_ROLE_KEY);
+      localStorage.removeItem('qaryati_remember_me');
     }
   } catch {}
 }
@@ -382,6 +425,11 @@ export function clearAllSystemSessions(): void {
     localStorage.removeItem('qaryati_dev_session_v1');
     localStorage.removeItem('qaryati_remember_developer');
     localStorage.removeItem('qaryati_is_developer');
+    localStorage.removeItem('qaryati_remember_me');
+
+    sessionStorage.removeItem(ACTIVE_ROLE_KEY);
+    sessionStorage.removeItem('flowapp_v4_active_local_user');
+
     clearDriverProfile();
     // Dispatch global event so all components immediately react
     window.dispatchEvent(new CustomEvent('flowapp:global-logout'));
@@ -469,7 +517,7 @@ export async function registerMerchant(params: {
   if (!params.password || params.password.length < 4) return { success: false, message: 'كلمة المرور يجب ألا تقل عن 4 خانات' };
 
   const merchants = getMerchants();
-  const existing = merchants.find((m) => m.phone === finalCleanPhone || m.nationalId === cleanNationalId);
+  const existing = merchants.find((m) => phonesMatch(m.phone, finalCleanPhone) || m.nationalId === cleanNationalId);
   if (existing) {
     return {
       success: false,
@@ -534,7 +582,8 @@ export async function registerMerchant(params: {
 
 export async function loginMerchant(
   identifier: string, // phone or national ID or name
-  passwordInput: string
+  passwordInput: string,
+  rememberMe: boolean = false
 ): Promise<{ success: boolean; message: string; merchant?: MerchantAccountRecord; isPending?: boolean }> {
   const cleanId = identifier.trim().replace(/\s+/g, '');
   const merchants = getMerchants();
@@ -542,6 +591,7 @@ export async function loginMerchant(
   let merchant = merchants.find(
     (m) =>
       m.phone === cleanId ||
+      phonesMatch(m.phone, cleanId) ||
       m.nationalId === cleanId ||
       m.name.toLowerCase() === identifier.trim().toLowerCase()
   );
@@ -569,7 +619,7 @@ export async function loginMerchant(
   }
 
   // Set active role
-  setActiveSessionRole('MERCHANT');
+  setActiveSessionRole('MERCHANT', rememberMe);
   syncMerchantToAuth(merchant);
 
   logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: merchant.phone, status: 'SUCCESS' });
@@ -708,7 +758,7 @@ export async function registerDriver(params: {
   };
 }
 
-export async function loginDriver(phoneInput: string, passwordInput: string): Promise<{
+export async function loginDriver(phoneInput: string, passwordInput: string, rememberMe: boolean = false): Promise<{
   success: boolean;
   message: string;
   driver?: DriverAccountRecord;
@@ -717,7 +767,7 @@ export async function loginDriver(phoneInput: string, passwordInput: string): Pr
   const cleanPhone = phoneInput.trim().replace(/\s+/g, '');
   const drivers = getDrivers();
 
-  let driver = drivers.find((d) => d.phone === cleanPhone);
+  let driver = drivers.find((d) => d.phone === cleanPhone || phonesMatch(d.phone, cleanPhone));
 
   // If not in local cache, check cloud Firestore directly
   if (!driver) {
@@ -754,7 +804,7 @@ export async function loginDriver(phoneInput: string, passwordInput: string): Pr
     registeredAt: driver.createdAt,
   };
   saveDriverProfile(profile);
-  setActiveSessionRole('DRIVER');
+  setActiveSessionRole('DRIVER', rememberMe);
 
   logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'SUCCESS' });
   return { success: true, message: `أهلاً بك يا ${driver.name}`, driver };
@@ -851,10 +901,10 @@ export function getCustomerSession(): CustomerSession | null {
   }
 }
 
-export function saveCustomerSession(session: CustomerSession): void {
+export function saveCustomerSession(session: CustomerSession, rememberMe: boolean = false): void {
   try {
     localStorage.setItem(CUSTOMER_SESSION_KEY, JSON.stringify(session));
-    setActiveSessionRole('CUSTOMER');
+    setActiveSessionRole('CUSTOMER', rememberMe);
     window.dispatchEvent(new CustomEvent('flowapp:customer-session-updated', { detail: session }));
   } catch {}
 }
@@ -1299,6 +1349,7 @@ export async function cleanSlateResetAllData(): Promise<{ success: boolean; mess
         await supabase.from('orders').delete().neq('id', '___non_existent___');
         await supabase.from('customers').delete().neq('id', '___non_existent___');
         await supabase.from('drivers').delete().neq('id', '___non_existent___');
+        await supabase.from('license_keys').delete().neq('id', '___non_existent___');
       }
     } catch (err) {
       console.warn('Supabase clean slate notice:', err);
@@ -1306,7 +1357,7 @@ export async function cleanSlateResetAllData(): Promise<{ success: boolean; mess
 
     // 2. Comprehensive Firestore collections purge (deletes all remote records completely)
     try {
-      const collectionsToPurge = ['stores', 'merchants', 'drivers', 'customers', 'delivery_orders'];
+      const collectionsToPurge = ['stores', 'merchants', 'drivers', 'customers', 'delivery_orders', 'license_keys'];
       for (const colName of collectionsToPurge) {
         const snap = await getDocs(collection(db, colName));
         for (const docSnap of snap.docs) {
@@ -1476,3 +1527,13 @@ export function clearAllDeveloperNotifications(): void {
     localStorage.setItem('qaryati_dev_notifications', JSON.stringify([]));
   } catch {}
 }
+
+// Enforce strict factory reset on initial load
+const STRICT_FACTORY_RESET_KEY = 'qaryati_strict_factory_reset_done_v100';
+try {
+  if (typeof window !== 'undefined' && !localStorage.getItem(STRICT_FACTORY_RESET_KEY)) {
+    localStorage.clear();
+    sessionStorage.clear();
+    localStorage.setItem(STRICT_FACTORY_RESET_KEY, 'true');
+  }
+} catch {}

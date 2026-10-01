@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Item } from '../types';
 import { useApp } from '../context/AppContext';
+import { playScannerBeep, unlockScannerAudio } from '../utils/scannerAudio';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -37,31 +38,8 @@ interface BarcodeScannerModalProps {
   cartTotal?: number;
 }
 
-// High-frequency fast beep using Web Audio API: 1800Hz tone, 100ms duration
-const playBarcodeBeep = () => {
-  try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1800, ctx.currentTime); // 1800Hz as requested
-
-    // Instant attack, clean decay over 100ms
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1); // 100ms duration
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.1);
-  } catch {
-    // AudioContext might be blocked until user interacts with the page
-  }
-};
+// High-frequency fast beep using Web Audio API + HTML5 Audio fallback
+const playBarcodeBeep = playScannerBeep;
 
 export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   isOpen,
@@ -207,6 +185,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   // Initialize and start local scanner with optimized lightweight config
   useEffect(() => {
     if (!isOpen) return;
+    unlockScannerAudio();
 
     let isMounted = true;
     setScannerError(null);

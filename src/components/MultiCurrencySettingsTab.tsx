@@ -418,115 +418,119 @@ export const MultiCurrencySettingsTab: React.FC = () => {
           </div>
 
           {/* Search Box */}
-          <div className="relative min-w-[180px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2" />
+          <div className="relative min-w-[200px] sm:w-auto w-full">
+            <Search className={`w-3.5 h-3.5 text-slate-400 absolute ${isRTL ? 'right-2.5' : 'left-2.5'} top-2.5`} />
             <input
               type="text"
               placeholder={language === 'ar' ? 'بحث عن عملة...' : 'Search currency...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg pr-8 pl-2.5 py-1 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
+              className={`w-full bg-slate-900 border border-slate-700 rounded-lg ${isRTL ? 'pr-8 pl-2.5' : 'pl-8 pr-2.5'} py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500`}
             />
           </div>
         </div>
 
-        {/* Table / List */}
-        <div className="max-h-[320px] overflow-y-auto divide-y divide-slate-800/80 border border-slate-800 rounded-xl overflow-hidden">
-          <table className="w-full text-right text-xs">
-            <thead className="bg-slate-900 text-slate-400 font-bold text-[11px] sticky top-0 z-10">
-              <tr>
-                <th className="p-2.5">{t.currency}</th>
-                <th className="p-2.5 text-center">{t.exchangeRateLabel} (1 {baseCode} = )</th>
-                <th className="p-2.5 text-center hidden sm:table-cell">{t.inverseRateLabel}</th>
-                <th className="p-2.5 text-center w-24">{language === 'ar' ? 'تحكم' : 'Action'}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60 bg-slate-950/60">
-              {filteredCurrencies.map((curr) => {
-                const isBase = curr.code === baseCode;
-                const activeRate = isBase ? 1.0 : (rates[curr.code] !== undefined ? rates[curr.code] : 1.0);
-                const inverseRate = activeRate > 0 ? (1 / activeRate) : 0;
-                const isCustom = customRatesMap[curr.code];
+        {/* Table / List Container with safe horizontal & vertical scrolling */}
+        <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/60">
+          <div className="max-h-[360px] overflow-y-auto overflow-x-auto scrollbar-thin">
+            <table className={`w-full ${isRTL ? 'text-right' : 'text-left'} text-xs min-w-[500px]`}>
+              <thead className="bg-slate-900 text-slate-300 font-bold text-[11px] sticky top-0 z-10 border-b border-slate-800 shadow-xs">
+                <tr>
+                  <th className={`p-2.5 whitespace-nowrap ${isRTL ? 'text-right' : 'text-left'}`}>{t.currency}</th>
+                  <th className="p-2.5 text-center whitespace-nowrap">{t.exchangeRateLabel} (1 {baseCode} = )</th>
+                  <th className="p-2.5 text-center hidden md:table-cell whitespace-nowrap">{t.inverseRateLabel}</th>
+                  <th className="p-2.5 text-center w-20 whitespace-nowrap">{language === 'ar' ? 'تحكم' : 'Action'}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 bg-slate-950/40">
+                {filteredCurrencies.map((curr) => {
+                  const isBase = curr.code === baseCode;
+                  const activeRate = isBase ? 1.0 : (rates[curr.code] !== undefined ? rates[curr.code] : 1.0);
+                  const inverseRate = activeRate > 0 ? (1 / activeRate) : 0;
+                  const isCustom = customRatesMap[curr.code];
 
-                return (
-                  <tr
-                    key={curr.code}
-                    className={`hover:bg-slate-850 transition-colors ${
-                      isBase ? 'bg-amber-950/20 font-bold' : ''
-                    }`}
-                  >
-                    {/* Currency name & info */}
-                    <td className="p-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg leading-none">{curr.flag}</span>
-                        <div>
-                          <div className="font-extrabold text-white flex items-center gap-1.5">
-                            <span>{language === 'ar' ? curr.name : curr.nameEn}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">({curr.code})</span>
-                            {isBase && (
-                              <span className="bg-amber-500/20 text-amber-300 text-[9px] px-1.5 py-0.2 rounded-md border border-amber-500/40">
-                                {t.baseCurrency}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-slate-400 truncate max-w-[160px]">
-                            {curr.countries}
+                  return (
+                    <tr
+                      key={curr.code}
+                      className={`hover:bg-slate-900/60 transition-colors ${
+                        isBase ? 'bg-amber-950/20 font-bold' : ''
+                      }`}
+                    >
+                      {/* Currency name & info */}
+                      <td className={`p-2.5 ${isRTL ? 'text-right' : 'text-left'}`}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl leading-none shrink-0">{curr.flag}</span>
+                          <div className="min-w-0">
+                            <div className="font-extrabold text-white flex items-center gap-1.5 flex-wrap">
+                              <span>{language === 'ar' ? curr.name : curr.nameEn}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">({curr.code})</span>
+                              {isBase && (
+                                <span className="bg-amber-500/20 text-amber-300 text-[9px] px-1.5 py-0.5 rounded-md border border-amber-500/40 font-bold shrink-0">
+                                  {t.baseCurrency}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 truncate max-w-[160px] sm:max-w-[220px]">
+                              {curr.countries}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Rate value (Editable if not base) */}
-                    <td className="p-2.5 text-center font-mono">
-                      {isBase ? (
-                        <span className="font-bold text-amber-300">1.0000 {curr.symbol}</span>
-                      ) : (
-                        <div className="flex items-center justify-center gap-1">
-                          <input
-                            type="number"
-                            value={activeRate}
-                            onChange={(e) => handleUpdateSingleRate(curr.code, parseFloat(e.target.value))}
-                            className={`w-24 bg-slate-900 border rounded-lg px-2 py-1 text-center font-mono font-bold text-xs focus:outline-none focus:border-amber-400 ${
-                              isCustom
-                                ? 'border-amber-500 text-amber-300 bg-amber-950/30'
-                                : 'border-slate-700 text-slate-100'
-                            }`}
-                            step="0.0001"
-                          />
-                          <span className="text-[10px] text-slate-400">{curr.symbol}</span>
-                        </div>
-                      )}
-                    </td>
+                      {/* Rate value (Editable if not base) */}
+                      <td className="p-2.5 text-center font-mono whitespace-nowrap">
+                        {isBase ? (
+                          <span className="inline-block font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1 text-xs">
+                            1.0000 {curr.symbol}
+                          </span>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <input
+                              type="number"
+                              value={activeRate}
+                              onChange={(e) => handleUpdateSingleRate(curr.code, parseFloat(e.target.value))}
+                              className={`w-24 bg-slate-900 border rounded-lg px-2 py-1 text-center font-mono font-bold text-xs focus:outline-none focus:border-amber-400 ${
+                                isCustom
+                                  ? 'border-amber-500 text-amber-300 bg-amber-950/30'
+                                  : 'border-slate-700 text-slate-100'
+                              }`}
+                              step="0.0001"
+                            />
+                            <span className="text-[11px] text-slate-400 font-sans">{curr.symbol}</span>
+                          </div>
+                        )}
+                      </td>
 
-                    {/* Inverse Rate */}
-                    <td className="p-2.5 text-center font-mono text-slate-400 hidden sm:table-cell text-[11px]">
-                      {isBase ? (
-                        <span>-</span>
-                      ) : (
-                        <span>
-                          1 {curr.code} = <strong className="text-slate-200">{inverseRate > 10 ? inverseRate.toFixed(2) : inverseRate.toFixed(4)}</strong> {baseCurrencyObj.symbol}
-                        </span>
-                      )}
-                    </td>
+                      {/* Inverse Rate */}
+                      <td className="p-2.5 text-center font-mono text-slate-400 hidden md:table-cell text-[11px] whitespace-nowrap">
+                        {isBase ? (
+                          <span className="text-slate-600">-</span>
+                        ) : (
+                          <span>
+                            1 {curr.code} = <strong className="text-slate-200">{inverseRate > 10 ? inverseRate.toFixed(2) : inverseRate.toFixed(4)}</strong> {baseCurrencyObj.symbol}
+                          </span>
+                        )}
+                      </td>
 
-                    {/* Reset Button */}
-                    <td className="p-2.5 text-center">
-                      {!isBase && isCustom && (
-                        <button
-                          type="button"
-                          onClick={() => handleResetSingleRate(curr.code)}
-                          title={t.resetToMarketRate}
-                          className="p-1 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-slate-800 transition-colors cursor-pointer"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      {/* Reset Button */}
+                      <td className="p-2.5 text-center whitespace-nowrap">
+                        {!isBase && isCustom && (
+                          <button
+                            type="button"
+                            onClick={() => handleResetSingleRate(curr.code)}
+                            title={t.resetToMarketRate}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-slate-800 transition-colors cursor-pointer inline-flex items-center justify-center"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

@@ -36,6 +36,7 @@ import {
 import { BarcodeScannerModal } from './BarcodeScannerModal';
 import { ConfirmationModal } from './ConfirmationModal';
 import { convertCurrency, findCurrency, POPULAR_CURRENCIES } from '../data/currencies';
+import { playScannerBeep } from '../utils/scannerAudio';
 
 interface TransactionsViewProps {
   onPrintReceipt: (transaction: Transaction) => void;
@@ -192,6 +193,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [cart, setCart] = useState<TransactionCartItem[]>([]);
   const [discount, setDiscount] = useState<number>(0);
   const [paidAmountInput, setPaidAmountInput] = useState<string>('');
+  const [cashTendered, setCashTendered] = useState<string>('');
 
   // POS Tabs & UI states
   const [posActiveTab, setPosActiveTab] = useState<'TERMINAL' | 'HISTORY'>('TERMINAL');
@@ -259,6 +261,39 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   const remainingDebt = Math.max(0, totalAmount - paidAmount);
 
+  // Dynamic Quick Cash Denomination options (Calculated for current currency & amount)
+  const quickCashOptions = React.useMemo(() => {
+    if (totalAmount <= 0) return [50, 100, 200, 500];
+    const opts = new Set<number>();
+    const next10 = Math.ceil(totalAmount / 10) * 10;
+    if (next10 > totalAmount) opts.add(next10);
+    const next50 = Math.ceil(totalAmount / 50) * 50;
+    if (next50 > totalAmount) opts.add(next50);
+    [50, 100, 200, 500].forEach((den) => {
+      if (den >= totalAmount) opts.add(den);
+    });
+    return Array.from(opts).sort((a, b) => a - b).slice(0, 4);
+  }, [totalAmount]);
+
+  // Authentic cashier barcode scan beep with WebAudio + HTML5 fallback
+  const playScanBeep = playScannerBeep;
+
+  // Re-focus barcode input
+  const focusBarcodeInput = () => {
+    if (inputViewMode === 'BARCODE') {
+      setTimeout(() => {
+        barcodeInputRef.current?.focus();
+      }, 60);
+    }
+  };
+
+  // Automatic focus on terminal mount & barcode view switch
+  useEffect(() => {
+    if (posActiveTab === 'TERMINAL' && inputViewMode === 'BARCODE') {
+      focusBarcodeInput();
+    }
+  }, [posActiveTab, inputViewMode]);
+
   // Shelf stock verification status for sales
   const isSaleMode = operationType === 'SALE' || operationType === 'CREDIT_SALE';
   const hasOversoldItems =
@@ -267,6 +302,63 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       const s = realTimeItems.find((i) => i.id === c.itemId);
       return !s || c.quantity > s.quantity || s.quantity <= 0;
     });
+
+  // Keyboard Shortcuts for Cashier / POS (F2, F4, F8, F9, Ctrl+Enter, Esc)
+  useEffect(() => {
+    if (posActiveTab !== 'TERMINAL') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT');
+
+      // F2 or '/' to focus barcode
+      if (e.key === 'F2' || (!isInput && e.key === '/')) {
+        e.preventDefault();
+        setInputViewMode('BARCODE');
+        focusBarcodeInput();
+        return;
+      }
+
+      // F4 to select CASH
+      if (e.key === 'F4') {
+        e.preventDefault();
+        setPaymentMethod('CASH');
+        showNotification(language === 'ar' ? 'تم اختيار الدفع نقداً (كاش)' : 'Cash Payment Selected', 'info');
+        return;
+      }
+
+      // F8 to select CARD
+      if (e.key === 'F8') {
+        e.preventDefault();
+        setPaymentMethod('CARD');
+        showNotification(language === 'ar' ? 'تم اختيار الدفع بالشبكة / البطاقة' : 'Card Payment Selected', 'info');
+        return;
+      }
+
+      // F9 or Ctrl+Enter to complete transaction
+      if (e.key === 'F9' || ((e.ctrlKey || e.metaKey) && e.key === 'Enter')) {
+        e.preventDefault();
+        if (cart.length > 0 && !hasOversoldItems) {
+          handleCompleteTransaction();
+        } else if (cart.length === 0) {
+          showNotification(language === 'ar' ? 'السلة فارغة حالياً' : 'Cart is empty', 'warning');
+        }
+        return;
+      }
+
+      // Esc to clear cart
+      if (e.key === 'Escape' && cart.length > 0 && !isInput) {
+        e.preventDefault();
+        if (window.confirm(language === 'ar' ? 'هل تريد تفريغ السلة؟' : 'Clear current cart?')) {
+          clearCart();
+        }
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [posActiveTab, cart, hasOversoldItems, language]);
 
   // Add Item to cart with inventory quantity verification
   const addItemToCart = (item: Item, quantity: number = 1) => {
@@ -346,6 +438,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         ];
       }
     });
+
+    playScanBeep();
+    focusBarcodeInput();
   };
 
   // Barcode Scan Handler
@@ -360,8 +455,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     if (found) {
       addItemToCart(found, 1);
       setBarcodeInput('');
+      focusBarcodeInput();
     } else {
       showNotification(`لم يتم العثور على صنف برقم الباركود (${barcodeInput})`, 'error');
+      focusBarcodeInput();
     }
   };
 
@@ -435,9 +532,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     setCart([]);
     setDiscount(0);
     setPaidAmountInput('');
+    setCashTendered('');
     setPartyName('');
     setPartyPhone('');
     setNotes('');
+    focusBarcodeInput();
   };
 
   // Complete Transaction with comprehensive stock validation
@@ -636,8 +735,24 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       </div>
 
       {posActiveTab === 'TERMINAL' ? (
-        /* Main Grid: POS Terminal (Left: Barcode/Catalog + Cart, Right: Payment & Summary) */
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <>
+          {/* Desktop & iPad Fast Cashier Hotkeys ribbon */}
+          <div className="hidden sm:flex items-center justify-between text-[11px] text-slate-300 bg-slate-900/90 px-3.5 py-2 rounded-xl border border-slate-800 shadow-xs font-mono">
+            <span className="flex items-center gap-1.5 font-bold text-white">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>اختصارات الكاشير السريعة:</span>
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800 text-slate-300"><strong className="text-emerald-400">F2</strong> باركود</span>
+              <span className="bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800 text-slate-300"><strong className="text-emerald-400">F4</strong> كاش</span>
+              <span className="bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800 text-slate-300"><strong className="text-teal-400">F8</strong> شبكة</span>
+              <span className="bg-emerald-950/60 px-2.5 py-0.5 rounded-md border border-emerald-500/40 text-emerald-300 font-bold shadow-xs"><strong className="text-white">F9</strong> إنهاء وطباعة</span>
+              <span className="bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800 text-slate-400"><strong className="text-rose-400">Esc</strong> تفريغ</span>
+            </div>
+          </div>
+
+          {/* Main Grid: POS Terminal (Left: Barcode/Catalog + Cart, Right: Payment & Summary) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Left Column: POS Terminal & Cart (Col 7 on lg, Col 7 on xl) */}
           <div className="lg:col-span-7 xl:col-span-7 space-y-3">
             {/* Mode Tabs: Barcode Scan VS Interactive Items Catalog */}
@@ -1195,6 +1310,92 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               </div>
             </div>
 
+            {/* Quick Cash Tender & Change Calculator (for Super Fast Cash Sales) */}
+            {paymentMethod === 'CASH' && !isCreditOperation && (
+              <div className="bg-emerald-950/25 border border-emerald-700/40 rounded-xl p-3 space-y-2 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                    <Coins className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>المبلغ المستلم كاش وباقي العميل:</span>
+                  </span>
+                  {cashTendered && (
+                    <button
+                      type="button"
+                      onClick={() => setCashTendered('')}
+                      className="text-[10px] text-slate-400 hover:text-rose-300 transition-colors cursor-pointer"
+                    >
+                      مسح
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      placeholder={`المطلوب: ${totalAmount.toFixed(2)}`}
+                      value={cashTendered}
+                      onChange={(e) => setCashTendered(e.target.value)}
+                      className="w-full bg-slate-950 border border-emerald-600/50 rounded-lg pr-3 pl-12 py-1.5 text-sm font-mono font-bold text-white focus:outline-none focus:border-emerald-400"
+                    />
+                    <span className="absolute left-2.5 top-2 text-[10px] font-mono text-slate-400">
+                      {settings.currency}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCashTendered(totalAmount.toFixed(2))}
+                    disabled={totalAmount <= 0}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-slate-950 font-black text-xs transition-colors cursor-pointer shrink-0 shadow-sm"
+                    title="تسجيل المبلغ بالضبط"
+                  >
+                    بالضبط
+                  </button>
+                </div>
+
+                {/* Quick Cash Denomination Buttons */}
+                {totalAmount > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    <span className="text-[10px] text-slate-400 font-semibold">فئات نقدية سريعة:</span>
+                    {quickCashOptions.map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        onClick={() => setCashTendered(String(amount))}
+                        className={`text-[11px] px-2.5 py-0.5 rounded-md font-mono font-bold border transition-colors cursor-pointer ${
+                          parseFloat(cashTendered) === amount
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                            : 'bg-slate-900 border-slate-700 text-slate-200 hover:border-emerald-500 hover:text-white'
+                        }`}
+                      >
+                        {amount} {settings.currency}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Live Change Calculation Badge */}
+                {parseFloat(cashTendered) > 0 && (
+                  <div className="pt-2 border-t border-emerald-800/30 flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-300 text-[11px] font-bold">
+                      {parseFloat(cashTendered) >= totalAmount ? 'الباقي للعميل (إرجاع):' : 'المتبقي لإتمام الدفع:'}
+                    </span>
+                    <span
+                      className={`font-black text-sm px-2.5 py-0.5 rounded-lg ${
+                        parseFloat(cashTendered) >= totalAmount
+                          ? 'text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 shadow-xs'
+                          : 'text-amber-400 bg-amber-950/80 border border-amber-500/40'
+                      }`}
+                    >
+                      {parseFloat(cashTendered) >= totalAmount
+                        ? `${(parseFloat(cashTendered) - totalAmount).toFixed(2)} ${settings.currency}`
+                        : `${(totalAmount - parseFloat(cashTendered)).toFixed(2)} ${settings.currency}`}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Customer / Supplier Information */}
             {isCreditOperation ? (
               /* Always visible and prominent when Credit operation */
@@ -1508,6 +1709,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </div>
         </div>
       </div>
+      </>
       ) : (
         /* Tab 2: Transactions History Log (Full Width) */
         <div className="space-y-4">
@@ -1758,7 +1960,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       {/* Mobile Floating Quick-Checkout Bar: Cashier can complete transaction from anywhere on the screen */}
       {posActiveTab === 'TERMINAL' && cart.length > 0 && (
-        <div className="lg:hidden fixed bottom-3 inset-x-3 z-40 animate-fadeIn safe-bottom">
+        <div className="lg:hidden fixed bottom-16 sm:bottom-4 inset-x-3 z-30 animate-fadeIn safe-bottom">
           <div className="bg-slate-900/98 backdrop-blur-md border border-emerald-500/50 p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="text-[11px] text-slate-400 font-bold flex items-center gap-1.5">

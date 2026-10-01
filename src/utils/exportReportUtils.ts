@@ -810,11 +810,11 @@ export const exportInventoryAuditToPDF = async (
     it.barcode || '-',
     isAr ? formatArabicPdfText(doc, it.name) : it.name,
     isAr ? formatArabicPdfText(doc, it.category || 'عام') : (it.category || 'General'),
-    `${it.quantity} ${isAr ? formatArabicPdfText(doc, it.unit) : it.unit}`,
-    fmtNum(it.costPrice),
-    fmtNum(it.salePrice),
-    fmtNum(it.totalCost),
-    fmtNum(it.totalSale),
+    Number(it.quantity || 0).toLocaleString(),
+    fmtNum(Number(it.costPrice || 0)),
+    fmtNum(Number(it.salePrice || 0)),
+    fmtNum(Number(it.totalCost || 0)),
+    fmtNum(Number(it.totalSale || 0)),
     isAr ? formatArabicPdfText(doc, it.status) : it.status,
   ]);
 
@@ -832,6 +832,15 @@ export const exportInventoryAuditToPDF = async (
     styles: { font: fontName, halign: isAr ? 'right' : 'left' },
     headStyles: { font: fontName, fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5, halign: isAr ? 'right' : 'left' },
     bodyStyles: { font: fontName, fontSize: 7, textColor: [30, 41, 59], halign: isAr ? 'right' : 'left' },
+    columnStyles: {
+      0: { font: 'helvetica', halign: 'center' },
+      1: { font: 'helvetica', halign: 'center' },
+      4: { font: 'helvetica', halign: 'center' },
+      5: { font: 'helvetica', halign: 'center' },
+      6: { font: 'helvetica', halign: 'center' },
+      7: { font: 'helvetica', halign: 'center' },
+      8: { font: 'helvetica', halign: 'center' },
+    },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     margin: { left: 14, right: 14 },
   });

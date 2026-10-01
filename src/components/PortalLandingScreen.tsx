@@ -125,6 +125,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   // Register State
   const [regName, setRegName] = useState('');
@@ -155,20 +156,19 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   const [logoClickCount, setLogoClickCount] = useState(0);
 
   const handleLogoClick = () => {
-    setLogoClickCount((prev) => {
-      const next = prev + 1;
-      if (next >= 10) {
-        if (isDeveloperRemembered()) {
-          setActiveSessionRole('DEVELOPER');
-          setIsDeveloper(true);
-          onEnterAdmin?.();
-        } else {
-          setShowAdminPinModal(true);
-        }
-        return 0; // reset
+    const next = logoClickCount + 1;
+    if (next >= 10) {
+      setLogoClickCount(0);
+      if (isDeveloperRemembered()) {
+        setActiveSessionRole('DEVELOPER');
+        setIsDeveloper(true);
+        onEnterAdmin?.();
+      } else {
+        setShowAdminPinModal(true);
       }
-      return next;
-    });
+    } else {
+      setLogoClickCount(next);
+    }
   };
 
   useEffect(() => {
@@ -444,7 +444,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         );
 
         if (foundMerchant) {
-          const res = await loginMerchant(identifier, password);
+          const res = await loginMerchant(identifier, password, rememberMe);
           if (res.success) {
             setAuthSuccess(`مرحباً بك يا ${foundMerchant.name}! جاري التوجيه للوحة التاجر...`);
             setTimeout(() => {
@@ -464,7 +464,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         const foundDriver = drivers.find((d) => d.phone === identifier || d.nationalId === identifier);
 
         if (foundDriver) {
-          const res = await loginDriver(identifier, password);
+          const res = await loginDriver(identifier, password, rememberMe);
           if (res.success) {
             setAuthSuccess(`مرحباً بك يا ${foundDriver.name}! جاري فتح بوابة السائق...`);
             setTimeout(() => {
@@ -480,7 +480,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         }
 
         // Check cloud directly if not found locally
-        const cloudMerchant = await loginMerchant(identifier, password);
+        const cloudMerchant = await loginMerchant(identifier, password, rememberMe);
         if (cloudMerchant.success) {
           setAuthSuccess(`مرحباً بك! جاري التوجيه للوحة التاجر...`);
           setTimeout(() => {
@@ -490,7 +490,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
           return;
         }
 
-        const cloudDriver = await loginDriver(identifier, password);
+        const cloudDriver = await loginDriver(identifier, password, rememberMe);
         if (cloudDriver.success) {
           setAuthSuccess(`مرحباً بك! جاري فتح بوابة السائق...`);
           setTimeout(() => {
@@ -501,7 +501,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         }
 
         // 3. Authenticate as customer securely
-        const customerRes = await loginCustomerRecord(identifier, password);
+        const customerRes = await loginCustomerRecord(identifier, password, rememberMe);
         if (customerRes.success) {
           setAuthSuccess(customerRes.message || 'تم تسجيل دخولك كعميل بنجاح! جاري فتح المتجر...');
           setTimeout(() => {
@@ -760,6 +760,20 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
                       {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                </div>
+
+                {/* Remember Me Checkbox */}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="rememberMeCheckbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-700 text-emerald-600 focus:ring-emerald-500 bg-slate-950 cursor-pointer"
+                  />
+                  <label htmlFor="rememberMeCheckbox" className="text-xs text-slate-300 cursor-pointer select-none">
+                    تذكرني (البقاء مسجلاً حتى بعد إغلاق المتصفح) 🔒
+                  </label>
                 </div>
 
                 {/* Password recovery triggers */}
