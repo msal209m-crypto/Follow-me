@@ -8,7 +8,8 @@ export type NavigationTab =
   | 'debts'
   | 'daily_reports'
   | 'village_bulletin'
-  | 'merchant_ads';
+  | 'merchant_ads'
+  | 'offline_sync';
 
 export interface Item {
   id: string;

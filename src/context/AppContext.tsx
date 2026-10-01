@@ -68,6 +68,8 @@ interface AppContextType {
   // Cloud Sync
   cloudSyncStatus: CloudSyncStatus;
   syncToCloudNow: () => Promise<void>;
+  offlineSyncCount: number;
+  updateOfflineSyncCount: () => Promise<void>;
 
   // Item operations
   addItem: (item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>) => Item;
@@ -210,6 +212,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeTab, setActiveTab] = useState<NavigationTab>('dashboard');
   const [selectedStickerItemId, setSelectedStickerItemId] = useState<string | null>(null);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>('offline');
+  const [offlineSyncCount, setOfflineSyncCount] = useState(0);
+
+  const updateOfflineSyncCount = useCallback(async () => {
+    try {
+      const { getAllFromIndexedDB } = await import('../utils/indexedDB');
+      const queue = await getAllFromIndexedDB('offline_queue');
+      setOfflineSyncCount(queue.length);
+    } catch {
+      setOfflineSyncCount(0);
+    }
+  }, []);
 
   // Multi-Vendor Security Filter: User and Merchant isolated storage keys
   const userPrefix =
@@ -607,6 +620,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // IndexedDB Auto-Sync Queue Processing & Browser Online Event Listener
   useEffect(() => {
+    // Update offline sync count on mount/auth change
+    updateOfflineSyncCount();
+
     // 1. Initial process of queue if online right now at app mount/auth boot
     if (navigator.onLine && currentUser) {
       import('../utils/indexedDB').then(({ processOfflineSyncQueue }) => {
@@ -614,6 +630,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           import('firebase/firestore').then(({ deleteDoc }) => {
             processOfflineSyncQueue(currentUser.uid, safeSetDoc, deleteDoc, db)
               .then(({ successCount }) => {
+                updateOfflineSyncCount();
                 if (successCount > 0) {
                   showNotification(`تمت مزامنة ${successCount} عملية بيع مؤجلة بنجاح مع السحابة!`, 'success');
                 }
@@ -632,6 +649,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             import('firebase/firestore').then(({ deleteDoc }) => {
               processOfflineSyncQueue(currentUser.uid, safeSetDoc, deleteDoc, db)
                 .then(({ successCount }) => {
+                  updateOfflineSyncCount();
                   if (successCount > 0) {
                     showNotification(`تمت استعادة اتصال الإنترنت ومزامنة المبيعات المعلقة (${successCount} عمليات) مع السحابة بنجاح!`, 'success');
                   }
@@ -647,7 +665,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       window.removeEventListener('online', handleOnline);
     };
-  }, [currentUser, showNotification]);
+  }, [currentUser, showNotification, updateOfflineSyncCount]);
 
   // صلاحيات الكاشير: عند تفعيل حساب الكاشير، إخفاء الحسابات والأرباح والمخزون، والاكتفاء بشاشة نقاط البيع فقط
   useEffect(() => {
@@ -1727,6 +1745,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
+    // Update offline sync count to capture any queued operations
+    setTimeout(updateOfflineSyncCount, 150);
+
     return newTransaction;
   };
 
@@ -2567,6 +2588,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateSettings,
         cloudSyncStatus,
         syncToCloudNow,
+        offlineSyncCount,
+        updateOfflineSyncCount,
         addItem,
         saveProduct,
         updateItem,

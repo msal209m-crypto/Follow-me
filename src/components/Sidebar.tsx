@@ -32,6 +32,8 @@ import {
   X,
   Compass,
   Megaphone,
+  WifiOff,
+  RefreshCw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -89,6 +91,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isRTL,
     isCashierMode,
     resetCashierPassword,
+    offlineSyncCount,
   } = useApp();
 
   // حالة نافذة استعادة كلمة مرور الكاشير للتاجر (المشرف)
@@ -166,6 +169,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'merchant_ads',
           label: language === 'ar' ? '📈 الترويج والإعلانات' : 'Promotions & Ads',
           icon: Megaphone,
+        },
+        {
+          id: 'offline_sync',
+          label: language === 'ar' ? '📴 العمليات المعلقة' : 'Offline Operations',
+          icon: WifiOff,
+          badge: offlineSyncCount > 0 ? offlineSyncCount : undefined,
+          alert: offlineSyncCount > 0,
         },
       ];
 

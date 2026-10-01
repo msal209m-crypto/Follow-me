@@ -101,6 +101,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     isRTL,
     cloudSyncStatus,
     syncToCloudNow,
+    offlineSyncCount,
+    setActiveTab,
   } = useApp();
 
   const { theme, toggleTheme } = useTheme();
@@ -428,12 +430,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <Menu className="w-4 h-4 xs:w-5 xs:h-5" />
           </button>
 
-          {/* Cloud Sync Status Pill */}
+          {/* Cloud Sync Status Pill (مؤشر حالة المزامنة السحابية الفوري والتفاعلي) */}
           <button
             type="button"
-            onClick={syncToCloudNow}
+            onClick={() => {
+              if (offlineSyncCount > 0) {
+                setActiveTab?.('offline_sync');
+              } else {
+                syncToCloudNow();
+              }
+            }}
             title={
-              cloudSyncStatus === 'synced'
+              offlineSyncCount > 0
+                ? (language === 'ar' 
+                    ? `عمليات معلقة بانتظار الرفع: ${offlineSyncCount} (انقر لعرض طابور العمليات)` 
+                    : `Offline pending syncs: ${offlineSyncCount} (Click to view queue)`)
+                : cloudSyncStatus === 'synced'
                 ? t.cloudSynced
                 : cloudSyncStatus === 'syncing'
                 ? t.cloudSyncing
@@ -441,8 +453,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 ? t.cloudOffline
                 : t.accountSecurityNote
             }
-            className={`flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm ${
-              cloudSyncStatus === 'synced'
+            className={`flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm ${
+              offlineSyncCount > 0
+                ? 'bg-amber-950/85 border-amber-500 text-amber-300 animate-pulse hover:bg-amber-900/80 shadow-md shadow-amber-950/50'
+                : cloudSyncStatus === 'synced' && isOnline
                 ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/70'
                 : cloudSyncStatus === 'syncing'
                 ? 'bg-amber-950/70 border-amber-500/50 text-amber-200 animate-pulse'
@@ -451,20 +465,47 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 : 'bg-slate-800 border-slate-650 text-slate-300 hover:bg-slate-750'
             }`}
           >
-            {cloudSyncStatus === 'syncing' ? (
-              <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
-            ) : currentUser ? (
-              <Cloud className="w-3 h-3 text-emerald-400" />
+            {/* Status light dot */}
+            {offlineSyncCount > 0 ? (
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              </span>
+            ) : cloudSyncStatus === 'syncing' ? (
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              </span>
+            ) : cloudSyncStatus === 'synced' && isOnline ? (
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
             ) : (
-              <ShieldCheck className="w-3 h-3 text-slate-400" />
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-500"></span>
+              </span>
             )}
+
+            {offlineSyncCount > 0 ? (
+              <WifiOff className="w-3 h-3 text-amber-400 animate-bounce shrink-0" />
+            ) : cloudSyncStatus === 'syncing' ? (
+              <RefreshCw className="w-3 h-3 animate-spin text-amber-400 shrink-0" />
+            ) : currentUser ? (
+              <Cloud className="w-3 h-3 text-emerald-400 shrink-0" />
+            ) : (
+              <ShieldCheck className="w-3 h-3 text-slate-400 shrink-0" />
+            )}
+
             <span className="hidden xs:inline">
               {currentUser
-                ? cloudSyncStatus === 'synced'
+                ? offlineSyncCount > 0
+                  ? (language === 'ar' ? `بالانتظار (${offlineSyncCount})` : `Pending (${offlineSyncCount})`)
+                  : cloudSyncStatus === 'synced' && isOnline
                   ? (language === 'ar' ? 'سحابي متصل' : 'Cloud Synced')
                   : cloudSyncStatus === 'syncing'
                   ? (language === 'ar' ? 'مزامنة...' : 'Syncing...')
-                  : (language === 'ar' ? 'متصل' : 'Connected')
+                  : (language === 'ar' ? 'أوفلاين' : 'Offline')
                 : (language === 'ar' ? 'وضع الضيف' : 'Guest')}
             </span>
           </button>

@@ -133,7 +133,9 @@ export const AdhanTopBarWidget: React.FC<AdhanTopBarWidgetProps> = ({
       <div
         onClick={() => setIsModalOpen(true)}
         dir={isRTL ? 'rtl' : 'ltr'}
-        className={`group cursor-pointer select-none transition-all duration-300 flex items-center justify-between gap-1.5 rounded-xl border px-2.5 py-1.5 shadow-xs hover:shadow-md ${
+        className={`group shrink-0 cursor-pointer select-none transition-all duration-300 flex items-center justify-between ${
+          compact ? 'gap-1 px-1.5 py-0.5 rounded-lg text-[10px]' : 'gap-1.5 px-2.5 py-1.5 rounded-xl text-xs'
+        } border shadow-xs hover:shadow-md ${
           isPrayerNow
             ? 'bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 border-emerald-400 text-white animate-pulse shadow-emerald-500/20'
             : isDarkMode
@@ -142,22 +144,24 @@ export const AdhanTopBarWidget: React.FC<AdhanTopBarWidgetProps> = ({
         } ${className}`}
         title="انقر لعرض مواقيت الأذان والقبلة ومساجد القرية وأصوات أذان الحرمين"
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
           <div
-            className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+            className={`${
+              compact ? 'w-5.5 h-5.5 rounded-md' : 'w-7 h-7 rounded-lg'
+            } flex items-center justify-center shrink-0 ${
               isPrayerNow
                 ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/40 animate-bounce'
                 : 'bg-emerald-500/20 text-emerald-400'
             }`}
           >
-            <Clock className="w-4 h-4" />
+            <Clock className={compact ? 'w-3 h-3' : 'w-4 h-4'} />
           </div>
 
-          <div className="min-w-0 flex items-center gap-2">
-            <span className="text-xs font-black text-emerald-400 truncate">
+          <div className="min-w-0 flex items-center gap-1.5">
+            <span className={`font-black text-emerald-400 truncate ${compact ? 'text-[11px]' : 'text-xs'}`}>
               {isPrayerNow ? 'حان الأذان 🕌' : prayerData.nextPrayer?.arabicName}
             </span>
-            <span className="text-[11px] text-slate-300 font-mono font-bold">
+            <span className={`text-slate-300 font-mono font-bold ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
               {prayerData.nextPrayer?.formattedTime}
             </span>
             {!compact && (
@@ -176,24 +180,26 @@ export const AdhanTopBarWidget: React.FC<AdhanTopBarWidgetProps> = ({
           <button
             type="button"
             onClick={handleAudioQuickToggle}
-            className={`px-2 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 text-xs font-bold ${
+            className={`transition-all cursor-pointer flex items-center justify-center rounded-lg font-bold ${
+              compact ? 'w-6 h-6 p-0' : 'px-2 py-1 gap-1 text-xs'
+            } ${
               isPlayingAudio
                 ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/40 animate-pulse'
                 : isDarkMode
-                ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-white'
+                ? 'bg-slate-800 hover:bg-slate-750 text-emerald-400 hover:text-white'
                 : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
             }`}
             title={isPlayingAudio ? 'إيقاف صوت الأذان' : 'سماع صوت الأذان الحقيقي'}
           >
             {isPlayingAudio ? (
               <>
-                <Square className="w-3.5 h-3.5 fill-current" />
-                <span className="text-[10px]">إيقاف</span>
+                <Square className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} fill-current`} />
+                {!compact && <span className="text-[10px]">إيقاف</span>}
               </>
             ) : (
               <>
-                <Volume2 className="w-3.5 h-3.5" />
-                <span className="text-[10px] hidden sm:inline">أذان الحرمين</span>
+                <Volume2 className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+                {!compact && <span className="text-[10px] hidden sm:inline">أذان الحرمين</span>}
               </>
             )}
           </button>

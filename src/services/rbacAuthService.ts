@@ -1575,10 +1575,10 @@ export function validateKYCParams(params: {
 
   let finalCleanPhone = phone;
 
+  // Global Phone Cleaner for All Supported Countries
   if (country === 'SA') {
     if (finalCleanPhone.startsWith('00966')) finalCleanPhone = finalCleanPhone.substring(5);
     else if (finalCleanPhone.startsWith('966')) finalCleanPhone = finalCleanPhone.substring(3);
-    
     if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
 
     if (!finalCleanPhone.startsWith('5') || finalCleanPhone.length !== 9) {
@@ -1587,12 +1587,69 @@ export function validateKYCParams(params: {
   } else if (country === 'YE') {
     if (finalCleanPhone.startsWith('00967')) finalCleanPhone = finalCleanPhone.substring(5);
     else if (finalCleanPhone.startsWith('967')) finalCleanPhone = finalCleanPhone.substring(3);
-    
     if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
 
     if (!finalCleanPhone.startsWith('7') || finalCleanPhone.length !== 9) {
       return { valid: false, message: 'رقم الجوال اليمني غير صحيح (يجب أن يبدأ بـ 7 ويتكون من 9 أرقام، مثال: 712345678)' };
     }
+  } else if (country === 'AE') {
+    if (finalCleanPhone.startsWith('00971')) finalCleanPhone = finalCleanPhone.substring(5);
+    else if (finalCleanPhone.startsWith('971')) finalCleanPhone = finalCleanPhone.substring(3);
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+
+    if (finalCleanPhone.length < 7 || finalCleanPhone.length > 10) {
+      return { valid: false, message: 'رقم الجوال الإماراتي غير صحيح.' };
+    }
+  } else if (country === 'EG') {
+    if (finalCleanPhone.startsWith('0020')) finalCleanPhone = finalCleanPhone.substring(4);
+    else if (finalCleanPhone.startsWith('20')) finalCleanPhone = finalCleanPhone.substring(2);
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+
+    if (finalCleanPhone.length < 9 || finalCleanPhone.length > 11) {
+      return { valid: false, message: 'رقم الجوال المصري غير صحيح.' };
+    }
+  } else if (country === 'QA') {
+    if (finalCleanPhone.startsWith('00974')) finalCleanPhone = finalCleanPhone.substring(5);
+    else if (finalCleanPhone.startsWith('974')) finalCleanPhone = finalCleanPhone.substring(3);
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+  } else if (country === 'KW') {
+    if (finalCleanPhone.startsWith('00965')) finalCleanPhone = finalCleanPhone.substring(5);
+    else if (finalCleanPhone.startsWith('965')) finalCleanPhone = finalCleanPhone.substring(3);
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+  } else if (country === 'BH') {
+    if (finalCleanPhone.startsWith('00973')) finalCleanPhone = finalCleanPhone.substring(5);
+    else if (finalCleanPhone.startsWith('973')) finalCleanPhone = finalCleanPhone.substring(3);
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+  } else if (country === 'OM') {
+    if (finalCleanPhone.startsWith('00968')) finalCleanPhone = finalCleanPhone.substring(5);
+    else if (finalCleanPhone.startsWith('968')) finalCleanPhone = finalCleanPhone.substring(3);
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+  } else if (country === 'JO') {
+    if (finalCleanPhone.startsWith('00962')) finalCleanPhone = finalCleanPhone.substring(5);
+    else if (finalCleanPhone.startsWith('962')) finalCleanPhone = finalCleanPhone.substring(3);
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+  } else if (country === 'MA') {
+    if (finalCleanPhone.startsWith('00212')) finalCleanPhone = finalCleanPhone.substring(5);
+    else if (finalCleanPhone.startsWith('212')) finalCleanPhone = finalCleanPhone.substring(3);
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+  } else if (country === 'TR') {
+    if (finalCleanPhone.startsWith('0090')) finalCleanPhone = finalCleanPhone.substring(4);
+    else if (finalCleanPhone.startsWith('90')) finalCleanPhone = finalCleanPhone.substring(2);
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+  } else if (country === 'GB') {
+    if (finalCleanPhone.startsWith('0044')) finalCleanPhone = finalCleanPhone.substring(4);
+    else if (finalCleanPhone.startsWith('44')) finalCleanPhone = finalCleanPhone.substring(2);
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+  } else if (country === 'US') {
+    if (finalCleanPhone.startsWith('001')) finalCleanPhone = finalCleanPhone.substring(3);
+    else if (finalCleanPhone.startsWith('1')) {
+      // Avoid stripping leading '1' if it's not actually a country prefix (US numbers are 10 digits, with prefix it's 11)
+      if (finalCleanPhone.length === 11) finalCleanPhone = finalCleanPhone.substring(1);
+    }
+    if (finalCleanPhone.startsWith('0')) finalCleanPhone = finalCleanPhone.substring(1);
+  } else {
+    // Other countries: just strip double leading zeros or plus signs if present
+    if (finalCleanPhone.startsWith('00')) finalCleanPhone = finalCleanPhone.substring(2);
   }
 
   return { valid: true, cleanPhone: finalCleanPhone };

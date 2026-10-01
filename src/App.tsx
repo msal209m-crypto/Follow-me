@@ -18,6 +18,7 @@ import { DebtsView } from './components/DebtsView';
 import { DailyReportsView } from './components/DailyReportsView';
 import { VillageBulletinView } from './components/VillageBulletinView';
 import { MerchantAdsView } from './components/MerchantAdsView';
+import { OfflineSyncQueueView } from './components/OfflineSyncQueueView';
 import { OrderGoodsView } from './components/OrderGoodsView';
 import { PrintReceiptModal } from './components/PrintReceiptModal';
 import { QuickItemModal } from './components/QuickItemModal';
@@ -288,6 +289,8 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
                 {activeTab === 'village_bulletin' && <VillageBulletinView />}
 
                 {activeTab === 'merchant_ads' && <MerchantAdsView />}
+
+                {activeTab === 'offline_sync' && <OfflineSyncQueueView />}
               </>
             )}
           </div>
