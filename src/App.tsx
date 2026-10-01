@@ -203,7 +203,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
 
         {/* Top Header with Multi-Tenant Cloud & Auth status */}
         <TopHeader
-          onOpenMobileMenu={() => setMobileOpen(true)}
+          onOpenMobileMenu={() => setMobileMenuOpen(true)}
           onOpenAddItem={isCashierMode ? () => {} : handleOpenAddItem}
           onOpenOrderGoods={isCashierMode ? () => {} : (item) => handleOpenOrderGoods(item?.id, 'CASH')}
           onOpenSettings={
@@ -233,6 +233,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
               <TransactionsView
                 onPrintReceipt={handlePrintTransactionReceipt}
                 onOpenOrderGoodsModal={undefined}
+                onOpenAddItem={handleOpenAddItem}
               />
             ) : (
               <>
@@ -265,6 +266,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
                   <TransactionsView
                     onPrintReceipt={handlePrintTransactionReceipt}
                     onOpenOrderGoodsModal={(type) => handleOpenOrderGoods(undefined, type || 'CASH')}
+                    onOpenAddItem={handleOpenAddItem}
                   />
                 )}
 

@@ -52,7 +52,7 @@ export const BarcodeSticker: React.FC<BarcodeStickerProps> = ({
       {/* Store Header */}
       {settings.stickerSettings.showStoreName && (
         <div className="w-full font-bold text-[10px] sm:text-[11px] text-slate-700 truncate border-b border-dashed border-slate-200 pb-0.5 mb-0.5">
-          {settings.storeName || 'متجر فلو اب'}
+          {settings.storeName || 'متجر قريتي'}
         </div>
       )}
 

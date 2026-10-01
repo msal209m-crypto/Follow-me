@@ -1,9 +1,9 @@
 /**
- * FlowApp Official Owner & Licensing Support Configuration
+ * Qaryati Official Owner & Licensing Support Configuration
  */
 
 export const OWNER_CONTACT = {
-  name: 'مالك ومطور تطبيق FlowApp',
+  name: 'مالك ومطور تطبيق قريتي',
   phoneRaw: '00966502063584',
   phoneInternational: '966502063584',
   phoneDisplay: '+966 50 206 3584',
@@ -25,7 +25,7 @@ export const OWNER_CONTACT = {
     const note = options?.customNote ? `\n📝 ملاحظة: ${options.customNote}` : '';
 
     const text = `السلام عليكم ورحمة الله،
-أرغب في شراء كود تفعيل لباقة FlowApp Pro.${store}${plan}${price}${note}
+    أرغب في شراء كود تفعيل لباقة قريتي Pro.${store}${plan}${price}${note}
 يرجى التكرم بتزويدي برقم الحساب البنكي لتحويل المبلغ وإرسال كود التفعيل.`;
 
     return `https://wa.me/${OWNER_CONTACT.phoneInternational}?text=${encodeURIComponent(text)}`;
@@ -36,8 +36,8 @@ export const OWNER_CONTACT = {
    */
   getSupportWhatsAppUrl: (query?: string) => {
     const text = query
-      ? `السلام عليكم، بخصوص تطبيق FlowApp: ${query}`
-      : `السلام عليكم، لدي استفسار بخصوص تطبيق كاشير وإدارة المبيعات FlowApp.`;
+      ? `السلام عليكم، بخصوص تطبيق قريتي: ${query}`
+      : `السلام عليكم، لدي استفسار بخصوص تطبيق كاشير وإدارة المبيعات قريتي.`;
     return `https://wa.me/${OWNER_CONTACT.phoneInternational}?text=${encodeURIComponent(text)}`;
   },
 };

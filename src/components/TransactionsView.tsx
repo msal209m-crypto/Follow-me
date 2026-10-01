@@ -41,11 +41,13 @@ import { playScannerBeep } from '../utils/scannerAudio';
 interface TransactionsViewProps {
   onPrintReceipt: (transaction: Transaction) => void;
   onOpenOrderGoodsModal?: (type?: 'CASH' | 'CREDIT') => void;
+  onOpenAddItem?: (initialBarcode?: string) => void;
 }
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
   onPrintReceipt,
   onOpenOrderGoodsModal,
+  onOpenAddItem,
 }) => {
   const {
     items,
@@ -1955,6 +1957,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           onAddToCart={(item) => {
             addItemToCart(item, 1);
           }}
+          onAddNewItemWithBarcode={onOpenAddItem}
         />
       )}
 

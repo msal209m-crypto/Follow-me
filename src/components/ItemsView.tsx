@@ -44,7 +44,7 @@ import {
 type SortableField = keyof Item | 'lastSale' | 'lastPurchase';
 
 interface ItemsViewProps {
-  onOpenAddItem: () => void;
+  onOpenAddItem: (initialBarcode?: string) => void;
   onOpenOrderGoods?: (itemId?: string, type?: 'CASH' | 'CREDIT') => void;
   onEditItem: (item: Item) => void;
   onPrintStickersForItem: (itemId: string) => void;
@@ -1062,6 +1062,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
           onItemScanned={(item, rawBarcode) => {
             setSearchQuery(item ? item.barcode : rawBarcode);
           }}
+          onAddNewItemWithBarcode={onOpenAddItem}
         />
       )}
 

@@ -509,7 +509,7 @@ export const DailyReportsView: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-center justify-between pb-4 border-b border-slate-800 text-center sm:text-right gap-2">
           <div>
             <h3 className="text-xl font-black text-white">
-              {settings.storeName || (language === 'ar' ? 'تقرير فلو اب' : 'FlowUp Report')}
+              {settings.storeName || (language === 'ar' ? 'تقرير قريتي' : 'Qaryati Report')}
             </h3>
             <div className="text-xs text-slate-400 mt-1">
               {periodType === 'MONTH' ? t.monthSummaryTitle : t.daySummaryTitle}:{' '}

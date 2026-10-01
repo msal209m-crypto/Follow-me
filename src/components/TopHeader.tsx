@@ -576,21 +576,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </button>
 
-          {/* Theme Toggle (Dark/Light Mode) */}
-          <button
-            type="button"
-            id="top-theme-toggle-btn"
-            onClick={toggleTheme}
-            className="h-8 sm:h-9 w-8 sm:w-9 bg-slate-800/90 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 text-amber-200 hover:text-amber-100 rounded-xl flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm"
-            title={theme === 'dark' ? 'التبديل للوضع النهاري' : 'التبديل للوضع الليلي'}
-          >
-            {theme === 'dark' ? (
-              <Sun className="w-4 h-4 text-amber-400" />
-            ) : (
-              <Moon className="w-4 h-4 text-indigo-400" />
-            )}
-          </button>
-
           {/* 1. Currency Switcher */}
           <div className="relative" ref={currencyMenuRef}>
             <button

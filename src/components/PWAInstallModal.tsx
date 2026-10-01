@@ -62,7 +62,7 @@ export const PWAInstallModal: React.FC = () => {
           </span>
 
           <h2 className="text-lg sm:text-xl font-black text-white">
-            {language === 'ar' ? 'تثبيت تطبيق فلو اب على جهازك' : 'Install FlowApp on Your Device'}
+            {language === 'ar' ? 'تثبيت تطبيق قريتي على جهازك' : 'Install Qaryati on Your Device'}
           </h2>
           <p className="text-xs text-slate-300 mt-1 max-w-xs mx-auto">
             {language === 'ar'

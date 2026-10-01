@@ -110,7 +110,7 @@ export const PrintReceiptModal: React.FC<PrintReceiptModalProps> = ({
           >
             {/* Header */}
             <div className="text-center pb-3 border-b border-dashed border-slate-300">
-              <h2 className="font-black text-base text-slate-950">{settings.storeName || 'متجر فلو اب'}</h2>
+              <h2 className="font-black text-base text-slate-950">{settings.storeName || 'متجر قريتي'}</h2>
               {settings.address && (
                 <div className="text-[10px] text-slate-600 mt-0.5">{settings.address}</div>
               )}
@@ -297,7 +297,7 @@ export const PrintReceiptModal: React.FC<PrintReceiptModalProps> = ({
             {/* Footer */}
             <div className="text-center pt-3 border-t border-dashed border-slate-300 text-[10px] text-slate-500 space-y-0.5">
               <p className="font-medium">{settings.footerNote || 'شكراً لزيارتكم ونسعد بخدمتكم دائماً'}</p>
-              <p className="font-mono text-[9px]">تطبيق فلو اب (FlowApp) لإدارة المخزون والمبيعات</p>
+              <p className="font-mono text-[9px]">تطبيق قريتي (Qaryati) لإدارة التجارة والمبيعات</p>
             </div>
           </div>
         </div>

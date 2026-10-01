@@ -524,7 +524,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [activeMerchantId, userProfile?.storeName, userProfile?.village]);
 
-  // Sync state to local storage cache for instant offline responsiveness
+  // Sync state to local storage cache for instant offline responsiveness and IndexedDB for large-capacity offline reliability
   useEffect(() => {
     try {
       localStorage.setItem(userPrefix + STORAGE_KEYS.ITEMS, JSON.stringify(items));
@@ -541,6 +541,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         available: item.quantity > 0 && item.available !== false,
       }));
       localStorage.setItem('qaryati_products', JSON.stringify(qaryatiFormat));
+
+      // Save to IndexedDB asynchronously to handle rich images and bypass 5MB local quota
+      import('../utils/indexedDB').then(({ saveToIndexedDB }) => {
+        items.forEach((item) => saveToIndexedDB('items', item));
+      });
     } catch (e) {
       console.error('Failed to sync items to localStorage (quota or serialization issue):', e);
       try {
@@ -550,6 +555,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           imageUrl: item.imageUrl && item.imageUrl.startsWith('data:') ? DEFAULT_PRODUCT_IMAGE : item.imageUrl,
         }));
         localStorage.setItem(userPrefix + STORAGE_KEYS.ITEMS, JSON.stringify(lightweightItems));
+
+        import('../utils/indexedDB').then(({ saveToIndexedDB }) => {
+          items.forEach((item) => saveToIndexedDB('items', item));
+        });
       } catch (innerE) {
         console.error('Critical localStorage quota exceeded:', innerE);
       }
@@ -559,6 +568,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     try {
       localStorage.setItem(userPrefix + STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+      // Save to IndexedDB asynchronously for full sales history
+      import('../utils/indexedDB').then(({ saveToIndexedDB }) => {
+        transactions.forEach((tx) => saveToIndexedDB('transactions', tx));
+      });
     } catch (e) {
       console.error(e);
     }
@@ -567,6 +580,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     try {
       localStorage.setItem(userPrefix + STORAGE_KEYS.DEBTS, JSON.stringify(debts));
+      // Save to IndexedDB asynchronously for debts
+      import('../utils/indexedDB').then(({ saveToIndexedDB }) => {
+        debts.forEach((d) => saveToIndexedDB('debts', d));
+      });
     } catch (e) {
       console.error(e);
     }
@@ -587,6 +604,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error('Failed to sync cashiers to localStorage:', e);
     }
   }, [cashiers, userPrefix]);
+
+  // IndexedDB Auto-Sync Queue Processing & Browser Online Event Listener
+  useEffect(() => {
+    // 1. Initial process of queue if online right now at app mount/auth boot
+    if (navigator.onLine && currentUser) {
+      import('../utils/indexedDB').then(({ processOfflineSyncQueue }) => {
+        import('../lib/firestoreUtils').then(({ safeSetDoc }) => {
+          import('firebase/firestore').then(({ deleteDoc }) => {
+            processOfflineSyncQueue(currentUser.uid, safeSetDoc, deleteDoc, db)
+              .then(({ successCount }) => {
+                if (successCount > 0) {
+                  showNotification(`تمت مزامنة ${successCount} عملية بيع مؤجلة بنجاح مع السحابة!`, 'success');
+                }
+              })
+              .catch(console.warn);
+          });
+        });
+      });
+    }
+
+    // 2. Add online listener to auto-sync when network is restored
+    const handleOnline = () => {
+      if (currentUser) {
+        import('../utils/indexedDB').then(({ processOfflineSyncQueue }) => {
+          import('../lib/firestoreUtils').then(({ safeSetDoc }) => {
+            import('firebase/firestore').then(({ deleteDoc }) => {
+              processOfflineSyncQueue(currentUser.uid, safeSetDoc, deleteDoc, db)
+                .then(({ successCount }) => {
+                  if (successCount > 0) {
+                    showNotification(`تمت استعادة اتصال الإنترنت ومزامنة المبيعات المعلقة (${successCount} عمليات) مع السحابة بنجاح!`, 'success');
+                  }
+                })
+                .catch(console.warn);
+            });
+          });
+        });
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [currentUser, showNotification]);
 
   // صلاحيات الكاشير: عند تفعيل حساب الكاشير، إخفاء الحسابات والأرباح والمخزون، والاكتفاء بشاشة نقاط البيع فقط
   useEffect(() => {
@@ -1537,7 +1598,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
 
           if (canWriteToCloud && currentUser) {
-            safeSetDoc(doc(db, 'users', currentUser.uid, 'items', invItem.id), updated, { merge: true }).catch(console.warn);
+            if (!navigator.onLine) {
+              import('../utils/indexedDB').then(({ queueOfflineSync }) => {
+                queueOfflineSync('items', 'SET', updated);
+              });
+            } else {
+              safeSetDoc(doc(db, 'users', currentUser.uid, 'items', invItem.id), updated, { merge: true })
+                .catch(async (err) => {
+                  const { queueOfflineSync } = await import('../utils/indexedDB');
+                  await queueOfflineSync('items', 'SET', updated);
+                });
+            }
           }
 
           return updated;
@@ -1573,7 +1644,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
 
         if (canWriteToCloud && currentUser) {
-          safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', updatedDebt.id), updatedDebt).catch(console.warn);
+          if (!navigator.onLine) {
+            import('../utils/indexedDB').then(({ queueOfflineSync }) => {
+              queueOfflineSync('debts', 'SET', updatedDebt);
+            });
+          } else {
+            safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', updatedDebt.id), updatedDebt)
+              .catch(async (err) => {
+                const { queueOfflineSync } = await import('../utils/indexedDB');
+                await queueOfflineSync('debts', 'SET', updatedDebt);
+              });
+          }
         }
       } else {
         const newDebtRecord: DebtRecord = {
@@ -1594,7 +1675,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setDebts((prev) => [newDebtRecord, ...prev]);
 
         if (canWriteToCloud && currentUser) {
-          safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', newDebtRecord.id), newDebtRecord).catch(console.warn);
+          if (!navigator.onLine) {
+            import('../utils/indexedDB').then(({ queueOfflineSync }) => {
+              queueOfflineSync('debts', 'SET', newDebtRecord);
+            });
+          } else {
+            safeSetDoc(doc(db, 'users', currentUser.uid, 'debts', newDebtRecord.id), newDebtRecord)
+              .catch(async (err) => {
+                const { queueOfflineSync } = await import('../utils/indexedDB');
+                await queueOfflineSync('debts', 'SET', newDebtRecord);
+              });
+          }
         }
       }
     }
@@ -1623,7 +1714,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     if (canWriteToCloud && currentUser) {
-      safeSetDoc(doc(db, 'users', currentUser.uid, 'transactions', newTransaction.id), newTransaction).catch(console.warn);
+      if (!navigator.onLine) {
+        import('../utils/indexedDB').then(({ queueOfflineSync }) => {
+          queueOfflineSync('transactions', 'SET', newTransaction);
+        });
+      } else {
+        safeSetDoc(doc(db, 'users', currentUser.uid, 'transactions', newTransaction.id), newTransaction)
+          .catch(async (err) => {
+            const { queueOfflineSync } = await import('../utils/indexedDB');
+            await queueOfflineSync('transactions', 'SET', newTransaction);
+          });
+      }
     }
 
     return newTransaction;
@@ -2139,7 +2240,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       debtsCount: debts.length,
       totalInventoryCost: Number(totalCost.toFixed(2)),
       totalInventorySale: Number(totalSale.toFixed(2)),
-      storeName: settings.storeName || userProfile?.storeName || 'FlowApp Store',
+      storeName: settings.storeName || userProfile?.storeName || 'Qaryati Store',
       type: type,
       deviceInfo: typeof navigator !== 'undefined' ? `${navigator.platform || ''} (${navigator.userAgent?.slice(0, 40)}...)` : 'Web Device',
       data: {
@@ -2268,11 +2369,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const exportDataJSON = () => {
     const totalCost = items.reduce((acc, curr) => acc + (curr.costPrice || 0) * (curr.quantity || 0), 0);
     const totalSale = items.reduce((acc, curr) => acc + (curr.salePrice || 0) * (curr.quantity || 0), 0);
-    const storeTitle = settings.storeName || userProfile?.storeName || 'FlowApp Store';
+    const storeTitle = settings.storeName || userProfile?.storeName || 'Qaryati Store';
 
     const payload = {
       version: '2.0',
-      databaseType: 'FlowApp_Store_Database_Snapshot',
+      databaseType: 'Qaryati_Store_Database_Snapshot',
       exportedAt: new Date().toISOString(),
       storeName: storeTitle,
       user: currentUser?.email || 'guest',
@@ -2301,7 +2402,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `flowapp_db_backup_${safeStore}_${dateStr}.json`;
+    link.download = `qaryati_db_backup_${safeStore}_${dateStr}.json`;
     link.click();
     URL.revokeObjectURL(url);
 

@@ -33,6 +33,9 @@ export interface AdhanTopBarWidgetProps {
   className?: string;
 }
 
+// A file-level global variable to survive component remounts when navigating
+let globalLastPlayedPrayer: string | null = null;
+
 export const AdhanTopBarWidget: React.FC<AdhanTopBarWidgetProps> = ({
   isDarkMode = true,
   isRTL = true,
@@ -46,7 +49,22 @@ export const AdhanTopBarWidget: React.FC<AdhanTopBarWidgetProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAdhkarModalOpen, setIsAdhkarModalOpen] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const lastPlayedPrayerRef = useRef<string | null>(null);
+
+  // Recover last played prayer key from localStorage or global variable to prevent repeated trigger on remount/reload
+  const getLastPlayedPrayer = (): string | null => {
+    try {
+      return localStorage.getItem('qaryati_last_played_adhan') || globalLastPlayedPrayer;
+    } catch {
+      return globalLastPlayedPrayer;
+    }
+  };
+
+  const setLastPlayedPrayer = (key: string) => {
+    globalLastPlayedPrayer = key;
+    try {
+      localStorage.setItem('qaryati_last_played_adhan', key);
+    } catch {}
+  };
 
   useEffect(() => {
     const handleSettingsUpdate = (e: any) => {
@@ -78,8 +96,9 @@ export const AdhanTopBarWidget: React.FC<AdhanTopBarWidgetProps> = ({
         currentTimes.currentPrayer.name !== 'sunrise'
       ) {
         const prayerKey = `${currentTimes.currentPrayer.name}_${new Date().toDateString()}`;
-        if (lastPlayedPrayerRef.current !== prayerKey) {
-          lastPlayedPrayerRef.current = prayerKey;
+        const lastPlayed = getLastPlayedPrayer();
+        if (lastPlayed !== prayerKey) {
+          setLastPlayedPrayer(prayerKey);
           playAdhanAudio(settings.selectedAdhanSound, settings.volume);
         }
       }

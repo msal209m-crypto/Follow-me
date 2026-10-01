@@ -456,8 +456,8 @@ export interface Translations {
 export const translations: Record<Language, Translations> = {
   ar: {
     // General
-    appName: 'فلو اب',
-    appSubtitle: 'FlowApp - نظام إدارة المخزون ونقاط البيع',
+    appName: 'قريتي',
+    appSubtitle: 'قريتي - نظام إدارة التجارة المحلية المتكامل',
     verticalDashboard: 'لوحة التحكم الرأسية',
     language: 'اللغة',
     arabic: 'العربية',
@@ -851,7 +851,7 @@ export const translations: Record<Language, Translations> = {
     dragDropJsonPrompt: 'اسحب وأفلت ملف النسخة (.json) هنا، أو انقر للاختيار من جهازك',
     databaseBackupSecuredMsg: 'تم تصدير وتنزيل نسخة احتياطية يدوية شاملة لقاعدة البيانات بصيغة JSON بنجاح!',
     databaseRestoredSuccessMsg: 'تمت استعادة قاعدة البيانات بنجاح وتحديث كافة المنتجات والفواتير والديون!',
-    invalidJsonFileMsg: 'الملف المحدد غير صالح أو لا يحتوي على بنية بيانات فلو اب الصحيحة.',
+    invalidJsonFileMsg: 'الملف المحدد غير صالح أو لا يحتوي على بنية بيانات قريتي الصحيحة.',
     restoreModeReplace: 'استبدال كامل شامل (يوصى به لجهاز جديد)',
     restoreModeMerge: 'دمج ذكي مع البيانات الحالية (الحفاظ على كافة البيانات)',
     databaseSnapshotSummary: 'ملخص محتويات ملف النسخة الاحتياطية',
@@ -909,8 +909,8 @@ export const translations: Record<Language, Translations> = {
 
   en: {
     // General
-    appName: 'FlowApp',
-    appSubtitle: 'Inventory & POS Management System',
+    appName: 'Qaryati',
+    appSubtitle: 'Qaryati - Integrated Local Commerce System',
     verticalDashboard: 'Vertical Dashboard',
     language: 'Language',
     arabic: 'العربية',
@@ -1292,7 +1292,7 @@ export const translations: Record<Language, Translations> = {
     dragDropJsonPrompt: 'Drag and drop backup file (.json) here, or click to select from your device',
     databaseBackupSecuredMsg: 'Complete database JSON backup exported and secured successfully!',
     databaseRestoredSuccessMsg: 'Database restored successfully! Products, sales, and debts are up to date.',
-    invalidJsonFileMsg: 'The selected file is invalid or does not match the FlowApp store database format.',
+    invalidJsonFileMsg: 'The selected file is invalid or does not match the Qaryati store database format.',
     restoreModeReplace: 'Full Replace (Recommended for fresh setup/new device)',
     restoreModeMerge: 'Smart Merge with current data (Keeps all records intact)',
     databaseSnapshotSummary: 'Backup Snapshot Contents Summary',

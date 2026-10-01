@@ -190,7 +190,7 @@ export const OTPPasswordResetModal: React.FC<OTPPasswordResetModalProps> = ({
                 </button>
               </div>
               <p className="text-slate-300 text-[11px] leading-relaxed">
-                رمز التحقق المؤقت الخاص بحسابك في فلو اب هو:{' '}
+                رمز التحقق المؤقت الخاص بحسابك في قريتي هو:{' '}
                 <strong className="font-mono text-base text-emerald-300 font-black tracking-wider bg-emerald-950 px-2 py-0.5 rounded border border-emerald-500/30">
                   {activeCodeBanner}
                 </strong>
