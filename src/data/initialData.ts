@@ -4,8 +4,13 @@ import { getDefaultRatesForBase } from './currencies';
 export const INITIAL_ITEMS: Item[] = [];
 
 export const INITIAL_CASHIERS: Cashier[] = [
-  { id: 'c-1', name: 'المدير العام (مشرف)', role: 'OWNER', phone: '', active: true },
-  { id: 'c-2', name: 'كاشير المبيعات', role: 'CASHIER', phone: '', active: true, password: '123' },
+  {
+    id: 'cashier-owner',
+    name: 'مدير المتجر',
+    role: 'OWNER',
+    password: '1234',
+    active: true
+  }
 ];
 
 export const INITIAL_DEBTS: DebtRecord[] = [];
@@ -16,27 +21,27 @@ export const INITIAL_SETTINGS: StoreSettings = {
   storeName: 'متجرك الجديد',
   phone: '',
   taxNumber: '',
-  address: 'المملكة العربية السعودية',
+  address: '',
   currency: 'ر.س',
   exchangeRate: 1.0,
-  footerNote: 'شكراً لتعاملكم معنا - نسعد بخدمتكم دائماً',
+  footerNote: 'شكراً لتعاملكم معنا',
   powerSavingMode: false,
   multiCurrency: {
-    enabled: true,
+    enabled: false,
     baseCurrencyCode: 'SAR',
     secondaryCurrencyCode: 'USD',
-    showDualCurrency: true,
-    rates: getDefaultRatesForBase('SAR'),
+    showDualCurrency: false,
+    rates: {},
     lastUpdated: new Date().toISOString(),
-    autoFetchRates: true,
+    autoFetchRates: false,
   },
   stickerSettings: {
     showStoreName: true,
     showPrice: true,
     showBarcodeText: true,
     showItemName: true,
-    labelWidthMm: 50,
-    labelHeightMm: 30,
+    labelWidthMm: 38,
+    labelHeightMm: 25,
     fontSize: 'md',
   }
 };

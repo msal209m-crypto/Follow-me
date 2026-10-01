@@ -389,7 +389,7 @@ export const OrderGoodsView: React.FC<OrderGoodsViewProps> = ({
 
     setReceivedQuantities(initialQtyMap);
     setReceivedCostPrices(initialCostMap);
-    setReceiverName(currentCashier.name || 'مدير الفرع');
+    setReceiverName(currentCashier?.name || 'مدير الفرع');
     setReceiptNotes('');
     setReceiptPaidAmount(order.paidAmount ? String(order.paidAmount) : '');
     setReceiptPaymentMethod(order.paymentMethod || 'CASH');
@@ -421,7 +421,7 @@ export const OrderGoodsView: React.FC<OrderGoodsViewProps> = ({
       receivedItems: receivedItemsPayload,
       paidAmount: paidVal,
       paymentMethod: receiptPaymentMethod,
-      receiverName: receiverName.trim() || currentCashier.name,
+      receiverName: receiverName.trim() || currentCashier?.name || 'مدير الفرع',
       notes: receiptNotes.trim(),
     });
 

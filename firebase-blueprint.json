@@ -1,175 +1,109 @@
 {
   "entities": {
-    "Store": {
-      "title": "Store",
-      "description": "Village grocery or store record",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "ownerName": { "type": "string" },
-        "phone": { "type": "string" },
-        "cityOrVillage": { "type": "string" },
-        "status": { "type": "string" },
-        "isApproved": { "type": "boolean" },
-        "itemsCount": { "type": "number" }
-      },
-      "required": ["id", "name", "cityOrVillage"]
-    },
-    "Item": {
-      "title": "Item",
-      "description": "Store product item",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "barcode": { "type": "string" },
-        "salePrice": { "type": "number" },
-        "costPrice": { "type": "number" },
-        "quantity": { "type": "number" },
-        "unit": { "type": "string" },
-        "category": { "type": "string" },
-        "image": { "type": "string" },
-        "imageUrl": { "type": "string" },
-        "available": { "type": "boolean" },
-        "storeId": { "type": "string" },
-        "merchantId": { "type": "string" }
-      },
-      "required": ["id", "name", "salePrice"]
-    },
     "Merchant": {
-      "title": "Merchant",
-      "description": "Registered merchant account record",
+      "title": "Merchant Account",
+      "description": "Professional account details for store owners",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" },
-        "phone": { "type": "string" },
-        "nationalId": { "type": "string" },
-        "storeName": { "type": "string" },
-        "village": { "type": "string" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "phone": { "type": "string", "pattern": "^\\+?[0-9]{8,15}$" },
+        "nationalId": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "storeName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "village": { "type": "string", "minLength": 2, "maxLength": 100 },
         "isApproved": { "type": "boolean" },
-        "createdAt": { "type": "string" }
+        "kycStatus": { "type": "string", "enum": ["PENDING_REVIEW", "VERIFIED", "REJECTED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "name", "phone", "storeName", "village"]
+      "required": ["id", "name", "phone", "nationalId", "storeName", "village", "isApproved"]
     },
     "Driver": {
-      "title": "Driver",
-      "description": "Registered delivery driver record",
+      "title": "Delivery Driver",
+      "description": "Account details for delivery personnel",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" },
-        "phone": { "type": "string" },
-        "nationalId": { "type": "string" },
-        "vehicleType": { "type": "string" },
-        "zone": { "type": "string" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "phone": { "type": "string", "pattern": "^\\+?[0-9]{8,15}$" },
+        "nationalId": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "vehicleInfo": { "type": "string", "maxLength": 200 },
         "isApproved": { "type": "boolean" },
-        "createdAt": { "type": "string" }
+        "status": { "type": "string", "enum": ["PENDING", "ACTIVE", "SUSPENDED"] },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "name", "phone"]
+      "required": ["id", "name", "phone", "nationalId", "isApproved", "status"]
     },
     "Customer": {
-      "title": "Customer",
-      "description": "Registered customer account record",
+      "title": "Platform Customer",
+      "description": "Details for users buying from stores",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" },
-        "phone": { "type": "string" },
-        "nationalId": { "type": "string" },
-        "village": { "type": "string" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "phone": { "type": "string", "pattern": "^\\+?[0-9]{8,15}$" },
+        "nationalId": { "type": "string", "minLength": 8, "maxLength": 20 },
+        "village": { "type": "string", "minLength": 2, "maxLength": 100 },
         "isApproved": { "type": "boolean" },
-        "createdAt": { "type": "string" }
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "name", "phone"]
+      "required": ["id", "name", "phone", "nationalId", "village", "isApproved"]
     },
-    "DeliveryOrder": {
-      "title": "DeliveryOrder",
-      "description": "Marketplace delivery order record",
+    "Order": {
+      "title": "Delivery Order",
+      "description": "Operational order records",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "orderNumber": { "type": "string" },
-        "storeId": { "type": "string" },
-        "storeName": { "type": "string" },
-        "customerName": { "type": "string" },
-        "customerPhone": { "type": "string" },
-        "status": { "type": "string" },
-        "totalAmount": { "type": "number" },
-        "createdAt": { "type": "string" }
+        "customerId": { "type": "string" },
+        "merchantId": { "type": "string" },
+        "driverId": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "PREPARING", "READY", "PICKED_UP", "DELIVERED", "CANCELLED"] },
+        "total": { "type": "number", "minimum": 0 },
+        "items": { "type": "array" },
+        "village": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "customerName", "status"]
+      "required": ["id", "customerId", "merchantId", "status", "total", "items", "village"]
     },
-    "Ad": {
-      "title": "Ad",
-      "description": "Village marketplace advertisement record",
+    "Item": {
+      "title": "Store Product",
+      "description": "Inventory items for a specific store",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "title": { "type": "string" },
-        "village": { "type": "string" }
+        "barcode": { "type": "string" },
+        "name": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string" },
+        "quantity": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "salePrice": { "type": "number" },
+        "merchantId": { "type": "string" },
+        "storeId": { "type": "string" }
       },
-      "required": ["id", "title"]
-    },
-    "LicenseKey": {
-      "title": "LicenseKey",
-      "description": "Activation license key",
-      "type": "object",
-      "properties": {
-        "key": { "type": "string" },
-        "is_used": { "type": "boolean" }
-      },
-      "required": ["key", "is_used"]
-    },
-    "UserProfile": {
-      "title": "UserProfile",
-      "description": "User profile metadata",
-      "type": "object",
-      "properties": {
-        "email": { "type": "string" },
-        "displayName": { "type": "string" },
-        "role": { "type": "string" }
-      },
-      "required": ["email", "displayName"]
+      "required": ["id", "name", "quantity", "costPrice", "salePrice", "merchantId"]
     }
   },
   "firestore": {
-    "/stores/{storeId}": {
-      "schema": "Store",
-      "description": "Public village stores directory"
-    },
-    "/stores/{storeId}/items/{itemId}": {
-      "schema": "Item",
-      "description": "Store inventory products subcollection"
-    },
     "/merchants/{merchantId}": {
       "schema": "Merchant",
-      "description": "Central merchants registry collection"
+      "description": "Merchant profiles"
     },
     "/drivers/{driverId}": {
       "schema": "Driver",
-      "description": "Central drivers registry collection"
+      "description": "Driver profiles"
     },
     "/customers/{customerId}": {
       "schema": "Customer",
-      "description": "Central customers registry collection"
+      "description": "Customer profiles"
     },
     "/delivery_orders/{orderId}": {
-      "schema": "DeliveryOrder",
-      "description": "Central delivery orders collection"
+      "schema": "Order",
+      "description": "Platform delivery orders"
     },
-    "/ads/{adId}": {
-      "schema": "Ad",
-      "description": "Advertisements collection"
-    },
-    "/license_keys/{keyId}": {
-      "schema": "LicenseKey",
-      "description": "Activation license keys collection"
-    },
-    "/users/{userId}": {
-      "schema": "UserProfile",
-      "description": "User profile document"
+    "/stores/{storeId}/items/{itemId}": {
+      "schema": "Item",
+      "description": "Inventory products per store"
     }
   }
 }

@@ -353,7 +353,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Clock className="w-3.5 h-3.5 text-cyan-400" />
             <span className="font-semibold text-slate-300">{formattedTodayDate}</span>
             <span className="text-slate-600">•</span>
-            <span>{currentCashier.name}</span>
+            <span>{currentCashier?.name || '-'}</span>
           </div>
 
           <button
@@ -429,467 +429,237 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Quick Action Navigation Bar */}
-          <div className="bg-slate-900/90 border border-slate-800 p-2 rounded-2xl flex items-center justify-between gap-2 overflow-x-auto no-scrollbar shadow-sm">
-            <button
-              type="button"
-              id="dashboard-btn-pos"
-              onClick={() => onNavigate('transactions')}
-              className="flex-1 min-w-[130px] py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
-            >
-              <ShoppingCart className="w-3.5 h-3.5" />
-              <span>{language === 'ar' ? 'نقطة البيع (POS) 🛒' : 'Open POS 🛒'}</span>
-            </button>
-            <button
-              type="button"
-              id="dashboard-btn-add-item"
-              onClick={onOpenAddItem}
-              className="flex-1 min-w-[105px] py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95 transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5 text-teal-400" />
-              <span>{language === 'ar' ? 'إضافة صنف' : 'Add Item'}</span>
-            </button>
-            <button
-              type="button"
-              id="dashboard-btn-order-goods"
-              onClick={() => onOpenOrderGoods(undefined, 'CASH')}
-              className="flex-1 min-w-[105px] py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95 transition-all cursor-pointer"
-            >
-              <Truck className="w-3.5 h-3.5 text-amber-400" />
-              <span>{language === 'ar' ? 'توريد بضاعة' : 'Inward'}</span>
-            </button>
-            <button
-              type="button"
-              id="dashboard-btn-invoices"
-              onClick={() => {
-                setModalSearch('');
-                setActiveModal('today_invoices');
-              }}
-              className="flex-1 min-w-[105px] py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95 transition-all cursor-pointer"
-            >
-              <FileText className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{language === 'ar' ? 'فواتير اليوم' : 'Invoices'}</span>
-            </button>
-            <button
-              type="button"
-              id="dashboard-btn-exchange-rate"
-              onClick={() => setShowExchangeRateModal(true)}
-              className="flex-1 min-w-[110px] py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95 transition-all cursor-pointer"
-            >
-              <Coins className="w-3.5 h-3.5 text-amber-400" />
-              <span>{language === 'ar' ? 'سعر الصرف 💱' : 'Exchange Rate'}</span>
-            </button>
+      {/* QUICK ACTIONS BAR (Compact and elegant) */}
+      <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-1">
+        <button
+          onClick={onOpenAddItem}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 hover:border-emerald-500/50 hover:text-emerald-400 transition-all shrink-0 active:scale-95"
+        >
+          <Plus className="w-4 h-4" />
+          <span>{language === 'ar' ? 'إضافة صنف' : 'Add Item'}</span>
+        </button>
+        <button
+          onClick={() => onOpenOrderGoods(undefined, 'CASH')}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 hover:border-amber-500/50 hover:text-amber-400 transition-all shrink-0 active:scale-95"
+        >
+          <Truck className="w-4 h-4" />
+          <span>{language === 'ar' ? 'توريد بضاعة' : 'Supply'}</span>
+        </button>
+        <button
+          onClick={() => setShowExchangeRateModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 hover:border-cyan-500/50 hover:text-cyan-400 transition-all shrink-0 active:scale-95"
+        >
+          <Coins className="w-4 h-4" />
+          <span>{language === 'ar' ? 'سعر الصرف' : 'Rate'}</span>
+        </button>
+      </div>
+
+      {/* 2-COLUMN BALANCED METRICS GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* CARD 1: TODAY SALES */}
+        <button
+          type="button"
+          onMouseEnter={() => setHoveredCardKey('today_sales')}
+          onMouseLeave={() => setHoveredCardKey(null)}
+          onClick={() => {
+            setModalSearch('');
+            setActiveModal('today_sales');
+          }}
+          className={`group relative flex flex-col justify-between p-4 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-emerald-500/60 transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[140px] backdrop-blur-sm`}
+        >
+          <div className="flex items-center justify-between w-full">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <Maximize2 className="w-4 h-4 text-slate-600 group-hover:text-emerald-400 transition-colors" />
           </div>
 
-          {/* CRITICAL SHORTAGE MINI-ALERT (Sleek & Unobtrusive) */}
-          {inventoryStats.lowStockCount > 0 && (
-            <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl px-3.5 py-2 flex items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-                <span className="text-amber-200 font-bold truncate">
-                  {language === 'ar'
-                    ? `تنبيه: يوجد ${inventoryStats.lowStockCount} أصناف قاربت على النفاد`
-                    : `Warning: ${inventoryStats.lowStockCount} items low on stock`}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setModalSearch('');
-                  setActiveModal('low_stock');
-                }}
-                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[11px] shrink-0 transition-colors cursor-pointer"
-              >
-                {language === 'ar' ? 'طلب التوريد' : 'Reorder'}
-              </button>
+          <div className="mt-4 w-full">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {t.todaySales || 'مبيعات اليوم'}
             </div>
-          )}
-
-          {/* EXCHANGE RATE CHANGE ALERT */}
-          {(settings.exchangeRate && Math.abs(settings.exchangeRate - 1.0) > 0.05) && (
-            <div className="bg-sky-950/40 border border-sky-500/40 rounded-xl px-3.5 py-2 flex items-center justify-between gap-2 text-xs flex-wrap">
-              <div className="flex items-center gap-2 min-w-0">
-                <AlertTriangle className="w-4 h-4 text-sky-400 shrink-0" />
-                <span className="text-sky-200 font-bold truncate">
-                  {language === 'ar'
-                    ? `تنبيه: سعر الصرف الحالي (${settings.exchangeRate}) قد يتطلب مراجعة وتحديث أسعار المخزون`
-                    : `Alert: Current exchange rate (${settings.exchangeRate}) may require price review`}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => onNavigate('items')}
-                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-[11px] shrink-0 transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  <span>{language === 'ar' ? 'تحديث أسعار المخزون ⚡' : 'Update Prices'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onOpenSettings && onOpenSettings('GENERAL')}
-                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg text-[11px] shrink-0 transition-colors cursor-pointer"
-                >
-                  {language === 'ar' ? 'ضبط الصرف' : 'Settings'}
-                </button>
-              </div>
+            <div className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight mt-1 truncate">
+              {todaySalesTotal.toLocaleString('en-US', { minimumFractionDigits: 1 })}{' '}
+              <span className="text-xs text-emerald-400 font-sans">{settings.currency}</span>
             </div>
-          )}
-
-          {/* 2-COLUMN BALANCED METRICS GRID (Smooth height transition animation on hover or click) */}
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-            {/* CARD 1: TODAY SALES */}
-            <button
-              type="button"
-              onMouseEnter={() => setHoveredCardKey('today_sales')}
-              onMouseLeave={() => setHoveredCardKey(null)}
-              onClick={() => {
-                setModalSearch('');
-                setActiveModal('today_sales');
-              }}
-              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-emerald-500/60 transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
-            >
-              <div className="flex items-center justify-between w-full">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
-                  <TrendingUp className="w-4 h-4" />
-                </div>
-                <Maximize2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
-              </div>
-
-              <div className="mt-2 w-full">
-                <div className="text-xs font-bold text-slate-300">
-                  {t.todaySales || 'مبيعات اليوم'}
-                </div>
-                <div className="text-base sm:text-lg font-black text-white font-mono tracking-tight mt-0.5 truncate">
-                  {todaySalesTotal.toLocaleString('en-US', { minimumFractionDigits: 1 })}{' '}
-                  <span className="text-[10px] text-emerald-400 font-sans">{settings.currency}</span>
-                </div>
-                <div className="text-[10px] text-emerald-400/90 font-mono font-medium truncate mt-0.5">
-                  +{todayProfit.toLocaleString('en-US', { minimumFractionDigits: 0 })} {settings.currency} {language === 'ar' ? 'ربح' : 'profit'} • {todaySalesTransactions.length} {language === 'ar' ? 'فواتير' : 'tx'}
-                </div>
-
-                {/* Smooth Expandable Summary Details Drawer */}
-                <div
-                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
-                    hoveredCardKey === 'today_sales' || expandedCardKey === 'today_sales'
-                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
-                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
-                  }`}
-                >
-                  <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60">
-                    <div>
-                      <span className="text-slate-500 block text-[9px]">متوسط الفاتورة:</span>
-                      <span className="font-bold text-emerald-400 font-mono">
-                        {todaySalesTransactions.length > 0 ? (todaySalesTotal / todaySalesTransactions.length).toFixed(1) : 0} {settings.currency}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[9px]">نسبة الهامش:</span>
-                      <span className="font-bold text-white font-mono">
-                        {todaySalesTotal > 0 ? ((todayProfit / todaySalesTotal) * 100).toFixed(0) : 0}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </button>
-
-            {/* CARD 2: CASH & LIQUIDITY */}
-            <button
-              type="button"
-              onMouseEnter={() => setHoveredCardKey('cash_liquidity')}
-              onMouseLeave={() => setHoveredCardKey(null)}
-              onClick={() => {
-                setModalSearch('');
-                setActiveModal('cash_liquidity');
-              }}
-              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/60 transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
-            >
-              <div className="flex items-center justify-between w-full">
-                <div className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
-                  <Wallet className="w-4 h-4" />
-                </div>
-                <Maximize2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 transition-colors" />
-              </div>
-
-              <div className="mt-2 w-full">
-                <div className="text-xs font-bold text-slate-300">
-                  {t.cashRegisterBalance || 'الخزينة والسيولة'}
-                </div>
-                <div className="text-base sm:text-lg font-black text-cyan-300 font-mono tracking-tight mt-0.5 truncate">
-                  {(financialSummary?.cashBalance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 1 })}{' '}
-                  <span className="text-[10px] text-slate-400 font-sans">{settings.currency}</span>
-                </div>
-                <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                  بنك: {(financialSummary?.bankTransferBalance ?? 0).toFixed(0)} • شبكة: {(financialSummary?.cardBalance ?? 0).toFixed(0)}
-                </div>
-
-                {/* Smooth Expandable Summary Details Drawer */}
-                <div
-                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
-                    hoveredCardKey === 'cash_liquidity' || expandedCardKey === 'cash_liquidity'
-                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
-                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
-                  }`}
-                >
-                  <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60">
-                    <div>
-                      <span className="text-slate-500 block text-[9px]">نقداً بالدرج:</span>
-                      <span className="font-bold text-cyan-300 font-mono">
-                        {(financialSummary?.cashBalance ?? 0).toFixed(0)} {settings.currency}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[9px]">إلكتروني وبنك:</span>
-                      <span className="font-bold text-teal-300 font-mono">
-                        {((financialSummary?.bankTransferBalance ?? 0) + (financialSummary?.cardBalance ?? 0)).toFixed(0)} {settings.currency}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </button>
-
-            {/* CARD 3: LOW STOCK SHORTAGES */}
-            <button
-              type="button"
-              onMouseEnter={() => setHoveredCardKey('low_stock')}
-              onMouseLeave={() => setHoveredCardKey(null)}
-              onClick={() => {
-                setModalSearch('');
-                setActiveModal('low_stock');
-              }}
-              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl border transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px] ${
-                inventoryStats.lowStockCount > 0
-                  ? 'bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-900 border-amber-500/50 hover:border-amber-400'
-                  : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
-              }`}
-            >
-              <div className="flex items-center justify-between w-full">
-                <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${
-                  inventoryStats.lowStockCount > 0
-                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 animate-pulse'
-                    : 'bg-slate-800 text-slate-400 border-slate-700'
-                }`}>
-                  <AlertTriangle className="w-4 h-4" />
-                </div>
-                {inventoryStats.lowStockCount > 0 ? (
-                  <span className="text-[10px] font-extrabold bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full">
-                    {inventoryStats.lowStockCount} {language === 'ar' ? 'ناقص!' : 'low!'}
-                  </span>
-                ) : (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                )}
-              </div>
-
-              <div className="mt-2 w-full">
-                <div className="text-xs font-bold text-slate-300">
-                  {t.lowStockAlerts || 'نواقص المخزون'}
-                </div>
-                <div className={`text-base sm:text-lg font-black font-mono tracking-tight mt-0.5 truncate ${
-                  inventoryStats.lowStockCount > 0 ? 'text-amber-400' : 'text-emerald-400'
-                }`}>
-                  {inventoryStats.lowStockCount > 0
-                    ? `${inventoryStats.lowStockCount} ${language === 'ar' ? 'أصناف بحاجة توريد' : 'items'}`
-                    : language === 'ar' ? 'المخزون ممتاز' : 'All Stock Good'}
-                </div>
-                <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                  {inventoryStats.lowStockCount > 0
-                    ? language === 'ar' ? 'اضغط للتوريد والطلب المباشر' : 'Click to reorder'
-                    : language === 'ar' ? 'كافة الأصناف فوق حد الأمان' : 'No shortages'}
-                </div>
-
-                {/* Smooth Expandable Summary Details Drawer */}
-                <div
-                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
-                    hoveredCardKey === 'low_stock' || expandedCardKey === 'low_stock'
-                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
-                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
-                  }`}
-                >
-                  <div className="text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60 space-y-0.5">
-                    <div className="flex items-center justify-between text-[9px]">
-                      <span className="text-slate-400">حالة حد الأمان:</span>
-                      <span className={inventoryStats.lowStockCount > 0 ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
-                        {inventoryStats.lowStockCount > 0 ? `${inventoryStats.lowStockCount} صنف بحاجة فورية` : 'المخزون آمن تماماً'}
-                      </span>
-                    </div>
-                    <div className="text-[9px] text-slate-400 truncate">
-                      تدقيق آلي متكرر يومياً • انقر لطلب التوريد السريع
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </button>
-
-            {/* CARD 4: INVENTORY CAPITAL */}
-            <button
-              type="button"
-              onMouseEnter={() => setHoveredCardKey('inventory_capital')}
-              onMouseLeave={() => setHoveredCardKey(null)}
-              onClick={() => {
-                setModalSearch('');
-                setActiveModal('inventory_capital');
-              }}
-              className={`group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-teal-500/60 transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[110px]`}
-            >
-              <div className="flex items-center justify-between w-full">
-                <div className="w-8 h-8 rounded-xl bg-teal-500/15 text-teal-400 border border-teal-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
-                  <Package className="w-4 h-4" />
-                </div>
-                <Maximize2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-teal-400 transition-colors" />
-              </div>
-
-              <div className="mt-2 w-full">
-                <div className="text-xs font-bold text-slate-300">
-                  {t.inventoryValueCost || 'رأس مال المخزون'}
-                </div>
-                <div className="text-base sm:text-lg font-black text-white font-mono tracking-tight mt-0.5 truncate">
-                  {inventoryStats.totalCostValue.toLocaleString('en-US', { minimumFractionDigits: 0 })}{' '}
-                  <span className="text-[10px] text-teal-400 font-sans">{settings.currency}</span>
-                </div>
-                <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                  {inventoryStats.totalItemsCount} {language === 'ar' ? 'صنف' : 'items'} • {inventoryStats.totalStockUnits} {language === 'ar' ? 'قطعة' : 'units'}
-                </div>
-
-                {/* Smooth Expandable Summary Details Drawer */}
-                <div
-                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
-                    hoveredCardKey === 'inventory_capital' || expandedCardKey === 'inventory_capital'
-                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
-                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
-                  }`}
-                >
-                  <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60">
-                    <div>
-                      <span className="text-slate-500 block text-[9px]">القيمة البيعية التقديرية:</span>
-                      <span className="font-bold text-teal-300 font-mono">
-                        {(inventoryStats.totalCostValue * 1.25).toFixed(0)} {settings.currency}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[9px]">الوحدات المتوفرة:</span>
-                      <span className="font-bold text-white font-mono">
-                        {inventoryStats.totalStockUnits} وحدة
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </button>
-
-            {/* CARD 5: DEBTS RECORD */}
-            <button
-              type="button"
-              onMouseEnter={() => setHoveredCardKey('debts_summary')}
-              onMouseLeave={() => setHoveredCardKey(null)}
-              onClick={() => {
-                setModalSearch('');
-                setActiveModal('debts_summary');
-              }}
-              className="group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-rose-500/60 transition-all duration-300 ease-out text-right cursor-pointer shadow-sm min-h-[110px]"
-            >
-              <div className="flex items-center justify-between w-full">
-                <div className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
-                  <CreditCard className="w-4 h-4" />
-                </div>
-                <Maximize2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-rose-400 transition-colors" />
-              </div>
-
-              <div className="mt-2 w-full">
-                <div className="text-xs font-bold text-slate-300">
-                  {t.totalDebtsDue || 'سجل الديون والآجل'}
-                </div>
-                <div className="text-base sm:text-lg font-black text-rose-400 font-mono tracking-tight mt-0.5 truncate">
-                  {(debtsSummary?.totalDebt ?? 0).toLocaleString('en-US', { minimumFractionDigits: 1 })}{' '}
-                  <span className="text-[10px] text-slate-400 font-sans">{settings.currency}</span>
-                </div>
-                <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                  لنا: <span className="text-emerald-400 font-bold">{(debtsSummary?.customerDebt ?? 0).toFixed(0)}</span> • علينا: <span className="text-rose-400 font-bold">{(debtsSummary?.supplierDebt ?? 0).toFixed(0)}</span>
-                </div>
-
-                {/* Smooth Expandable Summary Details Drawer */}
-                <div
-                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
-                    hoveredCardKey === 'debts_summary' || expandedCardKey === 'debts_summary'
-                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
-                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
-                  }`}
-                >
-                  <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60">
-                    <div>
-                      <span className="text-slate-500 block text-[9px]">ديون الزبائن (لنا):</span>
-                      <span className="font-bold text-emerald-400 font-mono">
-                        {(debtsSummary?.customerDebt ?? 0).toFixed(0)} {settings.currency}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[9px]">ديون الموردين (علينا):</span>
-                      <span className="font-bold text-rose-400 font-mono">
-                        {(debtsSummary?.supplierDebt ?? 0).toFixed(0)} {settings.currency}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </button>
-
-            {/* CARD 6: TODAY'S INVOICES & SHIFT */}
-            <button
-              type="button"
-              onMouseEnter={() => setHoveredCardKey('today_invoices')}
-              onMouseLeave={() => setHoveredCardKey(null)}
-              onClick={() => {
-                setModalSearch('');
-                setActiveModal('today_invoices');
-              }}
-              className="group relative flex flex-col justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-indigo-500/60 transition-all duration-300 ease-out text-right cursor-pointer shadow-sm min-h-[110px]"
-            >
-              <div className="flex items-center justify-between w-full">
-                <div className="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
-                  <FileSpreadsheet className="w-4 h-4" />
-                </div>
-                <span className="text-[10px] font-bold bg-indigo-950/80 text-indigo-300 border border-indigo-700/50 px-2 py-0.5 rounded-full">
-                  {todaySalesTransactions.length} {language === 'ar' ? 'فاتورة' : 'invoices'}
-                </span>
-              </div>
-
-              <div className="mt-2 w-full">
-                <div className="text-xs font-bold text-slate-300">
-                  {language === 'ar' ? 'إقفال الوردية وفواتير اليوم' : "Daily Closing & Invoices"}
-                </div>
-                <div className="text-base sm:text-lg font-black text-indigo-300 font-mono tracking-tight mt-0.5 truncate">
-                  {todaySalesTotal.toLocaleString('en-US', { minimumFractionDigits: 0 })}{' '}
-                  <span className="text-[10px] text-indigo-400 font-sans">{settings.currency}</span>
-                </div>
-                <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                  {language === 'ar' ? 'كشف تفصيلي وطباعة تقرير Z' : 'Z-Report & drawer audit'}
-                </div>
-
-                {/* Smooth Expandable Summary Details Drawer */}
-                <div
-                  className={`w-full overflow-hidden transition-all duration-300 ease-in-out ${
-                    hoveredCardKey === 'today_invoices' || expandedCardKey === 'today_invoices'
-                      ? 'max-h-24 opacity-100 mt-2.5 pt-2 border-t border-slate-800/80'
-                      : 'max-h-0 opacity-0 mt-0 pt-0 pointer-events-none'
-                  }`}
-                >
-                  <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/60">
-                    <div>
-                      <span className="text-slate-500 block text-[9px]">عمليات مسجلة:</span>
-                      <span className="font-bold text-indigo-300 font-mono">
-                        {todaySalesTransactions.length} عملية
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[9px]">حالة الوردية:</span>
-                      <span className="font-bold text-emerald-400">نشطة وقابلة للإقفال</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </button>
+            <div className="text-xs text-emerald-400/80 font-mono font-medium truncate mt-1">
+              +{todayProfit.toLocaleString('en-US', { minimumFractionDigits: 0 })} {settings.currency} {language === 'ar' ? 'ربح تقديري' : 'est. profit'}
+            </div>
           </div>
+        </button>
+
+        {/* CARD 2: CASH & LIQUIDITY */}
+        <button
+          type="button"
+          onMouseEnter={() => setHoveredCardKey('cash_liquidity')}
+          onMouseLeave={() => setHoveredCardKey(null)}
+          onClick={() => {
+            setModalSearch('');
+            setActiveModal('cash_liquidity');
+          }}
+          className={`group relative flex flex-col justify-between p-4 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-cyan-500/60 transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[140px] backdrop-blur-sm`}
+        >
+          <div className="flex items-center justify-between w-full">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
+              <Wallet className="w-5 h-5" />
+            </div>
+            <Maximize2 className="w-4 h-4 text-slate-600 group-hover:text-cyan-400 transition-colors" />
+          </div>
+
+          <div className="mt-4 w-full">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {t.cashRegisterBalance || 'الخزينة والسيولة'}
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-cyan-300 font-mono tracking-tight mt-1 truncate">
+              {(financialSummary?.cashBalance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 1 })}{' '}
+              <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
+            </div>
+            <div className="text-xs text-slate-400 truncate mt-1">
+              {language === 'ar' ? 'بنك / شبكة:' : 'Bank/POS:'} {( (financialSummary?.bankTransferBalance ?? 0) + (financialSummary?.cardBalance ?? 0) ).toFixed(0)} {settings.currency}
+            </div>
+          </div>
+        </button>
+
+        {/* CARD 3: INVENTORY CAPITAL */}
+        <button
+          type="button"
+          onMouseEnter={() => setHoveredCardKey('inventory_capital')}
+          onMouseLeave={() => setHoveredCardKey(null)}
+          onClick={() => {
+            setModalSearch('');
+            setActiveModal('inventory_capital');
+          }}
+          className={`group relative flex flex-col justify-between p-4 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-teal-500/60 transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[140px] backdrop-blur-sm`}
+        >
+          <div className="flex items-center justify-between w-full">
+            <div className="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
+              <Package className="w-5 h-5" />
+            </div>
+            <Maximize2 className="w-4 h-4 text-slate-600 group-hover:text-teal-400 transition-colors" />
+          </div>
+
+          <div className="mt-4 w-full">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {t.inventoryValueCost || 'قيمة المخزون'}
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight mt-1 truncate">
+              {inventoryStats.totalCostValue.toLocaleString('en-US', { minimumFractionDigits: 0 })}{' '}
+              <span className="text-xs text-teal-400 font-sans">{settings.currency}</span>
+            </div>
+            <div className="text-xs text-slate-400 truncate mt-1">
+              {inventoryStats.totalItemsCount} {language === 'ar' ? 'صنف مسجل' : 'registered items'}
+            </div>
+          </div>
+        </button>
+
+        {/* CARD 4: LOW STOCK SHORTAGES */}
+        <button
+          type="button"
+          onMouseEnter={() => setHoveredCardKey('low_stock')}
+          onMouseLeave={() => setHoveredCardKey(null)}
+          onClick={() => {
+            setModalSearch('');
+            setActiveModal('low_stock');
+          }}
+          className={`group relative flex flex-col justify-between p-4 rounded-2xl border transition-all duration-300 ease-out ${isRTL ? 'text-right' : 'text-left'} cursor-pointer shadow-sm min-h-[140px] backdrop-blur-sm ${
+            inventoryStats.lowStockCount > 0
+              ? 'bg-amber-950/20 border-amber-500/40 hover:border-amber-400'
+              : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+          }`}
+        >
+          <div className="flex items-center justify-between w-full">
+            <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110 ${
+              inventoryStats.lowStockCount > 0
+                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                : 'bg-slate-800/50 text-slate-500 border-slate-700/50'
+            }`}>
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            {inventoryStats.lowStockCount > 0 && (
+              <span className="text-[10px] font-black bg-amber-500 text-slate-950 px-2.5 py-1 rounded-lg animate-pulse">
+                {inventoryStats.lowStockCount} {language === 'ar' ? 'نواقص عاجلة' : 'low stock'}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-4 w-full">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {t.lowStockAlerts || 'نواقص المخزون'}
+            </div>
+            <div className={`text-xl sm:text-2xl font-black font-mono tracking-tight mt-1 truncate ${
+              inventoryStats.lowStockCount > 0 ? 'text-amber-400' : 'text-emerald-500'
+            }`}>
+              {inventoryStats.lowStockCount > 0
+                ? `${inventoryStats.lowStockCount} ${language === 'ar' ? 'أصناف' : 'items'}`
+                : language === 'ar' ? 'المخزون مكتمل' : 'All Good'}
+            </div>
+            <div className="text-xs text-slate-500 truncate mt-1">
+              {inventoryStats.lowStockCount > 0
+                ? language === 'ar' ? 'اضغط لعرض النواقص' : 'View shortages'
+                : language === 'ar' ? 'لا يوجد أصناف منتهية' : 'No items out of stock'}
+            </div>
+          </div>
+        </button>
+
+        {/* CARD 5: DEBTS RECORD */}
+        <button
+          type="button"
+          onMouseEnter={() => setHoveredCardKey('debts_summary')}
+          onMouseLeave={() => setHoveredCardKey(null)}
+          onClick={() => {
+            setModalSearch('');
+            setActiveModal('debts_summary');
+          }}
+          className="group relative flex flex-col justify-between p-4 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-rose-500/60 transition-all duration-300 ease-out cursor-pointer shadow-sm min-h-[140px] backdrop-blur-sm"
+        >
+          <div className="flex items-center justify-between w-full">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110">
+              <CreditCard className="w-5 h-5" />
+            </div>
+            <Maximize2 className="w-4 h-4 text-slate-600 group-hover:text-rose-400 transition-colors" />
+          </div>
+
+          <div className="mt-4 w-full">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {t.totalDebtsDue || 'إجمالي الديون والآجل'}
+            </div>
+            <div className="text-xl sm:text-2xl font-black text-rose-400 font-mono tracking-tight mt-1 truncate">
+              {(debtsSummary?.totalDebt ?? 0).toLocaleString('en-US', { minimumFractionDigits: 1 })}{' '}
+              <span className="text-xs text-slate-400 font-sans">{settings.currency}</span>
+            </div>
+            <div className="text-xs text-slate-500 truncate mt-1">
+              {language === 'ar' ? 'لنا:' : 'Owed:'} <span className="text-emerald-400 font-bold">{(debtsSummary?.customerDebt ?? 0).toFixed(0)}</span> • {language === 'ar' ? 'علينا:' : 'Owes:'} <span className="text-rose-400 font-bold">{(debtsSummary?.supplierDebt ?? 0).toFixed(0)}</span>
+            </div>
+          </div>
+        </button>
+
+        {/* CARD 6: QUICK POS ACTION */}
+        <button
+          type="button"
+          onClick={() => onNavigate('transactions')}
+          className="group relative flex flex-col justify-between p-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all duration-300 ease-out cursor-pointer shadow-lg shadow-emerald-950/20 min-h-[140px] border border-emerald-400/30 overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 p-8 bg-white/10 blur-3xl -mr-8 -mt-8 rounded-full" />
+          <div className="flex items-center justify-between w-full relative z-10">
+            <div className="w-10 h-10 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0">
+              <ShoppingCart className="w-5 h-5" />
+            </div>
+            <ArrowUpRight className="w-5 h-5 text-white/60 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+          </div>
+
+          <div className="mt-4 w-full relative z-10">
+            <div className="text-xs font-bold text-emerald-100 uppercase tracking-wider">
+              {language === 'ar' ? 'نقطة البيع السريعة' : 'Quick POS Access'}
+            </div>
+            <div className="text-xl sm:text-2xl font-black tracking-tight mt-1">
+              {language === 'ar' ? 'بيع كاش / أجل' : 'Sell Cash / Credit'}
+            </div>
+            <div className="text-xs text-emerald-100/80 truncate mt-1">
+              {language === 'ar' ? 'افتح شاشة الكاشير الآن' : 'Open cashier screen now'}
+            </div>
+          </div>
+        </button>
+      </div>
 
       {/* 3. MODAL / SLIDE OVER POPUP FOR ANY TILE CLICKED */}
       {/* This allows viewing full details, charts, invoices, and reorder tables without leaving the dashboard or suffering from long vertical scrolling! */}
@@ -1152,7 +922,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                     <div className="flex justify-between items-center py-1">
                       <span className="text-slate-400">{language === 'ar' ? 'المسؤول الحالي عن الصندوق' : 'Active Register Officer'}:</span>
-                      <span className="font-bold text-slate-200">{currentCashier.name}</span>
+                      <span className="font-bold text-slate-200">{currentCashier?.name || '-'}</span>
                     </div>
                   </div>
 
@@ -1524,9 +1294,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         </div>
 
                         <div className="w-full sm:w-1/2 space-y-2">
-                          {paymentDistributionData.map((p) => (
-                            <div key={p.name} className="flex items-center justify-between text-xs p-2 rounded-lg bg-slate-900 border border-slate-800">
-                              <span className="text-slate-300 font-medium">{p.name}</span>
+                          {(paymentDistributionData || []).map((p) => (
+                            <div key={p?.name || Math.random()} className="flex items-center justify-between text-xs p-2 rounded-lg bg-slate-900 border border-slate-800">
+                              <span className="text-slate-300 font-medium">{p?.name || '-'}</span>
                               <span className="font-mono font-bold text-white">{(p?.value ?? 0).toLocaleString()} {settings.currency}</span>
                             </div>
                           ))}

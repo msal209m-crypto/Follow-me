@@ -235,13 +235,38 @@ export async function registerCustomerRecord(params: {
     name: cleanName,
     phone: cleanPhone,
     nationalId: cleanNationalId,
-    passwordHash: params.password?.trim() || 'user123',
+    passwordHash: params.password?.trim() || '',
     housePhoto: params.housePhoto,
     idVerificationPhoto: params.idVerificationPhoto,
-    village: params.village || 'قرية الانهوم',
-    isApproved: false, // Strict Gatekeeping: Pending developer/admin review & approval
+    village: params.village || 'الموقع المحدد',
+    isApproved: false, // Mandatory Pending verification
     createdAt: new Date().toISOString()
   };
+
+  // Sign up user via Supabase Auth for security & access control
+  try {
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: `${cleanPhone}.cust@qaryati.local`, // Virtual email for customer
+      password: params.password || 'UserPassword123!',
+      options: {
+        data: {
+          role: 'CUSTOMER',
+          displayName: cleanName,
+        }
+      }
+    });
+
+    if (authError) {
+      console.warn('Supabase Customer Auth error:', authError);
+      // We continue but log it
+    }
+
+    if (authData?.user?.id) {
+      newCust.id = authData.user.id;
+    }
+  } catch (e) {
+    console.warn('Supabase Customer integration failed:', e);
+  }
 
   customers.unshift(newCust);
   try {
@@ -302,7 +327,7 @@ export async function loginCustomerRecord(phoneOrId: string, passwordInput: stri
     return { success: false, message: 'لم يتم العثور على حساب مسجل بهذا الرقم، يرجى إنشاء حساب جديد أولاً' };
   }
 
-  if (customer.passwordHash && customer.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234' && passwordInput.trim() !== 'user123') {
+  if (customer.passwordHash && customer.passwordHash !== passwordInput.trim()) {
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مجدداً أو استخدام زر الاسترجاع' };
   }
 
@@ -534,13 +559,38 @@ export async function registerMerchant(params: {
     nationalId: cleanNationalId,
     passwordHash: params.password,
     storeName: params.storeName.trim() || `متجر ${cleanName}`,
-    village: params.village.trim() || 'قرية الانهوم',
+    village: params.village.trim() || 'الموقع المحدد',
     photo: params.photo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
     idVerificationPhoto: params.idVerificationPhoto,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    isApproved: false, // Pending verification by admin
+    isApproved: false, // Mandatory Pending verification
   };
+
+  // Sign up user via Supabase Auth for security & access control
+  try {
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: `${finalCleanPhone}@qaryati.local`, // Virtual email for phone-based auth
+      password: params.password,
+      options: {
+        data: {
+          role: 'MERCHANT',
+          displayName: cleanName,
+        }
+      }
+    });
+
+    if (authError) {
+      console.warn('Supabase Auth error:', authError);
+      return { success: false, message: `فشل تأمين الحساب: ${authError.message}` };
+    }
+
+    if (authData?.user?.id) {
+      newMerchant.id = authData.user.id;
+    }
+  } catch (e) {
+    console.warn('Supabase integration skipped or failed:', e);
+  }
 
   // معالجة الـ OCR تلقائياً ومطابقة البيانات لإنشاء حالة 'بانتظار المراجعة'
   newMerchant = processMerchantKYCOCR(newMerchant);
@@ -560,7 +610,7 @@ export async function registerMerchant(params: {
     itemsCount: 0,
     isPro: false,
     planName: 'الباقة المجانية',
-    status: 'PENDING', // Pending approval
+    status: 'PENDING', // Strict Pending Status
     joinedAt: new Date().toISOString().split('T')[0],
     merchantPin: params.password,
     rating: 5.0,
@@ -572,6 +622,24 @@ export async function registerMerchant(params: {
   stores.unshift(newStoreRecord);
   saveStoresDirectory(stores);
   await syncSaveStore(newStoreRecord);
+
+  // Automatically create a promotional advertisement for the new store
+  try {
+    const { addPlatformAd } = await import('./platformSettingsService');
+    addPlatformAd({
+      title: `افتتاح متجر جديد: ${newMerchant.storeName}`,
+      subtitle: `أهلاً بك في متجرنا الجديد في ${newMerchant.village}! تفضل بزيارتنا وتسوق أفضل المنتجات.`,
+      badge: 'جديد 🏪',
+      bgGradient: 'from-blue-600 via-indigo-600 to-violet-700',
+      isActive: true,
+      storeId: merchantId,
+      storeName: newMerchant.storeName,
+      village: newMerchant.village,
+      status: 'APPROVED',
+    });
+  } catch (err) {
+    console.warn('Failed to auto-create ad for new store:', err);
+  }
 
   return { 
     success: true, 
@@ -613,7 +681,7 @@ export async function loginMerchant(
     return { success: false, message: 'لم يتم العثور على حساب تاجر بهذه البيانات، يرجى التأكد من الرقم أو التسجيل أولاً' };
   }
 
-  if (merchant.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234') {
+  if (merchant.passwordHash !== passwordInput.trim()) {
     logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: merchant.phone, status: 'FAILED', reason: 'كلمة المرور غير صحيحة' });
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة أو استخدام "نسيت كلمة المرور"' };
   }
@@ -739,8 +807,33 @@ export async function registerDriver(params: {
     vehiclePlate: params.vehiclePlate,
     zone: params.zone || 'القرية',
     createdAt: new Date().toISOString(),
-    isApproved: false, // Pending verification
+    isApproved: false, // Mandatory Pending verification
   };
+
+  // Sign up user via Supabase Auth for security & access control
+  try {
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: `${finalCleanPhone}.dr@qaryati.local`, // Virtual email for driver
+      password: params.password,
+      options: {
+        data: {
+          role: 'DRIVER',
+          displayName: cleanName,
+        }
+      }
+    });
+
+    if (authError) {
+      console.warn('Supabase Driver Auth error:', authError);
+      return { success: false, message: `فشل تأمين حساب السائق: ${authError.message}` };
+    }
+
+    if (authData?.user?.id) {
+      newDriver.id = authData.user.id;
+    }
+  } catch (e) {
+    console.warn('Supabase Driver integration failed:', e);
+  }
 
   drivers.unshift(newDriver);
   saveDrivers(drivers);
@@ -786,7 +879,7 @@ export async function loginDriver(phoneInput: string, passwordInput: string, rem
     return { success: false, message: 'لم يتم العثور على سائق مسجل بهذا الرقم، يرجى التسجيل أولاً' };
   }
 
-  if (driver.passwordHash !== passwordInput.trim() && passwordInput.trim() !== '1234') {
+  if (driver.passwordHash !== passwordInput.trim()) {
     logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'FAILED', reason: 'كلمة المرور غير صحيحة' });
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مجدداً' };
   }
@@ -962,7 +1055,7 @@ export function verifyDeveloperAccess(codeOrPin: string, phone?: string): boolea
   }
   const clean = codeOrPin.trim();
   const settings = getPlatformDeveloperSettings();
-  if (clean === settings.developerPin || clean === 'admin' || clean === '1234' || clean === 'dev2026') {
+  if (clean === settings.developerPin) {
     setActiveSessionRole('DEVELOPER');
     logAccessAttempt({ portal: 'DEVELOPER', usernameOrPhone: 'مدخل PIN السريع', status: 'SUCCESS' });
     return true;
@@ -1066,7 +1159,7 @@ export function verifyOTP(
       return { success: false, message: 'انتهت صلاحية رمز التحقق (5 دقائق)، يرجى طلب رمز جديد' };
     }
 
-    if (record.code !== cleanCode && cleanCode !== '123456') {
+    if (record.code !== cleanCode) {
       record.attempts = (record.attempts || 0) + 1;
       localStorage.setItem(OTP_RECORDS_KEY, JSON.stringify(records));
       return { success: false, message: 'رمز التحقق غير صحيح، يرجى التأكد وإعادة المحاولة' };
@@ -1528,12 +1621,40 @@ export function clearAllDeveloperNotifications(): void {
   } catch {}
 }
 
-// Enforce strict factory reset on initial load
-const STRICT_FACTORY_RESET_KEY = 'qaryati_strict_factory_reset_done_v100';
+// Enforce strict factory reset on initial load to ensure a clean slate
+const STRICT_FACTORY_RESET_KEY = 'qaryati_strict_factory_reset_done_v101';
 try {
   if (typeof window !== 'undefined' && !localStorage.getItem(STRICT_FACTORY_RESET_KEY)) {
     localStorage.clear();
     sessionStorage.clear();
     localStorage.setItem(STRICT_FACTORY_RESET_KEY, 'true');
+    console.log('🧹 Initial Factory Reset triggered.');
   }
 } catch {}
+
+/**
+ * Formal Factory Reset: Purges all operational data and refreshes app
+ */
+export async function factoryResetPlatform() {
+  try {
+    if (confirm('⚠️ تنبيه: هل أنت متأكد من تصفير المنصة بالكامل وحذف كافة البيانات؟')) {
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      if (supabase) {
+        await Promise.all([
+          supabase.from('merchants').delete().neq('id', '0'),
+          supabase.from('orders').delete().neq('id', '0'),
+          supabase.from('customers').delete().neq('id', '0'),
+          supabase.from('drivers').delete().neq('id', '0'),
+          supabase.from('license_keys').delete().neq('id', '0'),
+        ]).catch(e => console.warn('Supabase remote wipe skipped:', e));
+      }
+
+      alert('تم تصفير المنصة بنجاح. سيتم إعادة التحميل الآن.');
+      window.location.reload();
+    }
+  } catch (err) {
+    console.error('Reset failed:', err);
+  }
+}

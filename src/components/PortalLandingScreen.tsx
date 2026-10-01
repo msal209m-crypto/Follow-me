@@ -79,18 +79,7 @@ interface PortalLandingScreenProps {
   onOpenAuthModal: (role?: 'MERCHANT' | 'DRIVER' | 'CUSTOMER' | 'DEVELOPER') => void;
 }
 
-const FIXED_VILLAGES = [
-  'قرية الفصور',
-  'قرية الحقالي',
-  'قرية الباركة',
-  'قرية الانهوم',
-  'قرية مشيجبه',
-  'سوق حول جباري',
-  'قرية المداد',
-  'قرية الجامع',
-  'قرية المسيلة',
-  'قرية المكيل',
-];
+const FIXED_VILLAGES: string[] = [];
 
 export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   settings,

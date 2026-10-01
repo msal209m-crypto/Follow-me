@@ -369,21 +369,17 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     return () => window.removeEventListener('qaryati:dev-settings-updated', handleDevSettingsUpdate);
   }, []);
 
-  const FIXED_VILLAGES = [
-    'قرية الفصور',
-    'قرية الحقالي',
-    'قرية الباركة',
-    'قرية الانهوم',
-    'قرية مشيجبه',
-    'سوق حول جباري',
-    'قرية المداد',
-    'قرية الجامع',
-    'قرية المسيلة',
-    'قرية المكيل',
-  ];
-
-  // Strictly the 10 fixed villages requested by user
-  const villageList = FIXED_VILLAGES;
+  // Dynamic village list extracted from active stores
+  const villageList = useMemo(() => {
+    const villages = new Set<string>();
+    allStores.forEach(s => {
+      const v = (s.cityOrVillage || (s as any).village || '').trim();
+      if (v) villages.add(v);
+    });
+    const list = Array.from(villages).sort();
+    if (list.length === 0) return ['الموقع الحالي'];
+    return list;
+  }, [allStores]);
 
   // Stores available in the selected village - strictly enforcing Village-First Filtering:
   // Select * From merchants Where village_id = [Chosen_Village] And is_approved = true
@@ -2431,7 +2427,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-emerald-500"
                 >
                   <option value="">اختر قريتك...</option>
-                  {FIXED_VILLAGES.map((v) => (
+                  {villageList.map((v) => (
                     <option key={v} value={v}>
                       {v}
                     </option>

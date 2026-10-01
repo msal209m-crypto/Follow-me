@@ -18,6 +18,8 @@ import {
   LogIn,
   Bell,
   AlertTriangle,
+  Sun,
+  Moon,
   Smartphone,
   Rocket,
   Crown,
@@ -41,6 +43,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { usePWA } from '../context/PWAContext';
 import { useSubscription } from '../context/SubscriptionContext';
+import { useTheme } from '../context/ThemeContext';
 import { POPULAR_CURRENCIES, getDefaultRatesForBase } from '../data/currencies';
 import { ReorderAlertsDropdown } from './ReorderAlertsDropdown';
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
@@ -100,6 +103,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     syncToCloudNow,
   } = useApp();
 
+  const { theme, toggleTheme } = useTheme();
   const { currentUser, userProfile, logout, isCloudConnected } = useAuth();
   const { isInstalled, setShowInstallPromptModal, updateAvailable, applyUpdate, isOnline } = usePWA();
   const { isPro, subscription, setShowSubscriptionModal } = useSubscription();
@@ -555,6 +559,36 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           >
             <Globe className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
             <span className="hidden md:inline font-bold">العالمية</span>
+          </button>
+
+          {/* Theme Toggle (Dark/Light Mode) */}
+          <button
+            type="button"
+            id="top-theme-toggle-btn"
+            onClick={toggleTheme}
+            className="h-8 sm:h-9 w-8 sm:w-9 bg-slate-800/90 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 text-amber-200 hover:text-amber-100 rounded-xl flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm"
+            title={theme === 'dark' ? 'التبديل للوضع النهاري' : 'التبديل للوضع الليلي'}
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400" />
+            ) : (
+              <Moon className="w-4 h-4 text-indigo-400" />
+            )}
+          </button>
+
+          {/* Theme Toggle (Dark/Light Mode) */}
+          <button
+            type="button"
+            id="top-theme-toggle-btn"
+            onClick={toggleTheme}
+            className="h-8 sm:h-9 w-8 sm:w-9 bg-slate-800/90 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 text-amber-200 hover:text-amber-100 rounded-xl flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm"
+            title={theme === 'dark' ? 'التبديل للوضع النهاري' : 'التبديل للوضع الليلي'}
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400" />
+            ) : (
+              <Moon className="w-4 h-4 text-indigo-400" />
+            )}
           </button>
 
           {/* 1. Currency Switcher */}

@@ -443,7 +443,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         actionType: 'SALE_TRANSACTION',
         title: tx.type === 'CREDIT_SALE' ? 'فاتورة بيع آجل' : 'فاتورة بيع نقدي',
         details: `فاتورة رقم ${tx.invoiceNumber} بمبلغ ${tx.totalAmount} ${settings.currency} - العميل: ${tx.partyName || 'نقدي'} (${tx.items.length} أصناف)`,
-        performedBy: tx.cashierName || currentCashier.name,
+        performedBy: tx.cashierName || (currentCashier?.name || 'المدير'),
         targetId: tx.id,
         targetName: tx.invoiceNumber,
       }));
@@ -454,7 +454,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.error(e);
       }
     }
-  }, [activityLogs.length, transactions, settings.currency, userPrefix, currentCashier.name]);
+  }, [activityLogs.length, transactions, settings.currency, userPrefix, currentCashier?.name]);
 
   // Whenever active merchant/user changes, load their isolated storage cache immediately
   useEffect(() => {
@@ -855,8 +855,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       category: 'SETTINGS',
       actionType: 'SETTINGS_UPDATE',
       title: 'تحديث إعدادات المتجر',
-      details: `تم تحديث بيانات وإعدادات المتجر بواسطة ${currentCashier.name}`,
-      performedBy: currentCashier.name,
+      details: `تم تحديث بيانات وإعدادات المتجر بواسطة ${currentCashier?.name || 'المدير'}`,
+      performedBy: currentCashier?.name || 'المدير',
     });
     setSettings((prev) => {
       const protectedNames = ['قريتي'];
@@ -896,7 +896,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       actionType: 'ITEM_ADD',
       title: `إضافة صنف جديد: ${newItem.name}`,
       details: `الكمية: ${newItem.quantity} ${newItem.unit} - سعر البيع: ${newItem.salePrice} ${settings.currency} - الباركود: ${newItem.barcode || 'تلقائي'}`,
-      performedBy: currentCashier.name,
+      performedBy: currentCashier?.name || 'المدير',
       targetId: newItem.id,
       targetName: newItem.name,
     });
@@ -945,7 +945,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         details: diffs.length > 0
           ? `تم تعديل ${diffs.map((d) => `${d.label} من [${d.oldVal}] إلى [${d.newVal}]`).join('، ')}`
           : `تم تحديث بيانات الصنف ${existing.name}`,
-        performedBy: currentCashier.name,
+        performedBy: currentCashier?.name || 'المدير',
         targetId: id,
         targetName: existing.name,
         diffs: diffs.length > 0 ? diffs : undefined,
@@ -979,7 +979,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         actionType: 'ITEM_DELETE',
         title: `حذف صنف: ${target.name}`,
         details: `تم حذف الصنف (باركود: ${target.barcode}) برصيد ${target.quantity} ${target.unit}`,
-        performedBy: currentCashier.name,
+        performedBy: currentCashier?.name || 'المدير',
         targetId: id,
         targetName: target.name,
       });
@@ -1253,7 +1253,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paymentSource: data.paymentSource,
       ...(data.notes ? { notes: data.notes } : {}),
       receiptNumber: receiptNum,
-      recordedBy: currentCashier.name,
+      recordedBy: currentCashier?.name,
     };
 
     if (existingDebt) {
@@ -1319,7 +1319,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paymentSource,
       ...(notes ? { notes } : {}),
       receiptNumber: `ADV-${Date.now().toString().slice(-6)}`,
-      recordedBy: currentCashier.name,
+      recordedBy: currentCashier?.name,
     };
 
     setDebts((prev) =>
@@ -1347,7 +1347,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       actionType: 'DEBT_LOAN',
       title: `سلفة نقدية / إضافة دين: ${amount} ${settings.currency}`,
       details: `تمت إضافة سلفة/دين على (${targetDebt?.personName || 'شخص'}) بقيمة ${amount} ${settings.currency} - سند: ${loanItem.receiptNumber}`,
-      performedBy: currentCashier.name,
+      performedBy: currentCashier?.name,
       targetId: debtId,
       targetName: targetDebt?.personName,
     });
@@ -1369,7 +1369,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paymentMethod,
       ...(notes ? { notes } : {}),
       receiptNumber: `PAY-${Date.now().toString().slice(-6)}`,
-      recordedBy: currentCashier.name,
+      recordedBy: currentCashier?.name,
     };
 
     const targetDebt = debts.find((d) => d.id === debtId);
@@ -1378,7 +1378,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       actionType: 'DEBT_PAYMENT',
       title: `سداد دين: ${amount} ${settings.currency}`,
       details: `تم تسجيل سداد من (${targetDebt?.personName || 'شخص'}) بقيمة ${amount} ${settings.currency} (${paymentMethod}) - سند: ${paymentItem.receiptNumber}`,
-      performedBy: currentCashier.name,
+      performedBy: currentCashier?.name,
       targetId: debtId,
       targetName: targetDebt?.personName,
     });
@@ -1492,7 +1492,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       paymentMethod: data.paymentMethod,
       partyName: data.partyName,
       ...(data.partyPhone ? { partyPhone: data.partyPhone } : {}),
-      cashierName: currentCashier.name,
+      cashierName: currentCashier?.name,
       items: formattedCartItems,
       subtotal,
       discount,
@@ -1506,7 +1506,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isDirectReceipt: isDirect,
       ...(initialStatus === 'COMPLETED' ? {
         receivedAt: new Date().toISOString(),
-        receivedBy: currentCashier.name,
+        receivedBy: currentCashier?.name,
       } : {}),
       ...(data.expectedDeliveryDate ? { expectedDeliveryDate: data.expectedDeliveryDate } : {}),
     };
@@ -1617,7 +1617,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       actionType: isSaleTx ? 'SALE_TRANSACTION' : 'PURCHASE_TRANSACTION',
       title: `${actionLabel} - ${newTransaction.invoiceNumber}`,
       details: `المبلغ: ${newTransaction.totalAmount} ${settings.currency} (${newTransaction.items.length} أصناف) - العميل/المورد: ${newTransaction.partyName || 'عميل نقدي'} - الدفع: ${newTransaction.paymentMethod}`,
-      performedBy: currentCashier.name,
+      performedBy: currentCashier?.name,
       targetId: newTransaction.id,
       targetName: newTransaction.invoiceNumber,
     });
@@ -1669,7 +1669,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const order = transactions.find((t) => t.id === orderId);
     if (!order) return null;
 
-    const receiver = receiptData.receiverName || currentCashier.name;
+    const receiver = receiptData.receiverName || currentCashier?.name;
     const nowIso = new Date().toISOString();
 
     const receivedMap = new Map<string, { qty: number; cost?: number }>();
@@ -1903,8 +1903,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         category: 'SALES',
         actionType: 'TRANSACTION_DELETE',
         title: `حذف الفاتورة: ${targetTx.invoiceNumber}`,
-        details: `تم إلغاء وحذف الفاتورة بقيمة ${targetTx.totalAmount} ${settings.currency} - الطرف: ${targetTx.partyName || 'نقدي'} بواسطة ${currentCashier.name}`,
-        performedBy: currentCashier.name,
+        details: `تم إلغاء وحذف الفاتورة بقيمة ${targetTx.totalAmount} ${settings.currency} - الطرف: ${targetTx.partyName || 'نقدي'} بواسطة ${currentCashier?.name}`,
+        performedBy: currentCashier?.name,
         targetId: id,
         targetName: targetTx.invoiceNumber,
       });

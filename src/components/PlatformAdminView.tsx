@@ -347,10 +347,14 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   const [newAdBadge, setNewAdBadge] = useState('عرض خاص 🌟');
   const [newAdCode, setNewAdCode] = useState('');
   const [newAdGradient, setNewAdGradient] = useState('from-emerald-600 via-teal-600 to-cyan-700');
+  const [newAdStoreId, setNewAdStoreId] = useState<string>('');
 
   const handleAddAdSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAdTitle.trim()) return;
+
+    const selectedStore = stores.find(s => s.id === newAdStoreId);
+
     addPlatformAd({
       title: newAdTitle.trim(),
       subtitle: newAdSubtitle.trim() || 'عرض حصري لأهالي القرية الكرام',
@@ -359,11 +363,16 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
       actionText: 'تصفح العرض',
       bgGradient: newAdGradient,
       isActive: true,
+      storeId: selectedStore?.id,
+      storeName: selectedStore?.name,
+      village: selectedStore?.cityOrVillage,
+      status: 'APPROVED',
     });
     setAdsList(getPlatformAds());
     setNewAdTitle('');
     setNewAdSubtitle('');
     setNewAdCode('');
+    setNewAdStoreId('');
     setShowAddAdModal(false);
     showToast('تمت إضافة الإعلان الترويجي ونشره في متجر القرية');
   };
@@ -2832,6 +2841,22 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                   <option value="from-amber-600 via-orange-600 to-rose-700">برتقالي وذهبي دافئ (Amber & Rose)</option>
                   <option value="from-purple-600 via-indigo-600 to-blue-700">بنفسجي ملكي (Purple & Blue)</option>
                   <option value="from-rose-600 via-pink-600 to-red-700">وردي وأحمر ناري (Pink & Red)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">ربط الإعلان بمتجر (اختياري)</label>
+                <select
+                  value={newAdStoreId}
+                  onChange={(e) => setNewAdStoreId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="">-- بدون ربط بمتجر محدد --</option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.cityOrVillage})
+                    </option>
+                  ))}
                 </select>
               </div>
 

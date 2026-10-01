@@ -163,7 +163,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   const [adFormTitle, setAdFormTitle] = useState('');
   const [adFormDesc, setAdFormDesc] = useState('');
   const [adFormStoreName, setAdFormStoreName] = useState('');
-  const [adFormVillage, setAdFormVillage] = useState(FIXED_VILLAGES_LIST[0].name);
+  const [adFormVillage, setAdFormVillage] = useState((FIXED_VILLAGES_LIST && FIXED_VILLAGES_LIST.length > 0) ? FIXED_VILLAGES_LIST[0].name : '');
   const [adFormTheme, setAdFormTheme] = useState<'CELEBRATION' | 'HOT_DEAL' | 'OFFICIAL'>('CELEBRATION');
   const [adFormBadge, setAdFormBadge] = useState('افتتاح رسمي مبارك 🎉');
   const [adFormAction, setAdFormAction] = useState('تسوق الآن 🛒');
@@ -181,7 +181,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   const [showAllDriversList, setShowAllDriversList] = useState(false);
 
   // Live Query Simulator State
-  const [testVillage, setTestVillage] = useState(FIXED_VILLAGES_LIST[0].name);
+  const [testVillage, setTestVillage] = useState((FIXED_VILLAGES_LIST && FIXED_VILLAGES_LIST.length > 0) ? FIXED_VILLAGES_LIST[0].name : '');
   const [testQueryResult, setTestQueryResult] = useState<any[]>([]);
   const [isQuerying, setIsQuerying] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
@@ -194,7 +194,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     storeName: '',
     name: '',
     phone: '',
-    village: FIXED_VILLAGES_LIST[0].name,
+    village: (FIXED_VILLAGES_LIST && FIXED_VILLAGES_LIST.length > 0) ? FIXED_VILLAGES_LIST[0].name : '',
     nationalId: '',
     isApproved: true,
   });
@@ -205,7 +205,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     name: '',
     phone: '',
     vehicleType: 'MOTORCYCLE',
-    zone: FIXED_VILLAGES_LIST[0].name,
+    zone: (FIXED_VILLAGES_LIST && FIXED_VILLAGES_LIST.length > 0) ? FIXED_VILLAGES_LIST[0].name : '',
     nationalId: '',
     isApproved: true,
   });

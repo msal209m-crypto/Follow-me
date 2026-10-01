@@ -544,66 +544,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Section 3: قسم الإعدادات والتواصل (Settings & Support) */}
-          <div className="pt-2.5 border-t border-slate-800/80 space-y-2">
+          <div className="pt-2 border-t border-slate-800/80 space-y-1">
             {!isCollapsed && (
-              <div className="px-1 text-[11px] font-bold text-slate-400 flex items-center gap-1.5 mb-1">
-                <SettingsIcon className="w-3.5 h-3.5 text-teal-400" />
-                <span>{language === 'ar' ? 'قسم الإعدادات والتواصل' : 'Settings & Support'}</span>
+              <div className="px-1 text-[10px] font-bold text-slate-500 flex items-center gap-1.5 mb-1 uppercase tracking-tight">
+                <span>{language === 'ar' ? 'الإعدادات والدعم' : 'Settings & Support'}</span>
               </div>
             )}
 
             {!isCollapsed ? (
-              <div className="space-y-2">
-                {/* Return to Store Main View / Exit Button (Prominently styled, never cut off) */}
-                {onSwitchToStore && (
-                  <button
-                    type="button"
-                    id="sidebar-return-to-store-main-btn"
-                    onClick={async () => {
-                      setMobileOpen(false);
-                      clearAllSystemSessions();
-                      try { await logout(); } catch {}
-                      onSwitchToStore();
-                    }}
-                    className="w-full flex items-center justify-between py-2.5 px-3 bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 hover:from-emerald-900 hover:to-teal-900 border-2 border-emerald-500/70 hover:border-emerald-400 text-emerald-100 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md shadow-emerald-950/50 active:scale-[0.98]"
-                    title={language === 'ar' ? 'الخروج النهائي والعودة إلى متجر العملاء (يتطلب تسجيل الدخول لاحقاً)' : 'Exit & Logout to Store View'}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Store className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>{language === 'ar' ? 'متجر العملاء (خروج)' : 'Store View (Logout)'}</span>
-                    </div>
-                    <span className="text-[10px] bg-emerald-500/30 text-emerald-200 border border-emerald-400/50 px-1.5 py-0.5 rounded font-extrabold">
-                      {language === 'ar' ? 'خروج' : 'Exit'}
-                    </span>
-                  </button>
-                )}
-
-                {/* Back to Portals Screen (Completes Full Logout) */}
-                {onOpenLanding && (
-                  <button
-                    type="button"
-                    id="sidebar-portals-screen-btn"
-                    onClick={async () => {
-                      setMobileOpen(false);
-                      clearAllSystemSessions();
-                      try { await logout(); } catch {}
-                      onOpenLanding();
-                    }}
-                    className="w-full flex items-center justify-between py-2.5 px-3 bg-gradient-to-r from-rose-950/80 via-slate-900 to-amber-950/70 hover:from-rose-900 hover:to-amber-900 border-2 border-rose-500/70 hover:border-rose-400 text-rose-100 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md shadow-rose-950/40 active:scale-[0.98]"
-                    title={language === 'ar' ? 'تسجيل الخروج النهائي من حساب التاجر والعودة للواجهة الرئيسية (تتطلب كلمة المرور عند العودة)' : 'Full Logout & Return to Landing'}
-                  >
-                    <div className="flex items-center gap-2">
-                      <LogOut className="w-4 h-4 text-rose-400 shrink-0" />
-                      <span>{language === 'ar' ? 'الخروج النهائى للرئيسية' : 'Full Logout to Landing'}</span>
-                    </div>
-                    <span className="text-[10px] bg-rose-500/30 text-rose-200 border border-rose-400/50 px-1.5 py-0.5 rounded font-extrabold">
-                      🔒 {language === 'ar' ? 'إنهاء' : 'Logout'}
-                    </span>
-                  </button>
-                )}
-
+              <div className="space-y-1">
                 {/* Settings & Language Toggle */}
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
                   {!isCashierMode && (
                     <button
                       id="sidebar-btn-settings"
@@ -611,9 +562,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         setMobileOpen(false);
                         onOpenSettings();
                       }}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold text-slate-100 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-650 hover:border-teal-500/50 transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                      className="flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-bold text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-all cursor-pointer active:scale-95"
                     >
-                      <SettingsIcon className="w-3.5 h-3.5 text-teal-400" />
+                      <SettingsIcon className="w-3.5 h-3.5" />
                       <span>{t.navSettings}</span>
                     </button>
                   )}
@@ -621,78 +572,67 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     id="sidebar-btn-lang-toggle"
                     onClick={toggleLanguage}
-                    title={t.switchLanguage}
-                    className={`${isCashierMode ? 'w-full' : ''} py-2 px-3 text-slate-100 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-650 hover:border-emerald-500/50 transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs font-bold shrink-0 shadow-sm active:scale-[0.98]`}
+                    className={`${isCashierMode ? 'w-full' : ''} py-2 px-3 text-slate-300 hover:text-white bg-slate-800/50 hover:bg-slate-800 rounded-xl border border-slate-700/50 transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs font-bold shrink-0 active:scale-95`}
                   >
-                    <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                    <Globe className="w-3.5 h-3.5" />
                     <span>{language === 'ar' ? 'EN' : 'عربي'}</span>
                   </button>
                 </div>
 
-                {/* Onboarding Tour Button in Sidebar */}
-                {onStartTour && !isCashierMode && (
+                {/* Return to Store Main View / Exit Button (Professional version) */}
+                {onSwitchToStore && (
                   <button
                     type="button"
-                    id="sidebar-btn-tour"
-                    onClick={() => {
+                    onClick={async () => {
                       setMobileOpen(false);
-                      onStartTour();
+                      clearAllSystemSessions();
+                      try { await logout(); } catch {}
+                      onSwitchToStore();
                     }}
-                    className="w-full flex items-center justify-between py-2 px-3 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/50 text-amber-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-[0.98]"
-                    title={language === 'ar' ? 'الجولة التعريفية بالنظام' : 'System Onboarding Tour'}
+                    className="w-full flex items-center justify-between py-2 px-3 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 rounded-xl text-xs font-bold border border-emerald-500/20 transition-all cursor-pointer active:scale-95"
                   >
                     <div className="flex items-center gap-2">
-                      <Compass className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{language === 'ar' ? 'الجولة التعريفية' : 'Onboarding Tour'}</span>
+                      <Store className="w-4 h-4" />
+                      <span>{language === 'ar' ? 'واجهة العملاء' : 'Customer View'}</span>
                     </div>
-                    <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">
-                      {language === 'ar' ? 'دليل البدء' : 'Guide'}
-                    </span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                )}
+
+                {/* Full Logout */}
+                {onOpenLanding && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setMobileOpen(false);
+                      clearAllSystemSessions();
+                      try { await logout(); } catch {}
+                      onOpenLanding();
+                    }}
+                    className="w-full flex items-center justify-between py-2 px-3 bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 rounded-xl text-xs font-bold border border-rose-500/20 transition-all cursor-pointer active:scale-95"
+                  >
+                    <div className="flex items-center gap-2">
+                      <LogOut className="w-4 h-4" />
+                      <span>{language === 'ar' ? 'خروج نهائي' : 'Full Logout'}</span>
+                    </div>
+                    <Lock className="w-3 h-3" />
                   </button>
                 )}
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2">
-                {onSwitchToStore && (
-                  <button
-                    type="button"
-                    id="sidebar-collapsed-return-to-store-btn"
-                    onClick={onSwitchToStore}
-                    title={language === 'ar' ? 'الخروج والعودة إلى واجهة المتجر الرئيسية' : 'Exit / Return to Main Store View'}
-                    className="p-2 text-emerald-300 hover:text-white bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 rounded-xl text-xs font-bold border border-emerald-400/50 shadow-md shadow-emerald-950/60 cursor-pointer active:scale-95 transition-all"
-                  >
-                    <Store className="w-4 h-4" />
-                  </button>
-                )}
-
+                <button
+                  onClick={onOpenSettings}
+                  className="p-2 text-slate-400 hover:text-white bg-slate-800/50 rounded-xl border border-slate-700/50"
+                >
+                  <SettingsIcon className="w-4 h-4" />
+                </button>
                 <button
                   onClick={toggleLanguage}
-                  title={t.switchLanguage}
-                  className="p-2 text-slate-200 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold border border-slate-650 shadow-sm"
+                  className="p-2 text-slate-400 hover:text-white bg-slate-800/50 rounded-xl border border-slate-700/50 text-[10px] font-bold"
                 >
                   {language === 'ar' ? 'EN' : 'AR'}
                 </button>
-
-                {!isCashierMode && (
-                  <button
-                    onClick={onOpenSettings}
-                    title={t.navSettings}
-                    className="p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-650 shadow-sm"
-                  >
-                    <SettingsIcon className="w-4 h-4 text-teal-400" />
-                  </button>
-                )}
-
-                {onStartTour && !isCashierMode && (
-                  <button
-                    type="button"
-                    onClick={onStartTour}
-                    title={language === 'ar' ? 'الجولة التعريفية' : 'Onboarding Tour'}
-                    className="p-2 text-amber-300 hover:text-amber-200 bg-amber-950/70 hover:bg-amber-900/80 rounded-lg border border-amber-500/50 shadow-sm cursor-pointer active:scale-95"
-                  >
-                    <Compass className="w-4 h-4 text-amber-400" />
-                  </button>
-                )}
               </div>
             )}
           </div>

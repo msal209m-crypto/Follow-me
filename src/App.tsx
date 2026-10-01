@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import { AppProvider, useApp } from './context/AppContext';
 import { PWAProvider } from './context/PWAContext';
 import { SubscriptionProvider, useSubscription } from './context/SubscriptionContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import { AppUpdateBanner } from './components/AppUpdateBanner';
@@ -195,14 +196,14 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
         setMobileOpen={setMobileMenuOpen}
       />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+        {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Instant PWA Update Notification Banner */}
         <AppUpdateBanner />
 
         {/* Top Header with Multi-Tenant Cloud & Auth status */}
         <TopHeader
-          onOpenMobileMenu={() => setMobileMenuOpen(true)}
+          onOpenMobileMenu={() => setMobileOpen(true)}
           onOpenAddItem={isCashierMode ? () => {} : handleOpenAddItem}
           onOpenOrderGoods={isCashierMode ? () => {} : (item) => handleOpenOrderGoods(item?.id, 'CASH')}
           onOpenSettings={
@@ -224,235 +225,9 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
           onStartTour={isCashierMode ? undefined : handleStartTour}
         />
 
-        {/* Top Fast Navigation Tabs Bar for Merchant Dashboard */}
-        {!isCashierMode && (
-          <div className="bg-slate-900/95 border-b border-slate-800 px-3 sm:px-6 py-2 relative z-20 backdrop-blur-md shadow-sm">
-            <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
-              <nav className="flex items-center gap-1.5 sm:gap-2 flex-1 overflow-x-auto no-scrollbar py-0.5" aria-label={language === 'ar' ? 'أقسام لوحة تحكم التاجر' : 'Merchant Dashboard Sections'}>
-                {/* 1. الرئيسية */}
-                <button
-                  type="button"
-                  id="tab-merchant-dashboard"
-                  onClick={() => setActiveTab('dashboard')}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
-                    activeTab === 'dashboard'
-                      ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/90'
-                  }`}
-                >
-                  <LayoutDashboard className="w-4 h-4 shrink-0" />
-                  <span>{language === 'ar' ? 'الرئيسية' : 'Dashboard'}</span>
-                </button>
-
-                {/* 2. المبيعات / الكاشير */}
-                <button
-                  type="button"
-                  id="tab-merchant-pos"
-                  onClick={() => setActiveTab('transactions')}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
-                    activeTab === 'transactions'
-                      ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/90'
-                  }`}
-                >
-                  <ShoppingCart className="w-4 h-4 shrink-0" />
-                  <span>{language === 'ar' ? 'المبيعات / الكاشير' : 'POS & Sales'}</span>
-                </button>
-
-                {/* 3. المخزون */}
-                <button
-                  type="button"
-                  id="tab-merchant-inventory"
-                  onClick={() => setActiveTab('items')}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
-                    activeTab === 'items' || activeTab === 'stickers' || activeTab === 'order_goods'
-                      ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/90'
-                  }`}
-                >
-                  <Package className="w-4 h-4 shrink-0" />
-                  <span>{language === 'ar' ? 'المخزون' : 'Inventory'}</span>
-                </button>
-
-                {/* 4. التقارير والحسابات */}
-                <button
-                  type="button"
-                  id="tab-merchant-reports"
-                  onClick={() => setActiveTab('daily_reports')}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
-                    activeTab === 'daily_reports' || activeTab === 'accounts' || activeTab === 'debts'
-                      ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/90'
-                  }`}
-                >
-                  <BarChart3 className="w-4 h-4 shrink-0" />
-                  <span>{language === 'ar' ? 'التقارير والحسابات' : 'Reports & Accounts'}</span>
-                </button>
-
-                {/* 5. الترويج والإعلانات */}
-                <button
-                  type="button"
-                  id="tab-merchant-ads"
-                  onClick={() => setActiveTab('merchant_ads')}
-                  className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
-                    activeTab === 'merchant_ads'
-                      ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/90'
-                  }`}
-                >
-                  <Megaphone className="w-4 h-4 shrink-0" />
-                  <span>{language === 'ar' ? 'الترويج والإعلانات' : 'Promotions & Ads'}</span>
-                </button>
-              </nav>
-
-              {/* Sub-Tabs Pill Switcher (Contextual) */}
-              {(activeTab === 'items' || activeTab === 'stickers' || activeTab === 'order_goods') && (
-                <div className="hidden md:flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('items')}
-                    className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                      activeTab === 'items' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {language === 'ar' ? 'الأصناف' : 'Items'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('stickers')}
-                    className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                      activeTab === 'stickers' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {language === 'ar' ? 'طباعة الباركود' : 'Barcode Labels'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('order_goods')}
-                    className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                      activeTab === 'order_goods' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {language === 'ar' ? 'طلب بضاعة' : 'Purchase Orders'}
-                  </button>
-                </div>
-              )}
-
-              {(activeTab === 'daily_reports' || activeTab === 'accounts' || activeTab === 'debts') && (
-                <div className="hidden md:flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('daily_reports')}
-                    className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                      activeTab === 'daily_reports' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {language === 'ar' ? 'التقارير اليومية' : 'Daily Reports'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('accounts')}
-                    className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                      activeTab === 'accounts' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {language === 'ar' ? 'الحسابات' : 'Accounts'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('debts')}
-                    className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                      activeTab === 'debts' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {language === 'ar' ? 'الديون والسلف' : 'Debts & Loans'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Mobile Sub-Tabs Row: Visible on phones to eliminate navigation friction */}
-            {(activeTab === 'items' || activeTab === 'stickers' || activeTab === 'order_goods') && (
-              <div className="md:hidden flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 mt-1 border-t border-slate-800/80 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('items')}
-                  className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
-                    activeTab === 'items'
-                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-400 bg-slate-950/60'
-                  }`}
-                >
-                  {language === 'ar' ? 'الأصناف' : 'Items'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('stickers')}
-                  className={`flex-1 min-w-[100px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
-                    activeTab === 'stickers'
-                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-400 bg-slate-950/60'
-                  }`}
-                >
-                  {language === 'ar' ? 'طباعة الباركود' : 'Barcode Labels'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('order_goods')}
-                  className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
-                    activeTab === 'order_goods'
-                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-400 bg-slate-950/60'
-                  }`}
-                >
-                  {language === 'ar' ? 'طلب بضاعة' : 'Purchase Orders'}
-                </button>
-              </div>
-            )}
-
-            {(activeTab === 'daily_reports' || activeTab === 'accounts' || activeTab === 'debts') && (
-              <div className="md:hidden flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 mt-1 border-t border-slate-800/80 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('daily_reports')}
-                  className={`flex-1 min-w-[100px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
-                    activeTab === 'daily_reports'
-                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-400 bg-slate-950/60'
-                  }`}
-                >
-                  {language === 'ar' ? 'التقارير اليومية' : 'Daily Reports'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('accounts')}
-                  className={`flex-1 min-w-[80px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
-                    activeTab === 'accounts'
-                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-400 bg-slate-950/60'
-                  }`}
-                >
-                  {language === 'ar' ? 'الحسابات' : 'Accounts'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('debts')}
-                  className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg text-center whitespace-nowrap transition-colors cursor-pointer ${
-                    activeTab === 'debts'
-                      ? 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-400 bg-slate-950/60'
-                  }`}
-                >
-                  {language === 'ar' ? 'الديون والسلف' : 'Debts & Loans'}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Content views */}
-        <main className="main-content-container flex-1 p-3 sm:p-5 lg:p-6 overflow-y-auto pb-20 sm:pb-6">
-          <div className="max-w-7xl mx-auto w-full">
+        <main className="main-content-container flex-1 overflow-y-auto pb-24 sm:pb-8">
+          <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8">
             {/* صلاحيات الكاشير: عند تفعيل حساب الكاشير، إخفاء الحسابات والأرباح والمخزون، والاكتفاء بشاشة نقاط البيع فقط */}
             {isCashierMode ? (
               <TransactionsView
@@ -1056,15 +831,17 @@ const PortalRouter: React.FC = () => {
 
 export default function App() {
   return (
-    <PWAProvider>
-      <AuthProvider>
-        <AppProvider>
-          <SubscriptionProvider>
-            <AppUpdateBanner />
-            <PortalRouter />
-          </SubscriptionProvider>
-        </AppProvider>
-      </AuthProvider>
-    </PWAProvider>
+    <ThemeProvider>
+      <PWAProvider>
+        <AuthProvider>
+          <AppProvider>
+            <SubscriptionProvider>
+              <AppUpdateBanner />
+              <PortalRouter />
+            </SubscriptionProvider>
+          </AppProvider>
+        </AuthProvider>
+      </PWAProvider>
+    </ThemeProvider>
   );
 }

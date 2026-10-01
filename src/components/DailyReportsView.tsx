@@ -479,9 +479,9 @@ export const DailyReportsView: React.FC = () => {
                   <option value="ALL" className="bg-slate-900">
                     {t.allCashiers}
                   </option>
-                  {cashiers.map((c) => (
-                    <option key={c.id} value={c.name} className="bg-slate-900">
-                      {c.name}
+                  {(cashiers || []).map((c) => (
+                    <option key={c?.id || Math.random()} value={c?.name || ''} className="bg-slate-900">
+                      {c?.name || '-'}
                     </option>
                   ))}
                 </select>

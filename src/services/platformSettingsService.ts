@@ -80,25 +80,14 @@ const BARCODE_CONFIG_KEY = 'qaryati_platform_barcode_config_v1';
 const DEVELOPER_SETTINGS_KEY = 'qaryati_developer_settings_v1';
 const APPROVED_VILLAGES_KEY = 'qaryati_approved_villages_v1';
 
-const DEFAULT_APPROVED_VILLAGES = [
-  'قرية الفصور',
-  'قرية الحقالي',
-  'قرية الباركة',
-  'قرية الانهوم',
-  'قرية مشيجبه',
-  'سوق حول جباري',
-  'قرية المداد',
-  'قرية الجامع',
-  'قرية المسيلة',
-  'قرية المكيل',
-];
+const DEFAULT_APPROVED_VILLAGES: string[] = [];
 
 export function getApprovedVillages(): string[] {
   try {
     const raw = localStorage.getItem(APPROVED_VILLAGES_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch {}
   return DEFAULT_APPROVED_VILLAGES;
@@ -131,31 +120,7 @@ export function deleteApprovedVillage(name: string): string[] {
 }
 
 // Initial default promotional ads for the village store
-const DEFAULT_ADS: PlatformAd[] = [
-  {
-    id: 'ad-welcome-1',
-    title: 'توصيل مجاني لجميع أهالي القرية!',
-    subtitle: 'اطلب احتياجاتك المنزلية الآن وسيصلك المندوب حتى باب منزلك فوراً',
-    badge: 'عرض خاص 🛵',
-    discountCode: 'FREEVILLAGE',
-    targetLink: '#products-container',
-    actionText: 'تسوق الآن',
-    bgGradient: 'from-emerald-600 via-teal-600 to-cyan-700',
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'ad-fresh-2',
-    title: 'وصول خضار وفواكه طازجة يومياً',
-    subtitle: 'تموينات القرية توفر أفضل المنتجات الطازجة بأفضل الأسعار المعتمدة',
-    badge: 'طازج اليوم 🍎',
-    targetLink: '#products-container',
-    actionText: 'تصفح الأصناف',
-    bgGradient: 'from-amber-600 via-orange-600 to-rose-700',
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-];
+const DEFAULT_ADS: PlatformAd[] = [];
 
 const DEFAULT_BARCODE_CONFIG: BarcodePlatformConfig = {
   defaultCamera: 'environment',

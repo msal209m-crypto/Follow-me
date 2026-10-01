@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email == 'msal209m@gmail.com' || 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      ); 
+    }
+
+    // Validation Blueprints
+    function isValidMerchant(data) {
+      return data.keys().hasAll(['id', 'name', 'phone', 'nationalId', 'storeName', 'village', 'isApproved']) &&
+             data.id is string && data.id.size() <= 100 &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+             data.phone is string && data.phone.size() <= 20 &&
+             data.nationalId is string && data.nationalId.size() <= 20 &&
+             data.isApproved is bool;
+    }
+
+    function isValidItem(data) {
+      return data.keys().hasAll(['id', 'name', 'quantity', 'costPrice', 'salePrice', 'merchantId']) &&
+             data.name is string && data.name.size() <= 200 &&
+             data.quantity is number &&
+             data.costPrice is number &&
+             data.salePrice is number;
+    }
+
+    // Collection Rules
+    match /merchants/{merchantId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(merchantId) && isValidMerchant(incoming()) && 
+                    incoming().isApproved == false; // Mandatory Pending status
+      allow update: if isAdmin() || (isOwner(merchantId) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'storeName', 'village', 'updatedAt']));
+    }
+
+    match /drivers/{driverId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(driverId) && 
+                    incoming().status == 'PENDING' && incoming().isApproved == false;
+      allow update: if isAdmin() || (isOwner(driverId) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'vehicleInfo', 'status']));
+    }
+
+    match /customers/{customerId} {
+      allow read: if isSignedIn() && (isOwner(customerId) || isAdmin());
+      allow create: if isSignedIn() && isValidId(customerId) && incoming().isApproved == false;
+      allow update: if isAdmin() || isOwner(customerId);
+    }
+
+    match /delivery_orders/{orderId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(orderId);
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (incoming().status in ['ACCEPTED', 'PREPARING', 'READY', 'PICKED_UP', 'DELIVERED', 'CANCELLED'])
+      );
+    }
+
+    match /stores/{storeId}/items/{itemId} {
+      allow read: if true; // Publicly visible items for storefront
+      allow write: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/merchants/$(request.auth.uid)).data.id == storeId);
+    }
+  }
+}
