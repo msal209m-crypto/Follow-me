@@ -20,7 +20,7 @@ export interface PWAContextType {
   refreshOfflineCache: () => Promise<number>;
 }
 
-const CURRENT_VERSION = '3.0.0';
+const CURRENT_VERSION = '3.1.0';
 const PWAContext = createContext<PWAContextType | undefined>(undefined);
 
 interface BeforeInstallPromptEvent extends Event {
@@ -166,13 +166,28 @@ export const PWAProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (response.ok) {
         const data = await response.json();
-        if (data && data.version && data.version !== CURRENT_VERSION) {
+        let lastAppliedVersion = '';
+        let dismissedVersion = '';
+        try {
+          lastAppliedVersion = localStorage.getItem('flowapp_applied_version') || '';
+          dismissedVersion = sessionStorage.getItem('flowapp_update_banner_dismissed') || '';
+        } catch {}
+
+        if (
+          data &&
+          data.version &&
+          data.version !== CURRENT_VERSION &&
+          data.version !== lastAppliedVersion &&
+          data.version !== dismissedVersion
+        ) {
           foundUpdate = true;
           setUpdateAvailable(true);
           setNewVersionInfo({
             version: data.version,
             description: data.description || 'تحديث برمجي جديد متاح لجميع المستخدمين',
           });
+        } else if (data && data.version && (data.version === CURRENT_VERSION || data.version === lastAppliedVersion)) {
+          setUpdateAvailable(false);
         }
       }
     } catch (e) {
@@ -202,20 +217,6 @@ export const PWAProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         checkForUpdates();
       }
     });
-
-    // Listen to cloud Firestore data updates (stores, ads, etc.)
-    const handleCloudSyncPrompt = (e: any) => {
-      const detail = e?.detail;
-      try {
-        sessionStorage.removeItem('flowapp_update_banner_dismissed');
-      } catch {}
-      setUpdateAvailable(true);
-      setNewVersionInfo({
-        version: detail?.version || 'تحديث سحابي فوري ☁️',
-        description: detail?.message || 'تم تحديث بيانات المتجر والإعلانات في السحابة',
-      });
-    };
-    window.addEventListener('qaryati:cloud-sync-reload-prompt', handleCloudSyncPrompt);
 
     // Listen to service worker controller change, new worker waiting, or messages
     let handleSWMessage: ((e: MessageEvent) => void) | null = null;
@@ -279,7 +280,6 @@ export const PWAProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', onFocus);
-      window.removeEventListener('qaryati:cloud-sync-reload-prompt', handleCloudSyncPrompt);
       if (handleSWMessage && 'serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('message', handleSWMessage);
       }
@@ -306,8 +306,15 @@ export const PWAProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const applyUpdate = async () => {
     try {
-      sessionStorage.removeItem('flowapp_update_banner_dismissed');
+      if (newVersionInfo?.version) {
+        localStorage.setItem('flowapp_applied_version', newVersionInfo.version);
+      } else {
+        localStorage.setItem('flowapp_applied_version', CURRENT_VERSION);
+      }
+      sessionStorage.setItem('flowapp_update_banner_dismissed', 'true');
     } catch {}
+
+    setUpdateAvailable(false);
 
     if ('serviceWorker' in navigator) {
       try {

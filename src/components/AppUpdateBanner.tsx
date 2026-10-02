@@ -6,13 +6,24 @@ import { useApp } from '../context/AppContext';
 export const AppUpdateBanner: React.FC = () => {
   const { updateAvailable, newVersionInfo, applyUpdate } = usePWA();
   const { isRTL, language } = useApp();
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem('flowapp_update_banner_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // When updateAvailable becomes true or new version arrives, force banner to show
+  // When a truly new version arrives, allow banner to show if not already dismissed in session
   useEffect(() => {
     if (updateAvailable) {
-      setIsDismissed(false);
+      try {
+        const dismissed = sessionStorage.getItem('flowapp_update_banner_dismissed') === 'true';
+        if (!dismissed) {
+          setIsDismissed(false);
+        }
+      } catch {}
     }
   }, [updateAvailable, newVersionInfo]);
 

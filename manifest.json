@@ -1,16 +1,32 @@
 {
-  "name": "Qaryati My Village",
-  "short_name": "Qaryati",
+  "id": "/",
+  "name": "قريتي - تطبيق التجارة المحلية المتكامل",
+  "short_name": "قريتي",
+  "description": "تطبيق قريتي الشامل لتجارة القرى والمتاجر المحلية مع بوابة الدخول المستقلة وعزل بيانات التجار",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#fdfaf6",
-  "theme_color": "#8a7254",
+  "orientation": "any",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "categories": ["business", "finance", "productivity"],
   "icons": [
     {
       "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.png",
       "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
       "type": "image/png"
     }
   ]
 }
-

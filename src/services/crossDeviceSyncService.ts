@@ -112,15 +112,6 @@ export function initGlobalCloudSync(): void {
       window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: stores }));
 
       if (!initialStoresSync) {
-        window.dispatchEvent(
-          new CustomEvent('qaryati:cloud-sync-reload-prompt', {
-            detail: {
-              type: 'stores',
-              message: 'تم تحديث بيانات المتاجر في السحابة',
-              timestamp: Date.now(),
-            },
-          })
-        );
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
           navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_DATA_CACHE' });
         }
@@ -247,15 +238,6 @@ export function initGlobalCloudSync(): void {
       window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: ads }));
 
       if (!initialAdsSync) {
-        window.dispatchEvent(
-          new CustomEvent('qaryati:cloud-sync-reload-prompt', {
-            detail: {
-              type: 'ads',
-              message: 'تم تحديث الإعلانات أو حذفها في السحابة',
-              timestamp: Date.now(),
-            },
-          })
-        );
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
           navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_DATA_CACHE' });
         }

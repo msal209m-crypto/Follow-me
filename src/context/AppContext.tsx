@@ -898,36 +898,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser, activeMerchantId, canWriteToCloud]);
 
-  // Manual sync function to batch save all state to Firestore
+  // Manual sync function to batch save all state to Firestore & flush offline queue
   const syncToCloudNow = useCallback(async () => {
-    if (!canWriteToCloud || !currentUser) return;
     setCloudSyncStatus('syncing');
     try {
-      const batch = writeBatch(db);
+      if (canWriteToCloud && currentUser) {
+        // 1. Flush any pending IndexedDB offline actions
+        try {
+          const { processOfflineSyncQueue } = await import('../utils/indexedDB');
+          await processOfflineSyncQueue(currentUser.uid, safeSetDoc, deleteDoc, db);
+        } catch (queueErr) {
+          console.warn('Queue sync flush notice:', queueErr);
+        }
 
-      // Save settings
-      const settingsRef = doc(db, 'users', currentUser.uid, 'settings', 'store_config');
-      safeBatchSet(batch, settingsRef, settings);
+        // 2. Batch write local state to Firestore
+        const batch = writeBatch(db);
 
-      // Save items
-      for (const item of items) {
-        const itemRef = doc(db, 'users', currentUser.uid, 'items', item.id);
-        safeBatchSet(batch, itemRef, item);
+        // Save settings
+        const settingsRef = doc(db, 'users', currentUser.uid, 'settings', 'store_config');
+        safeBatchSet(batch, settingsRef, settings);
+
+        // Save items
+        for (const item of items) {
+          const itemRef = doc(db, 'users', currentUser.uid, 'items', item.id);
+          safeBatchSet(batch, itemRef, item);
+        }
+
+        // Save debts
+        for (const debt of debts) {
+          const debtRef = doc(db, 'users', currentUser.uid, 'debts', debt.id);
+          safeBatchSet(batch, debtRef, debt);
+        }
+
+        await batch.commit();
       }
 
-      // Save debts
-      for (const debt of debts) {
-        const debtRef = doc(db, 'users', currentUser.uid, 'debts', debt.id);
-        safeBatchSet(batch, debtRef, debt);
-      }
-
-      await batch.commit();
+      // 3. Re-calculate offline sync queue count
+      await updateOfflineSyncCount();
       setCloudSyncStatus('synced');
     } catch (e) {
       console.error('Batch sync error:', e);
       setCloudSyncStatus('error');
     }
-  }, [currentUser, items, debts, settings]);
+  }, [canWriteToCloud, currentUser, items, debts, settings, updateOfflineSyncCount]);
 
   const updateSettings = (newSettings: Partial<StoreSettings>) => {
     logActivity({

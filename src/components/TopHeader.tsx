@@ -433,13 +433,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           {/* Cloud Sync Status Pill (مؤشر حالة المزامنة السحابية الفوري والتفاعلي) */}
           <button
             type="button"
-            onClick={() => {
-              if (offlineSyncCount > 0) {
-                setActiveTab?.('offline_sync');
-              } else {
-                syncToCloudNow();
-              }
-            }}
+            onClick={syncToCloudNow}
             title={
               offlineSyncCount > 0
                 ? (language === 'ar' 
