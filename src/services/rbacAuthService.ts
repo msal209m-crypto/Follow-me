@@ -1,3 +1,4 @@
+import { PLAYSTORE_REVIEWER_PHONE } from '../config/testAccount';
 import { UserProfile, UserRole, DriverProfile, CustomerSession, StoreDirectoryRecord } from '../types';
 import { getStoresDirectory, saveStoresDirectory, saveDriverProfile, clearDriverProfile } from './deliveryService';
 import { getPlatformDeveloperSettings, verifyDeveloperCredentials, isAuthorizedDeveloperPhone } from './platformSettingsService';
@@ -567,7 +568,7 @@ export async function registerMerchant(params: {
     idVerificationPhoto: params.idVerificationPhoto,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    isApproved: false, // Mandatory Pending verification
+    isApproved: phonesMatch(finalCleanPhone, PLAYSTORE_REVIEWER_PHONE),
   };
 
   // Direct database record sync for merchant (bypassing synthetic email rate limit)
@@ -582,7 +583,7 @@ export async function registerMerchant(params: {
         village_name: newMerchant.village,
         village_id: newMerchant.village,
         password_hash: params.password,
-        is_approved: false,
+        is_approved: phonesMatch(finalCleanPhone, PLAYSTORE_REVIEWER_PHONE),
         created_at: newMerchant.createdAt,
         updated_at: newMerchant.updatedAt,
       }, { onConflict: 'phone' });

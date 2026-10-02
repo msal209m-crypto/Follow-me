@@ -30,6 +30,7 @@ import { clearAllSystemSessions, getActiveSessionRole } from './services/rbacAut
 import { consumePendingAdRedirect } from './services/storeNavigationService';
 import { ShareModal } from './components/ShareModal';
 import { ToastNotification } from './components/ToastNotification';
+import { OfflineBanner } from './components/OfflineBanner';
 import { VillageStoreView } from './components/VillageStoreView';
 import { PortalLandingScreen } from './components/PortalLandingScreen';
 import { WelcomeSplashScreen } from './components/WelcomeSplashScreen';
@@ -421,6 +422,7 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
 
       {/* Global Iframe-safe Toast */}
       <ToastNotification />
+      <OfflineBanner />
 
       {/* Immediate PWA Install Prompt Modal */}
       <PWAInstallModal />

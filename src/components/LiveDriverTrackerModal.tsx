@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   RotateCcw
 } from 'lucide-react';
-import L from 'leaflet';
+import * as L from 'leaflet';
 import { generateWhatsAppOrderLink } from '../services/whatsappHelper';
 
 export interface LiveDriverTrackerModalProps {

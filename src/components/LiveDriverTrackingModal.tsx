@@ -13,7 +13,7 @@ import {
   Compass,
   Sparkles,
 } from 'lucide-react';
-import L from 'leaflet';
+import * as L from 'leaflet';
 import { DeliveryOrder } from '../types';
 import { getGlobalPreferences } from '../services/globalizationService';
 

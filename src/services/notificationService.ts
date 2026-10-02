@@ -48,7 +48,8 @@ export function sendLocalSystemNotification(title: string, body: string, icon = 
   }
 
   try {
-    const notification = new Notification(title, {
+    const NotificationConstructor = (window as any).Notification;
+    const notification = new NotificationConstructor(title, {
       body,
       icon,
       badge: '/icon.png',
