@@ -55,7 +55,8 @@ import {
   getDrivers,
   validateKYCParams,
   registerCustomerRecord,
-  loginCustomerRecord
+  loginCustomerRecord,
+  formatAuthErrorMessage
 } from '../services/rbacAuthService';
 import { VillageBulletinView } from './VillageBulletinView';
 import { DeveloperAuthModal } from './DeveloperAuthModal';
@@ -279,9 +280,20 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
     }
   };
 
+  const lastRegSubmitTimeRef = useRef<number>(0);
+  const lastLoginSubmitTimeRef = useRef<number>(0);
+
   // Handle Registration Submit
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Debounce protection (prevent multi-clicks within 1.5 seconds)
+    const now = Date.now();
+    if (now - lastRegSubmitTimeRef.current < 1500 || authLoading) {
+      return;
+    }
+    lastRegSubmitTimeRef.current = now;
+
     setAuthError('');
     setAuthSuccess('');
 
@@ -339,7 +351,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
               setLoginIdentifier(finalPhone);
             }, 3000);
           } else {
-            setAuthError(res.message);
+            setAuthError(formatAuthErrorMessage(res.message));
             setAuthLoading(false);
           }
 
@@ -366,7 +378,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
               setLoginIdentifier(finalPhone);
             }, 3000);
           } else {
-            setAuthError(res.message);
+            setAuthError(formatAuthErrorMessage(res.message));
             setAuthLoading(false);
           }
 
@@ -393,12 +405,12 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
               setLoginIdentifier(finalPhone);
             }, 3000);
           } else {
-            setAuthError(res.message);
+            setAuthError(formatAuthErrorMessage(res.message));
             setAuthLoading(false);
           }
         }
       } catch (err: any) {
-        setAuthError(err?.message || 'حدث خطأ غير متوقع أثناء التسجيل.');
+        setAuthError(formatAuthErrorMessage(err?.message || 'حدث خطأ غير متوقع أثناء التسجيل.'));
         setAuthLoading(false);
       }
     }, 600);
@@ -407,6 +419,14 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   // Handle Login Submit
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Debounce protection
+    const now = Date.now();
+    if (now - lastLoginSubmitTimeRef.current < 1500 || authLoading) {
+      return;
+    }
+    lastLoginSubmitTimeRef.current = now;
+
     setAuthError('');
     setAuthSuccess('');
 

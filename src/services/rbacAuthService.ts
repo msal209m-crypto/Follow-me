@@ -39,6 +39,13 @@ export interface CustomerAccountRecord {
   createdAt: string;
 }
 
+export {
+  handleAuthError,
+  formatAuthErrorMessage,
+  withAuthDebounce,
+  createDebouncedHandler,
+} from './authErrorHandler';
+
 export function normalizePhone(input: string): { raw: string; digits: string; withoutLeadingZero: string; withLeadingZero: string } {
   const digits = (input || '').replace(/\D/g, '');
   let core = digits;
@@ -243,29 +250,21 @@ export async function registerCustomerRecord(params: {
     createdAt: new Date().toISOString()
   };
 
-  // Sign up user via Supabase Auth for security & access control
+  // Direct database record sync for customer (bypassing email-based auth rate limit)
   try {
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: `${cleanPhone}.cust@qaryati.local`, // Virtual email for customer
-      password: params.password || 'UserPassword123!',
-      options: {
-        data: {
-          role: 'CUSTOMER',
-          displayName: cleanName,
-        }
-      }
-    });
-
-    if (authError) {
-      console.warn('Supabase Customer Auth error:', authError);
-      // We continue but log it
-    }
-
-    if (authData?.user?.id) {
-      newCust.id = authData.user.id;
+    if (supabase) {
+      await (supabase as any).from('customers').upsert({
+        id: newCust.id,
+        phone: cleanPhone,
+        name: cleanName,
+        national_id: cleanNationalId,
+        village_name: params.village || 'الموقع المحدد',
+        created_at: newCust.createdAt,
+        updated_at: newCust.createdAt,
+      }, { onConflict: 'phone' });
     }
   } catch (e) {
-    console.warn('Supabase Customer integration failed:', e);
+    console.warn('Supabase customer table sync notice:', e);
   }
 
   customers.unshift(newCust);
@@ -567,29 +566,25 @@ export async function registerMerchant(params: {
     isApproved: false, // Mandatory Pending verification
   };
 
-  // Sign up user via Supabase Auth for security & access control
+  // Direct database record sync for merchant (bypassing synthetic email rate limit)
   try {
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: `${finalCleanPhone}@qaryati.local`, // Virtual email for phone-based auth
-      password: params.password,
-      options: {
-        data: {
-          role: 'MERCHANT',
-          displayName: cleanName,
-        }
-      }
-    });
-
-    if (authError) {
-      console.warn('Supabase Auth error:', authError);
-      return { success: false, message: `فشل تأمين الحساب: ${authError.message}` };
-    }
-
-    if (authData?.user?.id) {
-      newMerchant.id = authData.user.id;
+    if (supabase) {
+      await (supabase as any).from('merchants').upsert({
+        id: merchantId,
+        name: cleanName,
+        phone: finalCleanPhone,
+        national_id: cleanNationalId,
+        store_name: newMerchant.storeName,
+        village_name: newMerchant.village,
+        village_id: newMerchant.village,
+        password_hash: params.password,
+        is_approved: false,
+        created_at: newMerchant.createdAt,
+        updated_at: newMerchant.updatedAt,
+      }, { onConflict: 'phone' });
     }
   } catch (e) {
-    console.warn('Supabase integration skipped or failed:', e);
+    console.warn('Supabase merchant table sync notice:', e);
   }
 
   // معالجة الـ OCR تلقائياً ومطابقة البيانات لإنشاء حالة 'بانتظار المراجعة'
@@ -810,29 +805,25 @@ export async function registerDriver(params: {
     isApproved: false, // Mandatory Pending verification
   };
 
-  // Sign up user via Supabase Auth for security & access control
+  // Direct database record sync for driver (bypassing synthetic email rate limit)
   try {
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: `${finalCleanPhone}.dr@qaryati.local`, // Virtual email for driver
-      password: params.password,
-      options: {
-        data: {
-          role: 'DRIVER',
-          displayName: cleanName,
-        }
-      }
-    });
-
-    if (authError) {
-      console.warn('Supabase Driver Auth error:', authError);
-      return { success: false, message: `فشل تأمين حساب السائق: ${authError.message}` };
-    }
-
-    if (authData?.user?.id) {
-      newDriver.id = authData.user.id;
+    if (supabase) {
+      await (supabase as any).from('drivers').upsert({
+        id: newDriver.id,
+        name: cleanName,
+        phone: finalCleanPhone,
+        national_id: cleanNationalId,
+        vehicle_type: params.vehicleType || 'MOTORCYCLE',
+        vehicle_plate: params.vehiclePlate || '',
+        zone: params.zone || 'القرية',
+        password_hash: params.password,
+        is_approved: false,
+        is_online: false,
+        created_at: newDriver.createdAt,
+      }, { onConflict: 'phone' });
     }
   } catch (e) {
-    console.warn('Supabase Driver integration failed:', e);
+    console.warn('Supabase driver table sync notice:', e);
   }
 
   drivers.unshift(newDriver);

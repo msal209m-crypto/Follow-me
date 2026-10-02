@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   ShieldCheck,
   Lock,
@@ -28,6 +28,7 @@ import {
   saveCustomerSession,
   verifyDeveloperAccess,
   verifyDeveloperFullCredentials,
+  formatAuthErrorMessage,
 } from '../services/rbacAuthService';
 import { setDeveloperRemembered } from '../services/platformSettingsService';
 import { OTPPasswordResetModal } from './OTPPasswordResetModal';
@@ -149,46 +150,59 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
     }
   };
 
+  const lastSubmitTimeRef = useRef<number>(0);
+
   // Merchant Submit
   const handleMerchantSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const now = Date.now();
+    if (now - lastSubmitTimeRef.current < 1500 || loading) {
+      return;
+    }
+    lastSubmitTimeRef.current = now;
+
     resetFormFeedback();
     setLoading(true);
 
     setTimeout(async () => {
-      if (mode === 'LOGIN') {
-        const res = await loginMerchant(merchantPhone, merchantPassword);
-        setLoading(false);
-        if (res.success) {
-          setSuccessMessage(res.message);
-          setTimeout(() => {
-            onClose();
-            handleSuccess('MERCHANT', res.merchant || { storeName: merchantStoreName, village: merchantVillage });
-          }, 300);
+      try {
+        if (mode === 'LOGIN') {
+          const res = await loginMerchant(merchantPhone, merchantPassword);
+          setLoading(false);
+          if (res.success) {
+            setSuccessMessage(res.message);
+            setTimeout(() => {
+              onClose();
+              handleSuccess('MERCHANT', res.merchant || { storeName: merchantStoreName, village: merchantVillage });
+            }, 300);
+          } else {
+            setErrorMessage(formatAuthErrorMessage(res.message));
+          }
         } else {
-          setErrorMessage(res.message);
+          const res = await registerMerchant({
+            name: merchantName,
+            phone: merchantPhone,
+            nationalId: merchantNationalId,
+            password: merchantPassword,
+            storeName: merchantStoreName,
+            village: merchantVillage,
+            photo: merchantPhoto,
+            idVerificationPhoto: merchantIdPhoto,
+          });
+          setLoading(false);
+          if (res.success) {
+            setSuccessMessage(res.message);
+            setTimeout(() => {
+              onClose();
+              handleSuccess('MERCHANT', res.merchant || { storeName: merchantStoreName, village: merchantVillage });
+            }, 300);
+          } else {
+            setErrorMessage(formatAuthErrorMessage(res.message));
+          }
         }
-      } else {
-        const res = await registerMerchant({
-          name: merchantName,
-          phone: merchantPhone,
-          nationalId: merchantNationalId,
-          password: merchantPassword,
-          storeName: merchantStoreName,
-          village: merchantVillage,
-          photo: merchantPhoto,
-          idVerificationPhoto: merchantIdPhoto,
-        });
+      } catch (err: any) {
         setLoading(false);
-        if (res.success) {
-          setSuccessMessage(res.message);
-          setTimeout(() => {
-            onClose();
-            handleSuccess('MERCHANT', res.merchant || { storeName: merchantStoreName, village: merchantVillage });
-          }, 300);
-        } else {
-          setErrorMessage(res.message);
-        }
+        setErrorMessage(formatAuthErrorMessage(err));
       }
     }, 350);
   };
@@ -196,43 +210,54 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
   // Driver Submit
   const handleDriverSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const now = Date.now();
+    if (now - lastSubmitTimeRef.current < 1500 || loading) {
+      return;
+    }
+    lastSubmitTimeRef.current = now;
+
     resetFormFeedback();
     setLoading(true);
 
     setTimeout(async () => {
-      if (mode === 'LOGIN') {
-        const res = await loginDriver(driverPhone, driverPassword);
-        setLoading(false);
-        if (res.success) {
-          setSuccessMessage(res.message);
-          setTimeout(() => {
-            onClose();
-            handleSuccess('DRIVER', res.driver);
-          }, 300);
+      try {
+        if (mode === 'LOGIN') {
+          const res = await loginDriver(driverPhone, driverPassword);
+          setLoading(false);
+          if (res.success) {
+            setSuccessMessage(res.message);
+            setTimeout(() => {
+              onClose();
+              handleSuccess('DRIVER', res.driver);
+            }, 300);
+          } else {
+            setErrorMessage(formatAuthErrorMessage(res.message));
+          }
         } else {
-          setErrorMessage(res.message);
+          const res = await registerDriver({
+            name: driverName,
+            phone: driverPhone,
+            nationalId: driverNationalId,
+            password: driverPassword,
+            photo: driverPhoto,
+            idCardPhoto: driverIdCardPhoto,
+            vehicleType: driverVehicle,
+            zone: 'منطقة التوصيل السريع',
+          });
+          setLoading(false);
+          if (res.success) {
+            setSuccessMessage(res.message);
+            setTimeout(() => {
+              onClose();
+              handleSuccess('DRIVER', res.driver);
+            }, 300);
+          } else {
+            setErrorMessage(formatAuthErrorMessage(res.message));
+          }
         }
-      } else {
-        const res = await registerDriver({
-          name: driverName,
-          phone: driverPhone,
-          nationalId: driverNationalId,
-          password: driverPassword,
-          photo: driverPhoto,
-          idCardPhoto: driverIdCardPhoto,
-          vehicleType: driverVehicle,
-          zone: 'منطقة التوصيل السريع',
-        });
+      } catch (err: any) {
         setLoading(false);
-        if (res.success) {
-          setSuccessMessage(res.message);
-          setTimeout(() => {
-            onClose();
-            handleSuccess('DRIVER', res.driver);
-          }, 300);
-        } else {
-          setErrorMessage(res.message);
-        }
+        setErrorMessage(formatAuthErrorMessage(err));
       }
     }, 350);
   };

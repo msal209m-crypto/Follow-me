@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   ShieldCheck,
   Lock,
@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { validateKYCParams, registerMerchant } from '../services/rbacAuthService';
+import { validateKYCParams, registerMerchant, formatAuthErrorMessage } from '../services/rbacAuthService';
 import { registerCustomerAccount } from '../services/supabaseQaryatiService';
 import { SUPPORTED_COUNTRIES, CountryInfo } from '../services/globalizationService';
 
@@ -140,8 +140,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const lastSubmitTimeRef = useRef<number>(0);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Debounce protection (prevent multi-clicks within 1.5 seconds)
+    const now = Date.now();
+    if (now - lastSubmitTimeRef.current < 1500 || loading) {
+      return;
+    }
+    lastSubmitTimeRef.current = now;
+
     setErrorMessage(null);
     setSuccessMessage(null);
     setLoading(true);
@@ -231,7 +241,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } catch (err: any) {
       console.warn('Auth error handled:', err?.code || err?.message);
       const code = err?.code || '';
-      let msg = err?.message || t.error;
+      let msg = formatAuthErrorMessage(err);
       if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
         msg = language === 'ar' ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة.' : 'Invalid email or password.';
       } else if (code === 'auth/user-not-found') {
