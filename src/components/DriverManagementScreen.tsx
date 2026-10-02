@@ -6,7 +6,8 @@ import {
   Truck,
   IdCard
 } from 'lucide-react';
-import { getDrivers, saveDrivers, DriverAccountRecord } from '../services/rbacAuthService';
+import { approveDriverAccount, rejectDriverAccount, getDrivers, DriverAccountRecord } from '../services/rbacAuthService';
+import { setDriverApprovalStatus } from '../services/supabaseQaryatiService';
 
 export const DriverManagementScreen: React.FC<{ onClose: () => void; isDarkMode?: boolean }> = ({ 
   onClose, 
@@ -21,17 +22,21 @@ export const DriverManagementScreen: React.FC<{ onClose: () => void; isDarkMode?
       setDrivers(getDrivers());
     };
     window.addEventListener('qaryati:drivers-updated', handleUpdate);
+    window.addEventListener('qaryati:driver-approval-changed', handleUpdate);
     return () => {
       window.removeEventListener('qaryati:drivers-updated', handleUpdate);
+      window.removeEventListener('qaryati:driver-approval-changed', handleUpdate);
     };
   }, []);
 
-  const updateDriverStatus = (id: string, approved: boolean) => {
-    const updatedDrivers = drivers.map(d => 
-      d.id === id ? { ...d, isApproved: approved } : d
-    );
-    saveDrivers(updatedDrivers);
-    setDrivers(updatedDrivers);
+  const updateDriverStatus = async (id: string, approved: boolean) => {
+    if (approved) {
+      approveDriverAccount(id);
+    } else {
+      rejectDriverAccount(id);
+    }
+    await setDriverApprovalStatus(id, approved);
+    setDrivers(getDrivers());
   };
 
   const filteredDrivers = drivers.filter(d => 
@@ -77,20 +82,25 @@ export const DriverManagementScreen: React.FC<{ onClose: () => void; isDarkMode?
                     <span className="text-[10px] text-slate-500">الهوية</span>
                 </div>
               )}
-              <button 
-                onClick={() => updateDriverStatus(driver.id, true)}
-                className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white"
-                title="تفعيل"
-              >
-                <UserCheck className="w-5 h-5" />
-              </button>
-              <button 
-                onClick={() => updateDriverStatus(driver.id, false)}
-                className="p-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white"
-                title="حظر"
-              >
-                <UserX className="w-5 h-5" />
-              </button>
+              {driver.isApproved ? (
+                <button 
+                  onClick={() => updateDriverStatus(driver.id, false)}
+                  className="px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                  title="إيقاف مؤقت / حظر السائق"
+                >
+                  <UserX className="w-4 h-4 text-amber-400" />
+                  <span>إيقاف مؤقت / حظر</span>
+                </button>
+              ) : (
+                <button 
+                  onClick={() => updateDriverStatus(driver.id, true)}
+                  className="px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                  title="إلغاء الحظر / تفعيل السائق"
+                >
+                  <UserCheck className="w-4 h-4 text-emerald-400" />
+                  <span>إلغاء الحظر / تفعيل</span>
+                </button>
+              )}
             </div>
           </div>
         ))}

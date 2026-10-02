@@ -34,6 +34,7 @@ import { setDeveloperRemembered } from '../services/platformSettingsService';
 import { OTPPasswordResetModal } from './OTPPasswordResetModal';
 import { useAuth } from '../context/AuthContext';
 import { registerCustomerAccount } from '../services/supabaseQaryatiService';
+import { getPendingAdRedirect } from '../services/storeNavigationService';
 
 export type RBACRoleTab = 'MERCHANT' | 'DRIVER' | 'CUSTOMER' | 'DEVELOPER';
 
@@ -401,6 +402,23 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
               اختر دورك للوصول المباشر إلى المنظومة وحماية بياناتك
             </p>
           </div>
+
+          {/* Pending Ad Visit Redirect Banner */}
+          {(() => {
+            const pending = getPendingAdRedirect();
+            if (!pending) return null;
+            return (
+              <div className="bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-teal-500/20 border-b border-amber-500/40 px-4 py-3 text-right">
+                <div className="flex items-center gap-2 text-amber-300 font-black text-xs">
+                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>زيارة متجر مُعلن: {pending.storeName} ({pending.village})</span>
+                </div>
+                <p className="text-[11px] text-slate-200 mt-1 leading-relaxed">
+                  للانتقال الفوري لهذا المتجر والتسوق: يرجى تسجيل الدخول أو إنشاء حساب عميل سريع، وسيتم توجيهك مباشرة لمتجره فوراً!
+                </p>
+              </div>
+            );
+          })()}
 
           {/* 3 Role Tabs (Developer is strictly hidden and secret) */}
           <div className="px-4 pt-3 pb-2 grid grid-cols-3 gap-2 bg-slate-950/60 border-b border-slate-800">

@@ -25,6 +25,7 @@ import {
   Store,
   MapPin,
   FileSpreadsheet,
+  Lock,
 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -67,6 +68,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
     getPendingOrderQtyForItem,
     setActiveTab,
     showNotification,
+    isMerchantApproved,
     t,
     isRTL,
     language,
@@ -314,6 +316,28 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Pending Approval Security Lock Banner */}
+      {!isMerchantApproved && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-950/80 border-2 border-amber-500/80 shadow-md flex items-center justify-between gap-3 text-amber-200">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/30 text-amber-300 border border-amber-500/50 flex items-center justify-center shrink-0">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-amber-200">
+                🔒 إضافة الأصناف مقفلة مؤقتاً: حساب التاجر قيد المراجعة والتدقيق ⏳
+              </h4>
+              <p className="text-[11px] text-amber-300/90 mt-0.5">
+                لا يمكنك إضافة أصناف جديدة أو تعديل المخزون حتى يتم تدقيق صورة الهوية وتفعيل حسابك من قبل مطور المنصة.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-xl bg-amber-900 text-[11px] font-bold border border-amber-500/50 shrink-0">
+            بانتظار الاعتماد ⏳
+          </span>
+        </div>
+      )}
+
       {/* Store & Village Identity Banner */}
       <div className="bg-slate-900/95 border border-purple-500/30 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 flex-wrap shadow-sm">
         <div className="flex items-center gap-2.5">
@@ -330,7 +354,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
                 </span>
               )}
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                حساب التاجر المحمي لإضافة الأصناف 🔐
+                {isMerchantApproved ? 'حساب التاجر المعتمد 🔐' : 'حساب بانتظار المراجعة ⏳'}
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
@@ -341,11 +365,22 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
 
         <button
           type="button"
-          onClick={onOpenAddItem}
-          className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-purple-600/20 cursor-pointer active:scale-95 transition-all"
+          onClick={() => {
+            if (!isMerchantApproved) {
+              showNotification('🔒 الصلاحية مقفلة: حساب التاجر بانتظار اعتماد مطور المنصة وتدقيق الهوية. لا يمكن إضافة أصناف حتى التفعيل.', 'warning');
+            } else {
+              onOpenAddItem();
+            }
+          }}
+          className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 ${
+            !isMerchantApproved
+              ? 'bg-slate-800 text-slate-400 border border-amber-500/30 cursor-not-allowed'
+              : 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/20 cursor-pointer'
+          }`}
         >
-          <Plus className="w-3.5 h-3.5" />
+          {!isMerchantApproved ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <Plus className="w-3.5 h-3.5" />}
           <span>إضافة صنف جديد</span>
+          {!isMerchantApproved && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-950 text-amber-300">مقفل</span>}
         </button>
       </div>
 

@@ -70,6 +70,7 @@ interface AppContextType {
   syncToCloudNow: () => Promise<void>;
   offlineSyncCount: number;
   updateOfflineSyncCount: () => Promise<void>;
+  isMerchantApproved: boolean;
 
   // Item operations
   addItem: (item: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>) => Item;
@@ -213,6 +214,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedStickerItemId, setSelectedStickerItemId] = useState<string | null>(null);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>('offline');
   const [offlineSyncCount, setOfflineSyncCount] = useState(0);
+
+  // Strict Merchant Approval State (Pending KYC Verification)
+  const [isMerchantApproved, setIsMerchantApproved] = useState<boolean>(() => {
+    try {
+      const activeUserRaw = localStorage.getItem('flowapp_v4_active_local_user');
+      if (activeUserRaw) {
+        const parsed = JSON.parse(activeUserRaw);
+        if (parsed.role === 'DEVELOPER' || parsed.role === 'developer' || parsed.role === 'admin') return true;
+        if (parsed.isApproved !== undefined) return parsed.isApproved === true;
+      }
+      const merchantsRaw = localStorage.getItem('flowapp_rbac_merchants_v1');
+      if (merchantsRaw) {
+        const list = JSON.parse(merchantsRaw);
+        const found = list.find((m: any) => m.id === activeMerchantId || (userProfile?.phone && m.phone === userProfile.phone));
+        if (found && found.isApproved !== undefined) return found.isApproved === true;
+      }
+    } catch {}
+    if (userProfile?.role === 'developer' || userProfile?.role === 'admin') return true;
+    return false;
+  });
+
+  // Listen for real-time approval status updates from platform developer portal
+  useEffect(() => {
+    const handleApprovalChanged = (e: any) => {
+      const { merchantId, isApproved } = e?.detail || {};
+      if (merchantId === activeMerchantId || !merchantId) {
+        setIsMerchantApproved(Boolean(isApproved));
+      }
+    };
+    const handleMerchantsUpdated = (e: any) => {
+      const list = e?.detail || [];
+      const found = list.find((m: any) => m.id === activeMerchantId || (userProfile?.phone && m.phone === userProfile.phone));
+      if (found && found.isApproved !== undefined) {
+        setIsMerchantApproved(found.isApproved === true);
+      }
+    };
+
+    window.addEventListener('qaryati:merchant-approval-changed', handleApprovalChanged);
+    window.addEventListener('qaryati:merchants-updated', handleMerchantsUpdated);
+
+    return () => {
+      window.removeEventListener('qaryati:merchant-approval-changed', handleApprovalChanged);
+      window.removeEventListener('qaryati:merchants-updated', handleMerchantsUpdated);
+    };
+  }, [activeMerchantId, userProfile?.phone]);
 
   const updateOfflineSyncCount = useCallback(async () => {
     try {
@@ -968,6 +1014,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ITEM OPERATIONS
   const addItem = (itemData: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>): Item => {
+    if (!isMerchantApproved && activeMerchantId !== 'guest') {
+      showNotification(
+        '🔒 الصلاحية مقفلة: حساب التاجر بانتظار المراجعة والاعتماد الأمني من مطور المنصة. لا يمكنك إضافة أصناف حتى يتم تفعيل الحساب.',
+        'warning'
+      );
+      throw new Error('حساب التاجر قيد المراجعة والتدقيق الإداري.');
+    }
+
     const safeBarcode = String(itemData.barcode ?? '').trim();
     const safeName = String(itemData.name ?? '').trim();
     const newItem: Item = {
@@ -1520,6 +1574,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     status?: Transaction['status'];
     expectedDeliveryDate?: string;
   }): Transaction => {
+    if (!isMerchantApproved && activeMerchantId !== 'guest') {
+      showNotification(
+        '🔒 الصلاحية مقفلة: حساب التاجر بانتظار المراجعة والاعتماد من مطور المنصة. لا يمكنك تنفيذ عمليات بيع أو توريد حتى يتم اعتماد الحساب.',
+        'warning'
+      );
+      throw new Error('حساب التاجر قيد المراجعة والتدقيق الإداري.');
+    }
+
     // Strict stock check for sales: Prevent overselling and reject transactions exceeding available shelf quantity
     if (data.type === 'SALE' || data.type === 'CREDIT_SALE') {
       for (const cartItem of data.items) {
@@ -2603,6 +2665,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         syncToCloudNow,
         offlineSyncCount,
         updateOfflineSyncCount,
+        isMerchantApproved,
         addItem,
         saveProduct,
         updateItem,

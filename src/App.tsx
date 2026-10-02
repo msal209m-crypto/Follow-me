@@ -27,6 +27,7 @@ import { OrderGoodsModal } from './components/OrderGoodsModal';
 import { RBACAuthModal } from './components/RBACAuthModal';
 import { SessionInactivityGuard } from './components/SessionInactivityGuard';
 import { clearAllSystemSessions, getActiveSessionRole } from './services/rbacAuthService';
+import { consumePendingAdRedirect } from './services/storeNavigationService';
 import { ShareModal } from './components/ShareModal';
 import { ToastNotification } from './components/ToastNotification';
 import { VillageStoreView } from './components/VillageStoreView';
@@ -502,6 +503,28 @@ const PortalRouter: React.FC = () => {
 
 
 
+  // Listen to cross-app store navigation and ad redirect events
+  useEffect(() => {
+    const handleNavigateStore = () => {
+      setShowGlobalAuthModal(false);
+      setShowRBACAuthModal(false);
+      handleSwitchToStore();
+    };
+
+    const handlePromptAdAuth = () => {
+      setRbacInitialRole('CUSTOMER');
+      setShowRBACAuthModal(true);
+    };
+
+    window.addEventListener('qaryati:navigate-to-store', handleNavigateStore);
+    window.addEventListener('qaryati:prompt-ad-auth', handlePromptAdAuth);
+
+    return () => {
+      window.removeEventListener('qaryati:navigate-to-store', handleNavigateStore);
+      window.removeEventListener('qaryati:prompt-ad-auth', handlePromptAdAuth);
+    };
+  }, []);
+
   const handleOpenRBACAuth = (role?: 'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER') => {
     if (role) {
       setRbacInitialRole(role);
@@ -521,6 +544,14 @@ const PortalRouter: React.FC = () => {
 
   const handleRoleAuthSuccess = (role: 'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER', user: any) => {
     setShowRBACAuthModal(false);
+    
+    // Check if there was a pending ad store visit redirect
+    const consumedAd = consumePendingAdRedirect();
+    if (consumedAd) {
+      handleSwitchToStore();
+      return;
+    }
+
     if (role === 'DEVELOPER') {
       handleSwitchToAdmin();
     } else if (role === 'MERCHANT') {

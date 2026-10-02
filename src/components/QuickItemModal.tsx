@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Barcode, Sparkles, Package, DollarSign, Layers, Camera, Image as ImageIcon, Upload, Trash2, Check, Store, Loader2, HelpCircle } from 'lucide-react';
+import { X, Barcode, Sparkles, Package, DollarSign, Layers, Camera, Image as ImageIcon, Upload, Trash2, Check, Store, Loader2, HelpCircle, Lock } from 'lucide-react';
 import { Item, StoreSettings } from '../types';
 import { useApp } from '../context/AppContext';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
@@ -35,7 +35,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
   settings,
   onClose,
 }) => {
-  const { items, addItem, updateItem, showNotification } = useApp();
+  const { items, addItem, updateItem, isMerchantApproved, showNotification } = useApp();
 
   const [barcode, setBarcode] = useState(initialBarcode != null ? String(initialBarcode) : '');
   const [name, setName] = useState('');
@@ -226,6 +226,14 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Pending Approval Warning */}
+        {!isMerchantApproved && (
+          <div className="p-3 rounded-xl bg-amber-950/80 border border-amber-500/60 text-amber-200 text-xs font-bold flex items-center gap-2">
+            <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>🔒 حساب التاجر بانتظار اعتماد مطور المنصة وتدقيق الهوية. حفظ الأصناف مقفل حتى تفعيل الحساب.</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} autoComplete="off" className="space-y-3.5 text-xs">
           {/* Barcode with Camera Scan & Auto Generate Buttons */}
@@ -607,12 +615,21 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
             <button
               id="btn-save-item-modal"
               type="submit"
-              disabled={isSubmitting || isCompressingImage}
-              className={`flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition-colors cursor-pointer shadow-lg shadow-emerald-950 flex items-center justify-center gap-2 ${
-                isSubmitting || isCompressingImage ? 'opacity-60 cursor-not-allowed' : ''
+              disabled={isSubmitting || isCompressingImage || !isMerchantApproved}
+              className={`flex-1 font-bold py-2.5 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 ${
+                !isMerchantApproved
+                  ? 'bg-slate-800 text-amber-400 border border-amber-500/40 cursor-not-allowed opacity-80'
+                  : isSubmitting || isCompressingImage
+                  ? 'bg-emerald-600 text-white opacity-60 cursor-not-allowed shadow-emerald-950'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-emerald-950'
               }`}
             >
-              {isSubmitting ? (
+              {!isMerchantApproved ? (
+                <>
+                  <Lock className="w-4 h-4 text-amber-400" />
+                  <span>الحساب بانتظار الاعتماد الإداري ⏳</span>
+                </>
+              ) : isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin text-white" />
                   <span>جاري الحفظ والمزامنة...</span>

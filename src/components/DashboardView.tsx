@@ -45,6 +45,7 @@ import {
   Bell,
   Compass,
   Coins,
+  Lock,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { NavigationTab, Transaction, Item } from '../types';
@@ -96,6 +97,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     setLanguage,
     t,
     isRTL,
+    isMerchantApproved: contextIsApproved,
+    showNotification,
   } = useApp();
 
   // Smooth height transition animation for dashboard cards (hover / click expand)
@@ -133,10 +136,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [settings.phone, settings.storeName, settings.ownerName]);
 
   const isKycApproved = useMemo(() => {
-    if (merchantRecord) return merchantRecord.isApproved !== false;
-    if (merchantStoreRecord) return (merchantStoreRecord as any).isApproved !== false;
-    return true;
-  }, [merchantRecord, merchantStoreRecord]);
+    if (merchantRecord) return merchantRecord.isApproved === true;
+    if (merchantStoreRecord) return (merchantStoreRecord as any).isApproved === true;
+    return contextIsApproved;
+  }, [merchantRecord, merchantStoreRecord, contextIsApproved]);
 
   const todayTransactions = useMemo(() => {
     return transactions.filter(
@@ -375,6 +378,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Pending Approval Security Lock Banner (تنبيه قفل الصلاحيات لحساب التاجر المعلق) */}
+      {!isKycApproved && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-950/80 border-2 border-amber-500/80 shadow-lg shadow-amber-950/60 backdrop-blur-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/30 text-amber-300 border border-amber-500/50 flex items-center justify-center shrink-0">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-black text-amber-200 flex items-center gap-2">
+                <span>🔒 حساب التاجر بانتظار موافقة واعتماد المطور (قيد المراجعة ⏳)</span>
+              </h4>
+              <p className="text-[11px] text-amber-300/90 mt-0.5 leading-relaxed">
+                تم تفعيل وضع المعاينة فقط. إضافة الأصناف، وتوريد البضائع، وعمليات البيع مقفلة مؤقتاً حتى يتم تدقيق صورة الهوية والموافقة على حسابك من مطور المنصة.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1.5 rounded-xl bg-amber-900/90 text-amber-200 text-xs font-black border border-amber-500/60 shrink-0 shadow-sm">
+            بانتظار موافقة الإدارة ⏳
+          </span>
+        </div>
+      )}
+
       {/* Merchant Identity Review Status Field (حقل حالة مراجعة الهوية في واجهة التاجر) */}
       <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -385,7 +410,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 : 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse'
             }`}
           >
-            <ShieldCheck className="w-5 h-5" />
+            {isKycApproved ? <ShieldCheck className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
           </div>
           <div>
             <div className="text-[11px] text-slate-400 font-bold flex items-center gap-1.5">
@@ -432,19 +457,51 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* QUICK ACTIONS BAR (Compact and elegant) */}
       <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-1">
         <button
-          onClick={onOpenAddItem}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 hover:border-emerald-500/50 hover:text-emerald-400 transition-all shrink-0 active:scale-95"
+          onClick={() => {
+            if (!isKycApproved) {
+              showNotification('🔒 الصلاحية مقفلة مؤقتاً: حساب التاجر بانتظار اعتماد مطور المنصة وتدقيق الهوية. لا يمكن إضافة أصناف حتى التفعيل.', 'warning');
+            } else {
+              onOpenAddItem();
+            }
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 active:scale-95 ${
+            !isKycApproved
+              ? 'bg-slate-900/60 border border-amber-500/30 text-slate-400 hover:border-amber-500/50 hover:text-amber-300'
+              : 'bg-slate-900 border border-slate-800 text-slate-200 hover:border-emerald-500/50 hover:text-emerald-400'
+          }`}
         >
-          <Plus className="w-4 h-4" />
+          {!isKycApproved ? <Lock className="w-4 h-4 text-amber-400" /> : <Plus className="w-4 h-4" />}
           <span>{language === 'ar' ? 'إضافة صنف' : 'Add Item'}</span>
+          {!isKycApproved && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 font-bold">
+              مقفل ⏳
+            </span>
+          )}
         </button>
+
         <button
-          onClick={() => onOpenOrderGoods(undefined, 'CASH')}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 hover:border-amber-500/50 hover:text-amber-400 transition-all shrink-0 active:scale-95"
+          onClick={() => {
+            if (!isKycApproved) {
+              showNotification('🔒 الصلاحية مقفلة مؤقتاً: حساب التاجر بانتظار اعتماد مطور المنصة وتدقيق الهوية. لا يمكن توريد بضاعة حتى التفعيل.', 'warning');
+            } else {
+              onOpenOrderGoods(undefined, 'CASH');
+            }
+          }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 active:scale-95 ${
+            !isKycApproved
+              ? 'bg-slate-900/60 border border-amber-500/30 text-slate-400 hover:border-amber-500/50 hover:text-amber-300'
+              : 'bg-slate-900 border border-slate-800 text-slate-200 hover:border-amber-500/50 hover:text-amber-400'
+          }`}
         >
-          <Truck className="w-4 h-4" />
+          {!isKycApproved ? <Lock className="w-4 h-4 text-amber-400" /> : <Truck className="w-4 h-4" />}
           <span>{language === 'ar' ? 'توريد بضاعة' : 'Supply'}</span>
+          {!isKycApproved && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 font-bold">
+              مقفل ⏳
+            </span>
+          )}
         </button>
+
         <button
           onClick={() => setShowExchangeRateModal(true)}
           className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-slate-200 hover:border-cyan-500/50 hover:text-cyan-400 transition-all shrink-0 active:scale-95"

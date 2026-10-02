@@ -3202,17 +3202,19 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                             <button
                               type="button"
                               onClick={() => handleUnsuspendStore(store.id)}
-                              className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                              className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-black text-xs rounded-xl transition-colors cursor-pointer"
+                              title="إلغاء الحظر وإعادة التفعيل فوراً"
                             >
-                              إلغاء الحظر
+                              إلغاء الحظر / تفعيل ✅
                             </button>
                           ) : (
                             <button
                               type="button"
                               onClick={() => handleOpenSuspendModal(store)}
-                              className="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                              className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                              title="إيقاف مؤقت دون حذف الحساب"
                             >
-                              حظر / تجميد
+                              إيقاف مؤقت / حظر ⏸️
                             </button>
                           )}
 

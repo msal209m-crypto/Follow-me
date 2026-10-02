@@ -234,7 +234,46 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     return 'قرية الانهوم';
   });
   const [villageSearchQuery, setVillageSearchQuery] = useState<string>('');
-  const [selectedStoreId, setSelectedStoreId] = useState<string>('default');
+  const [selectedStoreId, setSelectedStoreId] = useState<string>(() => {
+    try {
+      const target = sessionStorage.getItem('qaryati_target_store_id') || localStorage.getItem('qaryati_target_store_id');
+      if (target) return target;
+    } catch {}
+    return 'default';
+  });
+  const [visitedAdNotice, setVisitedAdNotice] = useState<{ storeName: string; village: string } | null>(null);
+
+  // Sync village and store when direct ad navigation event is fired
+  useEffect(() => {
+    const handleDirectNavigation = (e: any) => {
+      const { storeId, village, storeName } = e?.detail || {};
+      if (storeId) {
+        setSelectedStoreId(storeId);
+      }
+      if (village) {
+        setSelectedVillage(village);
+      }
+      if (storeName) {
+        setVisitedAdNotice({ storeName, village: village || '' });
+        // Auto dismiss after 8 seconds
+        setTimeout(() => {
+          setVisitedAdNotice(null);
+        }, 8000);
+        // Smooth scroll to store toolbar & products
+        setTimeout(() => {
+          const el = document.getElementById('village-store-toolbar') || document.getElementById('store-products-section');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 150);
+      }
+    };
+
+    window.addEventListener('qaryati:navigate-to-store', handleDirectNavigation);
+    return () => {
+      window.removeEventListener('qaryati:navigate-to-store', handleDirectNavigation);
+    };
+  }, []);
 
   // Sync village when active customer updates
   useEffect(() => {
@@ -945,6 +984,43 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       <div className="max-w-6xl mx-auto px-4 mt-4 mb-1">
         <AdBannerWidget currentVillage={selectedVillage} isDarkMode={true} isRTL={isRTL} />
       </div>
+
+      {/* Visited Store Celebration / Direct Redirect Banner */}
+      {visitedAdNotice && (
+        <div className="max-w-6xl mx-auto px-4 my-2 animate-in fade-in slide-in-from-top-3 duration-300">
+          <div className="bg-gradient-to-r from-emerald-900/90 via-teal-900/90 to-emerald-950/90 border-2 border-emerald-400/80 rounded-2xl p-3.5 sm:p-4 text-white shadow-xl flex items-center justify-between gap-3 backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-400 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-md">
+                <Store className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-black bg-emerald-400/20 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-lg">
+                    🛍️ تم توجيهك للمتجر المعلن عنه
+                  </span>
+                  {visitedAdNotice.village && (
+                    <span className="text-[11px] text-amber-300 font-medium">
+                      📍 {visitedAdNotice.village}
+                    </span>
+                  )}
+                </div>
+                <h4 className="text-sm sm:text-base font-black text-white mt-0.5">
+                  أهلاً بك في متجر {visitedAdNotice.storeName}! تصفح المنتجات وأضفها لسلتك للطلب المباشر.
+                </h4>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setVisitedAdNotice(null)}
+              className="p-1.5 text-slate-300 hover:text-white bg-slate-900/60 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer border border-slate-700/60 shrink-0"
+              title="إغلاق التنبيه"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hero Welcome Bar */}
       <div className="bg-gradient-to-b from-slate-900 via-slate-900/80 to-slate-950 border-b border-slate-800/60 py-6 px-4">

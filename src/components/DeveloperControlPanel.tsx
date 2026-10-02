@@ -38,6 +38,7 @@ import {
   Eye,
   Radio,
   SlidersHorizontal,
+  RotateCcw,
   ChevronRight,
   PartyPopper,
   Flame,
@@ -55,7 +56,6 @@ import {
   AlertTriangle,
   Package,
   Key,
-  RotateCcw,
   Edit3,
   Save,
   X
@@ -75,6 +75,10 @@ import {
   clearAccessLogs,
   deleteAccessLog,
   deleteMerchantAccount,
+  getDeletedMerchants,
+  restoreMerchantAccount,
+  permanentlyDeleteMerchantAccount,
+  DeletedMerchantRecord,
   deleteDriverAccount,
   toggleMerchantStatus,
   toggleDriverStatus,
@@ -135,7 +139,17 @@ interface DeveloperControlPanelProps {
   isDarkMode?: boolean;
 }
 
-type DeveloperSubTab = 'GATEKEEPING' | 'ORDERS' | 'CUSTOMERS' | 'LICENSES' | 'MESSAGES' | 'PORTALS' | 'LOGS';
+type DeveloperSubTab = 
+  | 'GATEKEEPING' 
+  | 'ORDERS' 
+  | 'CUSTOMERS' 
+  | 'ADS' 
+  | 'TRASH_BIN' 
+  | 'MESSAGES' 
+  | 'LICENSES' 
+  | 'PORTALS' 
+  | 'CLOUD_DIAGNOSTICS' 
+  | 'LOGS_SECURITY';
 
 export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({ 
   onNavigate, 
@@ -244,6 +258,8 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     }
   };
 
+  const [deletedMerchants, setDeletedMerchants] = useState<DeletedMerchantRecord[]>(() => getDeletedMerchants());
+
   // Synchronizers
   const loadLogs = () => {
     setLogs(getAccessLogs());
@@ -252,6 +268,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   const refreshAccounts = () => {
     setMerchants(getMerchants());
     setDrivers(getDrivers());
+    setDeletedMerchants(getDeletedMerchants());
   };
 
   const loadNotifications = () => {
@@ -384,10 +401,15 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
       loadAdsList();
     };
 
+    const handleDeletedUpd = () => {
+      setDeletedMerchants(getDeletedMerchants());
+    };
+
     window.addEventListener('qaryati:new-customer-registered', handleNewCust);
     window.addEventListener('qaryati:customer-status-updated', handleStatusUpd);
     window.addEventListener('qaryati:customer-deleted', handleStatusUpd);
     window.addEventListener('qaryati:ads-updated', handleAdsUpd);
+    window.addEventListener('qaryati:deleted-merchants-updated', handleDeletedUpd);
     window.addEventListener('focus', loadNotifications);
 
     return () => {
@@ -398,9 +420,28 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
       window.removeEventListener('qaryati:customer-status-updated', handleStatusUpd);
       window.removeEventListener('qaryati:customer-deleted', handleStatusUpd);
       window.removeEventListener('qaryati:ads-updated', handleAdsUpd);
+      window.removeEventListener('qaryati:deleted-merchants-updated', handleDeletedUpd);
       window.removeEventListener('focus', loadNotifications);
     };
   }, [activeSubTab]);
+
+  const handleRestoreMerchant = (id: string) => {
+    const res = restoreMerchantAccount(id);
+    refreshAccounts();
+    if (res.success) {
+      setActionSuccessMsg(res.message);
+      setTimeout(() => setActionSuccessMsg(null), 4500);
+    }
+  };
+
+  const handlePermanentlyDeleteMerchant = (id: string, name: string) => {
+    if (window.confirm(`⚠️ تنبيه أمني:\nهل أنت متأكد من الحذف النهائي للأبد لـ (${name}) من سلة المحذوفات والقواعد السحابية؟\nهذا الإجراء لا يمكن التراجع عنه.`)) {
+      permanentlyDeleteMerchantAccount(id);
+      refreshAccounts();
+      setActionSuccessMsg(`تم حذف (${name}) نهائياً للأبد 🗑️`);
+      setTimeout(() => setActionSuccessMsg(null), 3000);
+    }
+  };
 
   // Derived Metrics
   const pendingMerchants = useMemo(() => merchants.filter((m) => m.isApproved === false), [merchants]);
@@ -707,7 +748,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   };
 
   useEffect(() => {
-    if (activeSubTab === 'LICENSES') {
+    if (activeSubTab === 'SUPPORT_LICENSES') {
       loadLicenseKeys();
     }
   }, [activeSubTab]);
@@ -823,7 +864,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   };
 
   useEffect(() => {
-    if (activeSubTab === 'GATEKEEPING') {
+    if (activeSubTab === 'SUPPORT_LICENSES' || activeSubTab === 'MERCHANTS_DRIVERS') {
       runTestQuery();
     }
   }, [testVillage, activeSubTab]);
@@ -995,46 +1036,23 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
         {/* 2. EXECUTIVE KPI SUMMARY STRIP (شريط مؤشرات الأداء اللحظي) */}
         {/* ========================================================= */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {/* Customers KPI */}
-          <div 
-            onClick={() => setActiveSubTab('CUSTOMERS')}
-            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
-              activeSubTab === 'CUSTOMERS'
-                ? 'bg-cyan-950/30 border-cyan-500/50 shadow-md shadow-cyan-950/30'
-                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400">العملاء السحابيون</span>
-              <Users className="w-4 h-4 text-cyan-400" />
-            </div>
-            <div className="flex items-baseline gap-2 mt-2">
-              <strong className="text-xl font-black text-white font-mono">{customers.length}</strong>
-              {newCustomersCount > 0 && (
-                <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
-                  +{newCustomersCount} جديد 🟢
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Pending Merchants KPI */}
+          {/* Merchants & Fleet KPI */}
           <div 
             onClick={() => setActiveSubTab('GATEKEEPING')}
             className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
               activeSubTab === 'GATEKEEPING'
-                ? 'bg-amber-950/30 border-amber-500/50 shadow-md shadow-amber-950/30'
-                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                ? 'bg-amber-950/40 border-amber-500/60 shadow-lg shadow-amber-950/40 scale-[1.02]'
+                : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400">حراسة المتاجر</span>
+              <span className="text-[11px] font-bold text-slate-300">المتاجر والأسطول</span>
               <Store className="w-4 h-4 text-amber-400" />
             </div>
             <div className="flex items-baseline gap-2 mt-2">
               <strong className="text-xl font-black text-white font-mono">{approvedMerchants.length}</strong>
               {pendingMerchants.length > 0 ? (
-                <span className="text-[10px] font-black text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded-md animate-pulse">
+                <span className="text-[10px] font-black text-rose-300 bg-rose-500/20 border border-rose-500/30 px-2 py-0.5 rounded-full animate-pulse">
                   {pendingMerchants.length} معلق ⏳
                 </span>
               ) : (
@@ -1043,52 +1061,71 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
             </div>
           </div>
 
-          {/* Pending Drivers KPI */}
+          {/* Trash Bin KPI */}
           <div 
-            onClick={() => setActiveSubTab('GATEKEEPING')}
+            onClick={() => setActiveSubTab('TRASH_BIN')}
             className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
-              activeSubTab === 'GATEKEEPING'
-                ? 'bg-amber-950/30 border-amber-500/50 shadow-md shadow-amber-950/30'
-                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+              activeSubTab === 'TRASH_BIN'
+                ? 'bg-rose-950/40 border-rose-500/60 shadow-lg shadow-rose-950/40 scale-[1.02]'
+                : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400">أسطول التوصيل</span>
-              <Truck className="w-4 h-4 text-amber-400" />
+              <span className="text-[11px] font-bold text-slate-300">سلة المحذوفات</span>
+              <Trash2 className="w-4 h-4 text-rose-400" />
             </div>
             <div className="flex items-baseline gap-2 mt-2">
-              <strong className="text-xl font-black text-white font-mono">{approvedDrivers.length}</strong>
-              {pendingDrivers.length > 0 ? (
-                <span className="text-[10px] font-black text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded-md animate-pulse">
-                  {pendingDrivers.length} معلق ⏳
+              <strong className="text-xl font-black text-white font-mono">{deletedMerchants.length}</strong>
+              <span className="text-[10px] text-rose-300 font-bold bg-rose-500/10 px-1.5 py-0.5 rounded-md">
+                مؤرشف 🗑️
+              </span>
+            </div>
+          </div>
+
+          {/* Customers & Orders KPI */}
+          <div 
+            onClick={() => setActiveSubTab('CUSTOMERS')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              activeSubTab === 'CUSTOMERS'
+                ? 'bg-cyan-950/40 border-cyan-500/60 shadow-lg shadow-cyan-950/40 scale-[1.02]'
+                : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-300">العملاء والمسجلين</span>
+              <Users className="w-4 h-4 text-cyan-400" />
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <strong className="text-xl font-black text-white font-mono">{customers.length}</strong>
+              {cloudOrders.length > 0 && (
+                <span className="text-[10px] font-bold text-cyan-300 bg-cyan-500/10 px-1.5 py-0.5 rounded-md">
+                  {cloudOrders.length} طلب حي
                 </span>
-              ) : (
-                <span className="text-[10px] text-emerald-400 font-bold">معتمد بالكامل ✓</span>
               )}
             </div>
           </div>
 
-          {/* Support Inquiries KPI */}
+          {/* Support KPI */}
           <div 
             onClick={() => setActiveSubTab('MESSAGES')}
             className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
               activeSubTab === 'MESSAGES'
-                ? 'bg-emerald-950/30 border-emerald-500/50 shadow-md shadow-emerald-950/30'
-                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                ? 'bg-emerald-950/40 border-emerald-500/60 shadow-lg shadow-emerald-950/40 scale-[1.02]'
+                : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400">رسائل المنصة</span>
+              <span className="text-[11px] font-bold text-slate-300">الدعم والاستفسارات</span>
               <MessageSquare className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="flex items-baseline gap-2 mt-2">
               <strong className="text-xl font-black text-white font-mono">{notifications.length}</strong>
               {unreadMessagesCount > 0 ? (
-                <span className="text-[10px] font-black text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded-md animate-pulse">
-                  {unreadMessagesCount} غير مقروء 📩
+                <span className="text-[10px] font-black text-rose-300 bg-rose-500/20 px-2 py-0.5 rounded-full animate-pulse">
+                  {unreadMessagesCount} جديد 📩
                 </span>
               ) : (
-                <span className="text-[10px] text-slate-500 font-bold">متابع بالكامل ✓</span>
+                <span className="text-[10px] text-emerald-400 font-bold">متابع بالكامل ✓</span>
               )}
             </div>
           </div>
@@ -1098,238 +1135,195 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
             onClick={() => setActiveSubTab('PORTALS')}
             className={`p-3.5 rounded-2xl border transition-all cursor-pointer col-span-2 sm:col-span-1 ${
               activeSubTab === 'PORTALS'
-                ? 'bg-indigo-950/30 border-indigo-500/50 shadow-md shadow-indigo-950/30'
-                : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                ? 'bg-indigo-950/40 border-indigo-500/60 shadow-lg shadow-indigo-950/40 scale-[1.02]'
+                : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400">بوابات النظام</span>
+              <span className="text-[11px] font-bold text-slate-300">البوابات والأمان</span>
               <LayoutGrid className="w-4 h-4 text-indigo-400" />
             </div>
             <div className="flex items-baseline gap-2 mt-2">
               <strong className="text-xl font-black text-white font-mono">6 بوابات</strong>
-              <span className="text-[10px] text-cyan-400 font-bold">جاهزة ومفعلة ✓</span>
+              <span className="text-[10px] text-indigo-300 font-bold">نشطة ⚡</span>
             </div>
           </div>
         </div>
 
         {/* ========================================================= */}
-        {/* 3. SEGMENTED TAB NAVIGATION (التبويبات المنظمة) */}
+        {/* 3. SEGMENTED TAB NAVIGATION (10 أقسام متخصصة ومنظمة بدون أي تكرار) */}
         {/* ========================================================= */}
-        <div className="flex gap-2 p-1.5 bg-slate-900/80 rounded-2xl border border-slate-800/90 overflow-x-auto scrollbar-none">
-          {/* Tab 1: Gatekeeping */}
+        <div className="flex items-center gap-1.5 p-2 bg-slate-900/90 rounded-2xl border border-slate-800 shadow-xl overflow-x-auto scrollbar-thin">
+          {/* 1. GATEKEEPING */}
           <button
             type="button"
             onClick={() => setActiveSubTab('GATEKEEPING')}
-            className={`flex-1 min-w-[170px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
               activeSubTab === 'GATEKEEPING'
-                ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/25 scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <Shield className="w-4 h-4" />
-            <span>حراسة الاعتمادات والسحابة</span>
-            {(pendingMerchants.length > 0 || pendingDrivers.length > 0) && (
+            <ShieldCheck className="w-4 h-4" />
+            <span>اعتماد التجار والأسطول</span>
+            {pendingMerchants.length > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black animate-pulse">
-                {pendingMerchants.length + pendingDrivers.length} معلق
+                {pendingMerchants.length} معلق
               </span>
             )}
           </button>
 
-          {/* Tab 2: Orders */}
+          {/* 2. ORDERS */}
           <button
             type="button"
             onClick={() => setActiveSubTab('ORDERS')}
-            className={`flex-1 min-w-[170px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
               activeSubTab === 'ORDERS'
-                ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/25 scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Package className="w-4 h-4" />
-            <span>طلبات القرى الحية</span>
-            {cloudOrders.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-violet-600 text-white text-[10px] font-black font-mono">
-                {cloudOrders.length} طلب
-              </span>
-            )}
+            <span>الطلبات الحية</span>
+            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-mono">
+              {cloudOrders.length}
+            </span>
           </button>
 
-          {/* Tab 3: Customers */}
+          {/* 3. CUSTOMERS */}
           <button
             type="button"
             onClick={() => setActiveSubTab('CUSTOMERS')}
-            className={`flex-1 min-w-[170px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
               activeSubTab === 'CUSTOMERS'
-                ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-slate-950 shadow-lg shadow-cyan-500/25 scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>دليل العملاء والمستخدمين</span>
-            {newCustomersCount > 0 ? (
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black">
-                {newCustomersCount} جديد 🟢
-              </span>
-            ) : (
-              <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
-                {customers.length}
+            <span>قاعدة العملاء</span>
+            {newCustomersCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black">
+                +{newCustomersCount}
               </span>
             )}
           </button>
 
-          {/* Tab 4: Licenses & Reset */}
+          {/* 4. ADS */}
           <button
             type="button"
-            onClick={() => setActiveSubTab('LICENSES')}
-            className={`flex-1 min-w-[170px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
-              activeSubTab === 'LICENSES'
-                ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            onClick={() => setActiveSubTab('ADS')}
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
+              activeSubTab === 'ADS'
+                ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-slate-950 shadow-lg shadow-yellow-500/25 scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <Key className="w-4 h-4" />
-            <span>مفاتيح الترخيص وضبط النظام</span>
-            <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
-              🔑
+            <PartyPopper className="w-4 h-4" />
+            <span>الإعلانات والافتتاحات</span>
+            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-mono">
+              {ads.length}
             </span>
           </button>
 
-          {/* Tab 5: Messages */}
+          {/* 5. TRASH_BIN */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('TRASH_BIN')}
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
+              activeSubTab === 'TRASH_BIN'
+                ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-600/30 scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Trash2 className="w-4 h-4 text-rose-300" />
+            <span>سلة المحذوفات والأرشيف</span>
+            <span className="px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 text-[10px] font-black border border-rose-800/60 font-mono">
+              {deletedMerchants.length}
+            </span>
+          </button>
+
+          {/* 6. MESSAGES */}
           <button
             type="button"
             onClick={() => setActiveSubTab('MESSAGES')}
-            className={`flex-1 min-w-[170px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
               activeSubTab === 'MESSAGES'
-                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 shadow-lg shadow-emerald-500/25 scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <MessageSquare className="w-4 h-4" />
-            <span>رسائل واستفسارات الدعم</span>
-            {unreadMessagesCount > 0 ? (
+            <span>الدعم والاستفسارات</span>
+            {unreadMessagesCount > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-black animate-pulse">
-                {unreadMessagesCount} جديد 📩
-              </span>
-            ) : (
-              <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
-                {notifications.length}
+                {unreadMessagesCount} جديد
               </span>
             )}
           </button>
 
-          {/* Tab 4: Portals */}
+          {/* 7. LICENSES */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('LICENSES')}
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
+              activeSubTab === 'LICENSES'
+                ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-lg shadow-amber-400/25 scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Key className="w-4 h-4" />
+            <span>التراخيص VIP</span>
+          </button>
+
+          {/* 8. PORTALS */}
           <button
             type="button"
             onClick={() => setActiveSubTab('PORTALS')}
-            className={`flex-1 min-w-[150px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
               activeSubTab === 'PORTALS'
-                ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/25 scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <LayoutGrid className="w-4 h-4" />
-            <span>مداخل وبوابات النظام</span>
-            <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
-              6
-            </span>
+            <span>بوابات المنصة</span>
           </button>
 
-          {/* Tab 5: Logs */}
+          {/* 9. CLOUD_DIAGNOSTICS */}
           <button
             type="button"
-            onClick={() => setActiveSubTab('LOGS')}
-            className={`flex-1 min-w-[150px] py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
-              activeSubTab === 'LOGS'
-                ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+            onClick={() => setActiveSubTab('CLOUD_DIAGNOSTICS')}
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
+              activeSubTab === 'CLOUD_DIAGNOSTICS'
+                ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-lg shadow-sky-500/25 scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <History className="w-4 h-4" />
-            <span>سجل الأمان والعمليات</span>
-            <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
-              {logs.length}
-            </span>
+            <Database className="w-4 h-4" />
+            <span>تشخيص السحابة</span>
+          </button>
+
+          {/* 10. LOGS_SECURITY */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('LOGS_SECURITY')}
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
+              activeSubTab === 'LOGS_SECURITY'
+                ? 'bg-gradient-to-r from-slate-700 to-slate-800 text-white shadow-lg scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Lock className="w-4 h-4" />
+            <span>سجل الأمان والضبط</span>
           </button>
         </div>
 
         {/* ========================================================= */}
-        {/* TAB 1: GATEKEEPING & SUPABASE (حراسة الاعتمادات والسحابة) */}
+        {/* TAB 1: GATEKEEPING (اعتماد التجار والأسطول) */}
         {/* ========================================================= */}
         {activeSubTab === 'GATEKEEPING' && (
           <div className="space-y-6">
-            {/* Supabase Live Connection & Health Check Card */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900/90 to-purple-950/40 border border-emerald-500/30 shadow-xl space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
-                    <Database className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-black text-white">حالة الاتصال السحابي بـ Supabase</h3>
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-black flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                        مرتبط بنجاح (Supabase Connected)
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
-                      https://vwpnpgticeehgypfmwnw.supabase.co
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={testSupabaseConnection}
-                    disabled={supabasePingStatus === 'TESTING'}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-950 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${supabasePingStatus === 'TESTING' ? 'animate-spin' : ''}`} />
-                    <span>{supabasePingStatus === 'TESTING' ? 'جاري الفحص...' : 'فحص الاتصال الحي ⚡'}</span>
-                  </button>
-                  <a
-                    href="https://supabase.com/dashboard/project/vwpnpgticeehgypfmwnw"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-colors"
-                  >
-                    <span>لوحة Supabase</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-              </div>
-
-              {/* Ping Result Banner if clicked */}
-              {supabasePingMessage && (
-                <div className="p-2.5 rounded-xl bg-slate-950/80 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300 font-mono">
-                  <span>{supabasePingMessage}</span>
-                  {supabasePingLatency !== null && (
-                    <span className="text-[11px] text-slate-400 font-sans">
-                      سرعة الاستجابة: <strong className="text-white font-mono">{supabasePingLatency} ms</strong>
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* How to verify in Supabase Quick Guide */}
-              <div className="pt-3 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                <div className="p-2 rounded-lg bg-slate-950/40 border border-slate-800/60">
-                  <span className="font-bold text-amber-300 block mb-0.5">1. جداول البيانات (Table Editor)</span>
-                  <span className="text-slate-400">ستجد جداول <code className="text-emerald-400">merchants</code> و <code className="text-emerald-400">drivers</code> و <code className="text-emerald-400">customers</code> تتحدث مع كل عملية.</span>
-                </div>
-                <div className="p-2 rounded-lg bg-slate-950/40 border border-slate-800/60">
-                  <span className="font-bold text-cyan-300 block mb-0.5">2. سجل الطلبات الحية (API Logs)</span>
-                  <span className="text-slate-400">في Supabase &gt; Logs &gt; PostgREST ستظهر طلبات التطبيق فوراً بحالة 200 OK.</span>
-                </div>
-                <div className="p-2 rounded-lg bg-slate-950/40 border border-slate-800/60">
-                  <span className="font-bold text-purple-300 block mb-0.5">3. محرر الاستعلامات (SQL Editor)</span>
-                  <span className="text-slate-400">استخدم الزر بالأسفل لنسخ كود الجداول وتشغيله بضغطة زر واحدة إذا لم تكن الجداول منشأة بعد.</span>
-                </div>
-              </div>
-            </div>
-
             {/* Quick Status Sub-Bar */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
@@ -1429,7 +1423,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+                      <div className="flex items-center gap-2 flex-wrap shrink-0 self-end md:self-center">
                         {m.idVerificationPhoto && (
                           <button
                             type="button"
@@ -1450,30 +1444,27 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                           <Edit3 className="w-3.5 h-3.5" />
                           <span>تعديل</span>
                         </button>
+
+                        {/* الزر الأول: قبول الموافقة وتفعيل التاجر فوراً */}
                         <button
                           type="button"
                           onClick={() => handleApproveMerchant(m.id, m.name)}
-                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-950"
+                          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-emerald-950/60 active:scale-95"
+                          title="قبول طلب التاجر وتفعيل حسابه ومتجره فوراً بالقرية"
                         >
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>اعتماد المتجر فوراً ✅</span>
+                          <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                          <span>قبول الموافقة وتفعيل التاجر فوراً ✅</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRejectMerchant(m.id, m.name)}
-                          className="px-3.5 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer"
-                        >
-                          <XCircle className="w-4 h-4" />
-                          <span>رفض</span>
-                        </button>
+
+                        {/* الزر الثاني: رفض / حذف نهائي */}
                         <button
                           type="button"
                           onClick={() => handleDeleteMerchant(m.id, m.name)}
-                          className="px-3 py-2 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
-                          title="حذف هذا الطلب وحساب التاجر نهائياً من قاعدة البيانات"
+                          className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-rose-950 via-red-950 to-rose-950 hover:from-rose-900 hover:to-red-900 border border-rose-700/60 text-rose-200 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md active:scale-95"
+                          title="رفض وحذف هذا الطلب وحساب التاجر نهائياً"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>حذف</span>
+                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                          <span>رفض / حذف نهائي 🗑️</span>
                         </button>
                       </div>
                     </div>
@@ -1567,6 +1558,107 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Deleted Merchants Trash Bin & Archive */}
+            <div className="bg-slate-900/80 border border-rose-500/30 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2">
+                      <span>سلة المحذوفات وأرشيف المتاجر المحذوفة</span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                        {deletedMerchants.length} متجر مؤرشف
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      تظهر هنا كافة المتاجر والحسابات المحذوفة. اضغط «استعادة الحساب والمتجر» لإعادته فوراً لقائمة المعلقين حيث يمكنك اعتماده وتفعيله، تعديله أو رفضه.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {deletedMerchants.length === 0 ? (
+                <div className="p-6 rounded-2xl bg-slate-950/40 border border-slate-800/70 text-center">
+                  <CheckCircle2 className="w-7 h-7 text-slate-600 mx-auto mb-2" />
+                  <h4 className="text-xs font-bold text-slate-400">لا توجد متاجر محذوفة أو مؤرشفة في سلة المحذوفات حالياً</h4>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    عند حذف أي متجر، سيظهر هنا لحمايته من الضياع وإتاحة استعادته بضغطة زر واحدة دون الحاجة لإعادة التسجيل.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {deletedMerchants.map((item) => {
+                    const m = item.merchant;
+                    const st = item.store;
+                    const storeName = st?.name || m?.storeName || 'متجر محذوف';
+                    const ownerName = m?.name || st?.ownerName || 'صاحب المتجر';
+                    const village = m?.village || st?.cityOrVillage || 'القرية';
+                    const phone = m?.phone || st?.phone || '';
+                    const nationalId = m?.nationalId || '';
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-4 rounded-2xl bg-slate-950 border border-rose-900/40 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-rose-500/50"
+                      >
+                        <div className="flex items-start gap-3.5">
+                          <div className="w-12 h-12 rounded-2xl bg-rose-950/80 text-rose-400 flex items-center justify-center font-black shrink-0 border border-rose-800/50 text-xl">
+                            🗑️
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <strong className="text-white text-sm font-black">{storeName}</strong>
+                              <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 text-[10px] font-bold border border-rose-500/30">
+                                محذوف / مؤرشف 🗑️
+                              </span>
+                              {item.deletedAt && (
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  تاريخ الحذف: {new Date(item.deletedAt).toLocaleDateString('ar-SA')}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-300">
+                              المالك: <strong className="text-white">{ownerName}</strong> • القرية: <strong className="text-amber-400 font-bold">{village}</strong>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono flex items-center gap-3 flex-wrap">
+                              {phone && <span>الجوال: {phone}</span>}
+                              {nationalId && <span>الهوية: {nationalId}</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+                          {/* زر استعادة الحساب والمتجر */}
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreMerchant(item.id)}
+                            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 via-teal-500 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-cyan-950/50 active:scale-95"
+                            title="إعادة هذا المتجر من سلة المحذوفات إلى قائمة المتاجر المعلقة حيث يمكنك اعتماده وتفعيله فوراً"
+                          >
+                            <RotateCcw className="w-4 h-4 text-slate-950" />
+                            <span>استعادة الحساب والمتجر 🔄</span>
+                          </button>
+
+                          {/* زر حذف نهائي للأبد */}
+                          <button
+                            type="button"
+                            onClick={() => handlePermanentlyDeleteMerchant(item.id, storeName)}
+                            className="px-3 py-2.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
+                            title="حذف هذا المتجر للأبد نهائياً من قاعدة البيانات والسحابة"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف نهائي ⚠️</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Pending Drivers */}
@@ -1747,7 +1839,14 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                 )}
               </div>
             </div>
+          </div>
+        )}
 
+        {/* ========================================================= */}
+        {/* TAB 4: ADS & GRAND OPENINGS (الإعلانات وبنرات الافتتاح) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'ADS' && (
+          <div className="space-y-6">
             {/* Ads & Grand Openings Management Section */}
             <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
@@ -2087,7 +2186,7 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
         )}
 
         {/* ========================================================= */}
-        {/* TAB 2: LIVE ORDERS (إدارة ومراقبة طلبات أهالي القرى الحية) */}
+        {/* TAB 2: LIVE ORDERS (إدارة الطلبات الحية والعمليات) */}
         {/* ========================================================= */}
         {activeSubTab === 'ORDERS' && (
           <div className="space-y-6">
@@ -2214,7 +2313,7 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
         )}
 
         {/* ========================================================= */}
-        {/* TAB 2: CUSTOMERS & NEW USERS (دليل العملاء السحابي) */}
+        {/* TAB 3: CUSTOMERS REGISTRY (قاعدة بيانات العملاء والمستخدمين) */}
         {/* ========================================================= */}
         {activeSubTab === 'CUSTOMERS' && (
           <div className="space-y-6">
@@ -2527,7 +2626,7 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
         )}
 
         {/* ========================================================= */}
-        {/* TAB: LICENSES & SYSTEM RESET (مفاتيح الترخيص وضبط النظام) */}
+        {/* TAB 7: LICENSES VIP (التراخيص ومفاتيح الاشتراك) */}
         {/* ========================================================= */}
         {activeSubTab === 'LICENSES' && (
           <div className="space-y-6">
@@ -2713,81 +2812,11 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                 </div>
               )}
             </div>
-
-            {/* Master System Reset & Demo Purge Section */}
-            <div className="bg-rose-950/20 border border-rose-500/30 rounded-3xl p-5 sm:p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
-                  <RotateCcw className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-rose-300">إعادة ضبط المنظومة وتطهير البيانات التجريبية</h3>
-                  <p className="text-[11px] text-slate-400">
-                    أدوات المطور لتطهير طلبات الاختبار وتصفير العدادات قبل تسليم التطبيق للأهالي والتجار.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                {/* Purge Test Orders Only */}
-                <div className="bg-slate-950/70 border border-slate-850 rounded-2xl p-4 space-y-2 flex flex-col justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>تطهير الطلبات التجريبية فقط</span>
-                      <span className="text-[10px] text-amber-400">(خفيف وآمن)</span>
-                    </h4>
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      يمسح كافة طلبات التوصيل الوهمية ويصفر عدادات السائقين مع الحفاظ التام على المتاجر وحسابات المشتركين.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handlePurgeDemoOrders}
-                    className="w-full mt-3 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>مسح وتطهير الطلبات التجريبية</span>
-                  </button>
-                </div>
-
-                {/* Master Factory Reset */}
-                <div className="bg-rose-950/40 border border-rose-500/30 rounded-2xl p-4 space-y-2 flex flex-col justify-between">
-                  <div>
-                    <h4 className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
-                      <span>إعادة ضبط المصنع وتجهيز الإنتاج العام</span>
-                      <span className="text-[10px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded">شامل</span>
-                    </h4>
-                    <p className="text-[11px] text-slate-300 mt-1">
-                      يطهر سجلات الأمان، ويزيل الإعلانات التجريبية، ويولد حزمة تراخيص جديدة مع حماية هيكل التطبيق وقرى المملكة.
-                    </p>
-                  </div>
-
-                  <div className="mt-3 space-y-2">
-                    <input
-                      type="text"
-                      value={masterResetConfirmText}
-                      onChange={(e) => setMasterResetConfirmText(e.target.value)}
-                      placeholder='اكتب كلمة "تأكيد" للبدء...'
-                      className="w-full bg-slate-950 border border-rose-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-400 text-center font-bold"
-                    />
-                    <button
-                      type="button"
-                      disabled={isResetting || (masterResetConfirmText.trim() !== 'تأكيد' && masterResetConfirmText.trim() !== 'RESET')}
-                      onClick={handleMasterFactoryReset}
-                      className="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
-                    >
-                      <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
-                      <span>{isResetting ? 'جاري إعادة الضبط...' : 'تنفيذ إعادة الضبط الشاملة ⚠️'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
         {/* ========================================================= */}
-        {/* TAB 3: INCOMING MESSAGES & SUPPORT (رسائل واستفسارات المنصة) */}
+        {/* TAB 6: TECHNICAL SUPPORT & INQUIRIES (الدعم والاستفسارات) */}
         {/* ========================================================= */}
         {activeSubTab === 'MESSAGES' && (
           <div className="space-y-6">
@@ -2985,10 +3014,10 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
         )}
 
         {/* ========================================================= */}
-        {/* TAB 4: SYSTEM PORTALS (مداخل وبوابات النظام الست) */}
+        {/* TAB 8: SYSTEM PORTALS (بوابات المنصة والانتقال السريع) */}
         {/* ========================================================= */}
         {activeSubTab === 'PORTALS' && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-black text-white flex items-center gap-2">
@@ -3035,9 +3064,9 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
         )}
 
         {/* ========================================================= */}
-        {/* TAB 5: ACCESS & SECURITY LOGS (سجل الأمان والعمليات) */}
+        {/* TAB 10: ACCESS & SECURITY LOGS (سجل الأمان والتصفير الشامل) */}
         {/* ========================================================= */}
-        {activeSubTab === 'LOGS' && (
+        {activeSubTab === 'LOGS_SECURITY' && (
           <div className="space-y-4">
             {/* Logs Toolbar */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -3181,6 +3210,403 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                     </div>
                   </div>
                 ))
+              )}
+            </div>
+            {/* Master System Reset & Demo Purge Section */}
+            <div className="bg-rose-950/20 border border-rose-500/30 rounded-3xl p-5 sm:p-6 space-y-4 mt-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-rose-300">إعادة ضبط المنظومة وتطهير البيانات التجريبية</h3>
+                  <p className="text-[11px] text-slate-400">
+                    أدوات المطور لتطهير طلبات الاختبار وتصفير العدادات قبل تسليم التطبيق للأهالي والتجار.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                {/* Purge Test Orders Only */}
+                <div className="bg-slate-950/70 border border-slate-850 rounded-2xl p-4 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>تطهير الطلبات التجريبية فقط</span>
+                      <span className="text-[10px] text-amber-400">(خفيف وآمن)</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      يمسح كافة طلبات التوصيل الوهمية ويصفر عدادات السائقين مع الحفاظ التام على المتاجر وحسابات المشتركين.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handlePurgeDemoOrders}
+                    className="w-full mt-3 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>مسح وتطهير الطلبات التجريبية</span>
+                  </button>
+                </div>
+
+                {/* Master Factory Reset */}
+                <div className="bg-rose-950/40 border border-rose-500/30 rounded-2xl p-4 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
+                      <span>إعادة ضبط المصنع وتجهيز الإنتاج العام</span>
+                      <span className="text-[10px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded">شامل</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-300 mt-1">
+                      يطهر سجلات الأمان، ويزيل الإعلانات التجريبية، ويولد حزمة تراخيص جديدة مع حماية هيكل التطبيق وقرى المملكة.
+                    </p>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    <input
+                      type="text"
+                      value={masterResetConfirmText}
+                      onChange={(e) => setMasterResetConfirmText(e.target.value)}
+                      placeholder='اكتب كلمة "تأكيد" للبدء...'
+                      className="w-full bg-slate-950 border border-rose-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-400 text-center font-bold"
+                    />
+                    <button
+                      type="button"
+                      disabled={isResetting || (masterResetConfirmText.trim() !== 'تأكيد' && masterResetConfirmText.trim() !== 'RESET')}
+                      onClick={handleMasterFactoryReset}
+                      className="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                    >
+                      <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+                      <span>{isResetting ? 'جاري إعادة الضبط...' : 'تنفيذ إعادة الضبط الشاملة ⚠️'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 9: CLOUD DIAGNOSTICS & QUERY SIMULATOR (تشخيص السحابة) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'CLOUD_DIAGNOSTICS' && (
+          <div className="space-y-6">
+            {/* Supabase Live Connection & Health Check Card */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900/90 to-purple-950/40 border border-emerald-500/30 shadow-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                    <Database className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-black text-white">حالة الاتصال السحابي بـ Supabase</h3>
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-black flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        مرتبط بنجاح (Supabase Connected)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5 font-mono">
+                      https://vwpnpgticeehgypfmwnw.supabase.co
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={testSupabaseConnection}
+                    disabled={supabasePingStatus === 'TESTING'}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-950 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${supabasePingStatus === 'TESTING' ? 'animate-spin' : ''}`} />
+                    <span>{supabasePingStatus === 'TESTING' ? 'جاري الفحص...' : 'فحص الاتصال الحي ⚡'}</span>
+                  </button>
+                  <a
+                    href="https://supabase.com/dashboard/project/vwpnpgticeehgypfmwnw"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-colors"
+                  >
+                    <span>لوحة Supabase</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Ping Result Banner if clicked */}
+              {supabasePingMessage && (
+                <div className="p-2.5 rounded-xl bg-slate-950/80 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300 font-mono">
+                  <span>{supabasePingMessage}</span>
+                  {supabasePingLatency !== null && (
+                    <span className="text-[11px] text-slate-400 font-sans">
+                      سرعة الاستجابة: <strong className="text-white font-mono">{supabasePingLatency} ms</strong>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Live Village Query Simulator */}
+            <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">
+                      محاكي استعلامات الفلترة المكانية (Village-First Query Inspector)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      اختبر واستعرض فورياً ما يراه ساكن كل قرية دون الحاجة لتسجيل الخروج.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={testVillage}
+                    onChange={(e) => setTestVillage(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 text-white text-xs font-bold rounded-xl px-3 py-2 cursor-pointer focus:outline-none focus:border-cyan-500"
+                  >
+                    {FIXED_VILLAGES_LIST.map((v) => (
+                      <option key={v.id} value={v.name}>{v.name}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={runTestQuery}
+                    className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow transition-all"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isQuerying ? 'animate-spin' : ''}`} />
+                    <span>فحص</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800">
+                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2">
+                  <span>المتاجر الظاهرة لأهالي قرية ({testVillage}):</span>
+                  <span className="text-cyan-400 font-mono font-bold">{testQueryResult.length} متجر معتمد</span>
+                </div>
+
+                {testQueryResult.length === 0 ? (
+                  <div className="text-slate-500 text-xs py-4 text-center">
+                    لا توجد متاجر معتمدة مسجلة في {testVillage} حتى الآن. نظام العزل المكاني يمنع ظهور متاجر القرى الأخرى.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {testQueryResult.map((st) => (
+                      <div key={st.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+                        <div>
+                          <strong className="text-white font-bold block">{st.name}</strong>
+                          <span className="text-[10px] text-emerald-400">معتمد ✓ | {st.ownerName}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">{st.phone}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Supabase Schema Reference */}
+            <div className="bg-slate-900/50 border border-slate-800/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 shrink-0">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-white">
+                    مخطط قاعدة بيانات Supabase الرسمية (5 جداول صلبة + RLS)
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    الجداول: customers, merchants, drivers, stores_directory, access_logs
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const fullSql = `-- سكربت إنشاء جداول قريتي الرسمية في Supabase
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS public.merchants (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    phone TEXT UNIQUE NOT NULL,
+    national_id TEXT NOT NULL,
+    photo TEXT,
+    village_name TEXT,
+    store_name TEXT NOT NULL,
+    is_approved BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.drivers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    phone TEXT UNIQUE NOT NULL,
+    national_id TEXT NOT NULL,
+    vehicle_type TEXT DEFAULT 'MOTORCYCLE',
+    zone TEXT DEFAULT 'القرية',
+    is_approved BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.customers (
+    id TEXT PRIMARY KEY,
+    phone TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    national_id TEXT,
+    village_name TEXT,
+    status TEXT DEFAULT 'NEW',
+    is_verified BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.orders (
+    id TEXT PRIMARY KEY,
+    customer_name TEXT,
+    customer_phone TEXT,
+    store_name TEXT,
+    village_name TEXT,
+    items JSONB DEFAULT '[]'::jsonb,
+    total_amount NUMERIC(10,2) DEFAULT 0,
+    status TEXT DEFAULT 'PENDING',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.merchants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public all" ON public.merchants FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public all" ON public.drivers FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public all" ON public.customers FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHECK (true);
+`;
+                  await copyToClipboard(fullSql);
+                  setCopiedSql(true);
+                  setActionSuccessMsg('تم نسخ كود الـ SQL بالكامل! الصقه في Supabase -> SQL Editor واضغط Run.');
+                  setTimeout(() => {
+                    setCopiedSql(false);
+                    setActionSuccessMsg(null);
+                  }, 4000);
+                }}
+                className="px-3.5 py-2 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/40 text-purple-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              >
+                {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSql ? 'تم نسخ كود SQL بالكامل ✓' : 'نسخ كود SQL لـ Supabase 📋'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* TAB 8: TRASH BIN & RECYCLE ARCHIVE (سلة المحذوفات والمتاجر) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'TRASH_BIN' && (
+          <div className="space-y-6">
+            <div className="bg-slate-900/80 border border-rose-500/30 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2">
+                      <span>سلة المحذوفات وأرشيف المتاجر المحذوفة</span>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                        {deletedMerchants.length} متجر مؤرشف
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      تظهر هنا كافة المتاجر والحسابات المحذوفة. اضغط «استعادة الحساب والمتجر» لإعادته فوراً لقائمة المعلقين حيث يمكنك اعتماده وتفعيله، تعديله أو رفضه.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {deletedMerchants.length === 0 ? (
+                <div className="p-8 rounded-2xl bg-slate-950/40 border border-slate-800/70 text-center space-y-2">
+                  <CheckCircle2 className="w-8 h-8 text-slate-600 mx-auto" />
+                  <h4 className="text-xs font-bold text-slate-400">لا توجد متاجر محذوفة أو مؤرشفة في سلة المحذوفات حالياً</h4>
+                  <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                    عند حذف أي متجر من المنظومة، سيظهر في هذا القسم المخصص لحمايته من الضياع وإتاحة زر استعادته بنقرة واحدة دون الحاجة لإعادة التسجيل.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {deletedMerchants.map((item) => {
+                    const m = item.merchant;
+                    const st = item.store;
+                    const storeName = st?.name || m?.storeName || 'متجر محذوف';
+                    const ownerName = m?.name || st?.ownerName || 'صاحب المتجر';
+                    const village = m?.village || st?.cityOrVillage || 'القرية';
+                    const phone = m?.phone || st?.phone || '';
+                    const nationalId = m?.nationalId || '';
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-4 rounded-2xl bg-slate-950 border border-rose-900/40 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-rose-500/50"
+                      >
+                        <div className="flex items-start gap-3.5">
+                          <div className="w-12 h-12 rounded-2xl bg-rose-950/80 text-rose-400 flex items-center justify-center font-black shrink-0 border border-rose-800/50 text-xl">
+                            🗑️
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <strong className="text-white text-sm font-black">{storeName}</strong>
+                              <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 text-[10px] font-bold border border-rose-500/30">
+                                محذوف / مؤرشف 🗑️
+                              </span>
+                              {item.deletedAt && (
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  تاريخ الحذف: {new Date(item.deletedAt).toLocaleDateString('ar-SA')}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-300">
+                              المالك: <strong className="text-white">{ownerName}</strong> • القرية: <strong className="text-amber-400 font-bold">{village}</strong>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono flex items-center gap-3 flex-wrap">
+                              {phone && <span>الجوال: {phone}</span>}
+                              {nationalId && <span>الهوية: {nationalId}</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
+                          {/* زر استعادة الحساب والمتجر */}
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreMerchant(item.id)}
+                            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 via-teal-500 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-cyan-950/50 active:scale-95"
+                            title="إعادة هذا المتجر من سلة المحذوفات إلى قائمة المتاجر المعلقة حيث يمكنك اعتماده وتفعيله فوراً"
+                          >
+                            <RotateCcw className="w-4 h-4 text-slate-950" />
+                            <span>استعادة الحساب والمتجر 🔄</span>
+                          </button>
+
+                          {/* زر حذف نهائي للأبد */}
+                          <button
+                            type="button"
+                            onClick={() => handlePermanentlyDeleteMerchant(item.id, storeName)}
+                            className="px-3 py-2.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
+                            title="حذف هذا المتجر للأبد نهائياً من قاعدة البيانات والسحابة"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف نهائي ⚠️</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>

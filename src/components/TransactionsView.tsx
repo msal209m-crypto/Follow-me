@@ -59,6 +59,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     currentCashier,
     showNotification,
     isCashierMode,
+    isMerchantApproved,
     language,
     t,
     isRTL,
@@ -543,6 +544,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   // Complete Transaction with comprehensive stock validation
   const handleCompleteTransaction = () => {
+    if (!isMerchantApproved) {
+      showNotification(
+        '🔒 الصلاحية مقفلة: حساب التاجر بانتظار اعتماد مطور المنصة وتدقيق الهوية. لا يمكن تنفيذ عمليات البيع أو إصدار الفواتير حتى يتم تفعيل الحساب.',
+        'warning'
+      );
+      return;
+    }
+
     if (cart.length === 0) {
       showNotification('الرجاء إضافة أصناف إلى السلة أولاً', 'warning');
       return;
@@ -643,6 +652,28 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Pending Approval Security Lock Banner */}
+      {!isMerchantApproved && (
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-950/80 border-2 border-amber-500/80 shadow-md flex items-center justify-between gap-3 text-amber-200">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/30 text-amber-300 border border-amber-500/50 flex items-center justify-center shrink-0">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-amber-200">
+                🔒 شاشة البيع ونقاط البيع مقفلة: الحساب قيد المراجعة والتدقيق ⏳
+              </h4>
+              <p className="text-[11px] text-amber-300/90 mt-0.5">
+                لا يمكنك إصدار فواتير أو إتمام عمليات بيع حتى يتم اعتماد حساب التاجر من قبل مطور المنصة.
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-xl bg-amber-900 text-[11px] font-bold border border-amber-500/50 shrink-0">
+            بانتظار الاعتماد ⏳
+          </span>
+        </div>
+      )}
+
       {/* Compact Top Header & Navigation Tabs */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-3">

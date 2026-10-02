@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AdRecord } from '../types';
 import { getAds } from '../services/adsService';
+import { handleAdStoreVisit } from '../services/storeNavigationService';
 
 interface AdBannerWidgetProps {
   currentVillage?: string;
@@ -380,8 +381,10 @@ export const AdBannerWidget: React.FC<AdBannerWidgetProps> = ({
             onClick={() => {
               if (onAdClick) {
                 onAdClick(currentAd);
-              } else if (currentAd.linkUrl) {
+              } else if (currentAd.linkUrl && currentAd.linkUrl.startsWith('http')) {
                 window.open(currentAd.linkUrl, '_blank');
+              } else {
+                handleAdStoreVisit(currentAd);
               }
             }}
             className={`w-full sm:w-auto px-5 py-3 rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all duration-300 cursor-pointer shadow-xl active:scale-95 ${

@@ -181,12 +181,38 @@ export const MerchantManagementScreen: React.FC<{ onClose: () => void; isDarkMod
                     </div>
                     
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {merchant.isApproved ? (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReject(merchant.id);
+                          }}
+                          className="px-2.5 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                          title="إيقاف مؤقت / حظر التاجر"
+                        >
+                          <UserX className="w-3.5 h-3.5 text-amber-400" />
+                          <span>إيقاف مؤقت / حظر</span>
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApprove(merchant.id);
+                          }}
+                          className="px-2.5 py-1 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                          title="إلغاء الحظر / تفعيل التاجر"
+                        >
+                          <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>إلغاء الحظر / تفعيل</span>
+                        </button>
+                      )}
+
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDelete(merchant.id);
                         }}
-                        className="p-2 rounded-lg bg-rose-950/30 hover:bg-rose-900/40 text-rose-400 transition-colors"
+                        className="p-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-900/40 text-rose-400 transition-colors cursor-pointer"
                         title="حذف الحساب نهائياً"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -363,23 +389,41 @@ export const MerchantManagementScreen: React.FC<{ onClose: () => void; isDarkMod
                   </span>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {!selectedMerchant.isApproved ? (
-                    <button 
-                      onClick={() => handleApprove(selectedMerchant.id)}
-                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-emerald-950/40 cursor-pointer"
-                    >
-                      <UserCheck className="w-4 h-4 text-slate-950" />
-                      <span>اعتماد ومطابقة الهوية وتفعيل المتجر ✅</span>
-                    </button>
+                    <>
+                      <button 
+                        onClick={() => handleApprove(selectedMerchant.id)}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-emerald-950/40 cursor-pointer active:scale-95"
+                      >
+                        <UserCheck className="w-4 h-4 text-slate-950" />
+                        <span>قبول الموافقة وتفعيل التاجر فوراً ✅</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(selectedMerchant.id)}
+                        className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-rose-950 via-red-950 to-rose-950 hover:from-rose-900 hover:to-red-900 border border-rose-700/60 text-rose-200 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+                      >
+                        <Trash2 className="w-4 h-4 text-rose-400" />
+                        <span>رفض / حذف نهائي 🗑️</span>
+                      </button>
+                    </>
                   ) : (
-                    <button 
-                      onClick={() => handleReject(selectedMerchant.id)}
-                      className="px-4 py-2.5 rounded-xl bg-rose-950/60 border border-rose-800 hover:bg-rose-900 hover:text-white text-rose-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <UserX className="w-4 h-4" />
-                      <span>سحب الاعتماد وحظر التاجر 🚫</span>
-                    </button>
+                    <>
+                      <button 
+                        onClick={() => handleReject(selectedMerchant.id)}
+                        className="px-4 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-950/30"
+                      >
+                        <UserX className="w-4 h-4 text-amber-400" />
+                        <span>إيقاف مؤقت / حظر التاجر ⏸️</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(selectedMerchant.id)}
+                        className="px-3.5 py-2.5 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>حذف نهائي 🗑️</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

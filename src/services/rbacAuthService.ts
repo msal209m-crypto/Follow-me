@@ -363,6 +363,8 @@ export interface MerchantAccountRecord {
   createdAt: string;
   updatedAt: string;
   isApproved: boolean;
+  status?: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
+  suspendReason?: string;
   kycStatus?: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED'; // حالة مراجعة الهوية للتاجر
   extractedName?: string; // الاسم المستخرج من الهوية عبر OCR
   extractedNationalId?: string; // رقم الهوية المستخرج من الهوية عبر OCR
@@ -382,6 +384,8 @@ export interface DriverAccountRecord {
   zone?: string;
   createdAt: string;
   isApproved: boolean;
+  status?: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
+  suspendReason?: string;
 }
 
 export interface OTPRecord {
@@ -681,6 +685,16 @@ export async function loginMerchant(
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة أو استخدام "نسيت كلمة المرور"' };
   }
 
+  // Check if merchant account is suspended/blocked
+  if (merchant.status === 'SUSPENDED' || (merchant.kycStatus === 'REJECTED' && merchant.isApproved === false)) {
+    logAccessAttempt({ portal: 'MERCHANT', usernameOrPhone: merchant.phone, status: 'FAILED', reason: 'حساب التاجر موقوف مؤقتاً' });
+    return {
+      success: false,
+      message: '🚫 حسابه موقوف مؤقتاً بقرار إداري من مطور المنصة. عند الضغط على "إلغاء الحظر / تفعيل" في لوحة التحكم، سيعود حسابك للعمل فوراً دون الحاجة للتسجيل من جديد.',
+      isPending: true,
+    };
+  }
+
   // Set active role
   setActiveSessionRole('MERCHANT', rememberMe);
   syncMerchantToAuth(merchant);
@@ -873,6 +887,16 @@ export async function loginDriver(phoneInput: string, passwordInput: string, rem
   if (driver.passwordHash !== passwordInput.trim()) {
     logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'FAILED', reason: 'كلمة المرور غير صحيحة' });
     return { success: false, message: 'كلمة المرور غير صحيحة، يرجى المحاولة مجدداً' };
+  }
+
+  // Check if driver account is suspended/blocked
+  if (driver.status === 'SUSPENDED' || (driver.isApproved === false && (driver as any).status === 'SUSPENDED')) {
+    logAccessAttempt({ portal: 'DRIVER', usernameOrPhone: driver.phone, status: 'FAILED', reason: 'حساب السائق موقوف مؤقتاً' });
+    return {
+      success: false,
+      message: '🚫 حسابه موقوف مؤقتاً بقرار إداري من مطور المنصة. عند الضغط على "إلغاء الحظر / تفعيل" في لوحة التحكم، سيعود حسابك للعمل فوراً دون الحاجة للتسجيل من جديد.',
+      isPending: true,
+    };
   }
 
   // Set active
@@ -1384,39 +1408,192 @@ export function deleteAccessLog(id: string): void {
   }
 }
 
+const DELETED_MERCHANTS_KEY = 'qaryati_deleted_merchants_trash_v1';
+
+export interface DeletedMerchantRecord {
+  id: string;
+  merchant: MerchantAccountRecord;
+  store?: StoreDirectoryRecord;
+  deletedAt: string;
+  deletedBy?: string;
+}
+
+export function getDeletedMerchants(): DeletedMerchantRecord[] {
+  try {
+    const raw = localStorage.getItem(DELETED_MERCHANTS_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDeletedMerchants(list: DeletedMerchantRecord[]): void {
+  try {
+    localStorage.setItem(DELETED_MERCHANTS_KEY, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('qaryati:deleted-merchants-updated', { detail: list }));
+    // Sync to Firestore deleted_merchants collection in background
+    list.forEach((item) => {
+      try {
+        const docRef = doc(db, 'deleted_merchants', item.id);
+        setDoc(docRef, item, { merge: true }).catch(console.warn);
+      } catch {}
+    });
+  } catch (e) {
+    console.warn('Failed to save deleted merchants:', e);
+  }
+}
+
 export function deleteMerchantAccount(id: string): void {
   try {
     const list = getMerchants();
-    const filtered = list.filter((m) => m.id !== id);
-    localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify(filtered));
+    const targetMerchant = list.find((m) => m.id === id || m.phone === id);
+    const filteredMerchants = list.filter((m) => m.id !== id && m.phone !== id);
+    localStorage.setItem(MERCHANTS_STORE_KEY, JSON.stringify(filteredMerchants));
 
-    // Also remove from stores directory
+    // Find store record if present
+    let targetStore: StoreDirectoryRecord | undefined;
     try {
       const rawStores = localStorage.getItem('qaryati_stores_directory');
       if (rawStores) {
         const stores = JSON.parse(rawStores);
-        const filteredStores = stores.filter((s: any) => s.id !== id && s.merchantId !== id);
+        targetStore = stores.find((s: any) => s.id === id || s.merchantId === id || s.phone === id);
+        const filteredStores = stores.filter((s: any) => s.id !== id && s.merchantId !== id && s.phone !== id);
         localStorage.setItem('qaryati_stores_directory', JSON.stringify(filteredStores));
+        localStorage.setItem('village_stores_directory', JSON.stringify(filteredStores));
       }
     } catch {}
 
-    // Also clean up local merchant accounts secondary key
+    // Add to Deleted Merchants Trash Bin if found
+    if (targetMerchant) {
+      const deletedList = getDeletedMerchants();
+      const cleanTrash = deletedList.filter((d) => d.id !== id && d.merchant?.id !== id);
+      const newTrashEntry: DeletedMerchantRecord = {
+        id: targetMerchant.id || id,
+        merchant: {
+          ...targetMerchant,
+          isApproved: false,
+          status: 'SUSPENDED',
+        },
+        store: targetStore,
+        deletedAt: new Date().toISOString(),
+        deletedBy: 'المطور',
+      };
+      cleanTrash.unshift(newTrashEntry);
+      saveDeletedMerchants(cleanTrash);
+    }
+
+    // Clean secondary keys
     try {
       const rawAccounts = localStorage.getItem('village_merchants_accounts');
       if (rawAccounts) {
         const accounts = JSON.parse(rawAccounts);
-        const filteredAccounts = accounts.filter((a: any) => a.id !== id);
+        const filteredAccounts = accounts.filter((a: any) => a.id !== id && a.phone !== id);
         localStorage.setItem('village_merchants_accounts', JSON.stringify(filteredAccounts));
       }
     } catch {}
 
     window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
     window.dispatchEvent(new CustomEvent('qaryati:stores-updated'));
-    // Cross-device sync deletion from Firestore and Supabase
+    window.dispatchEvent(new CustomEvent('qaryati:deleted-merchants-updated'));
+
+    // Soft sync deletion from active Firestore/Supabase
     syncDeleteMerchant(id).catch(console.warn);
     syncDeleteStore(id).catch(console.warn);
   } catch (e) {
-    console.warn('Failed to delete merchant:', e);
+    console.warn('Failed to soft delete merchant:', e);
+  }
+}
+
+export function restoreMerchantAccount(id: string): { success: boolean; message: string; merchant?: MerchantAccountRecord } {
+  try {
+    const deletedList = getDeletedMerchants();
+    const entryIndex = deletedList.findIndex((item) => item.id === id || item.merchant?.id === id);
+
+    if (entryIndex === -1) {
+      return { success: false, message: 'لم يتم العثور على حساب هذا التاجر في سلة المحذوفات' };
+    }
+
+    const entry = deletedList[entryIndex];
+    // Remove from Trash Bin
+    const updatedTrash = deletedList.filter((item, idx) => idx !== entryIndex);
+    saveDeletedMerchants(updatedTrash);
+
+    // Delete from Firestore deleted_merchants collection
+    try {
+      deleteDoc(doc(db, 'deleted_merchants', id)).catch(console.warn);
+    } catch {}
+
+    // Restore to Merchants list as PENDING review
+    const merchants = getMerchants();
+    const restoredMerchant: MerchantAccountRecord = {
+      ...entry.merchant,
+      isApproved: false, // PENDING review so developer can approve, reject or edit
+      status: 'PENDING',
+      kycStatus: 'PENDING_REVIEW',
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Replace or unshift into active merchants list
+    const existingIndex = merchants.findIndex((m) => m.id === restoredMerchant.id);
+    if (existingIndex !== -1) {
+      merchants[existingIndex] = restoredMerchant;
+    } else {
+      merchants.unshift(restoredMerchant);
+    }
+    saveMerchants(merchants);
+
+    // Restore store record if exists
+    if (entry.store) {
+      const stores = getStoresDirectory();
+      const restoredStore: StoreDirectoryRecord = {
+        ...entry.store,
+        isApproved: false,
+        status: 'PENDING',
+      };
+      const storeIdx = stores.findIndex((s) => s.id === restoredStore.id);
+      if (storeIdx !== -1) {
+        stores[storeIdx] = restoredStore;
+      } else {
+        stores.unshift(restoredStore);
+      }
+      saveStoresDirectory(stores);
+      syncSaveStore(restoredStore).catch(console.warn);
+    }
+
+    syncSaveMerchant(restoredMerchant).catch(console.warn);
+
+    window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
+    window.dispatchEvent(new CustomEvent('qaryati:stores-updated'));
+    window.dispatchEvent(new CustomEvent('qaryati:deleted-merchants-updated'));
+
+    return {
+      success: true,
+      message: `🎉 تم استعادة متجر "${restoredMerchant.storeName}" بنجاح! تم إعادتها إلى قائمة المتاجر المعلقة حيث يمكنك الآن قبول الموافقة، التعديل أو الرفض.`,
+      merchant: restoredMerchant,
+    };
+  } catch (err: any) {
+    console.error('Error restoring merchant account:', err);
+    return { success: false, message: 'حدث خطأ أثناء استعادة التاجر: ' + err?.message };
+  }
+}
+
+export function permanentlyDeleteMerchantAccount(id: string): void {
+  try {
+    const deletedList = getDeletedMerchants();
+    const cleanList = deletedList.filter((item) => item.id !== id && item.merchant?.id !== id);
+    saveDeletedMerchants(cleanList);
+
+    try {
+      deleteDoc(doc(db, 'deleted_merchants', id)).catch(console.warn);
+      deleteDoc(doc(db, 'merchants', id)).catch(console.warn);
+      deleteDoc(doc(db, 'stores', id)).catch(console.warn);
+    } catch {}
+
+    window.dispatchEvent(new CustomEvent('qaryati:deleted-merchants-updated'));
+  } catch (e) {
+    console.warn('Error in permanent delete:', e);
   }
 }
 
