@@ -259,11 +259,28 @@ export interface StoreSettings {
   currency: string;
   exchangeRate?: number; // Added for currency management
   footerNote: string;
+  storeLogo?: string; // شعار المتجر (رابط أو صورة مرفوعة أو أيقونة)
+  storeCover?: string; // غلاف المتجر (بانر علوي)
+  storeIcon?: string; // أيقونة أو إيموجي المتجر المميز
+  tagline?: string; // وصف ترويجي أو شعار لفظي للمتجر
   autoBackupEnabled?: boolean;
   autoBackupIntervalMinutes?: number; // e.g. 15, 30, 60 minutes
   lastAutoBackupTimestamp?: string;
   multiCurrency?: MultiCurrencyConfig;
   powerSavingMode?: boolean;
+  freeDelivery?: boolean; // هل يقدم المتجر توصيل مجاني
+  freeDeliveryMinOrder?: number; // الحد الأدنى للطلب للتوصيل المجاني
+  deliveryFee?: number; // رسوم التوصيل المعتادة (إذا لم يكن مجانياً)
+  workingHours?: {
+    isOpen24Hours?: boolean;
+    openTime?: string;
+    closeTime?: string;
+    isSplitShift?: boolean;
+    secondOpenTime?: string;
+    secondCloseTime?: string;
+    workingDays?: number[];
+    autoCloseForPrayer?: boolean;
+  };
   stickerSettings: {
     showStoreName: boolean;
     showPrice: boolean;
@@ -397,9 +414,15 @@ export interface StoreDirectoryRecord {
   id: string;
   merchantId?: string; // معرّف التاجر المالك
   name: string;
-  ownerName: string;
+  ownerName?: string;
   phone: string;
   cityOrVillage: string;
+  address?: string;
+  logo?: string;
+  coverPhoto?: string;
+  storeIcon?: string;
+  tagline?: string;
+  promoTag?: string;
   itemsCount: number;
   isPro: boolean;
   isApproved?: boolean;
@@ -410,6 +433,20 @@ export interface StoreDirectoryRecord {
   merchantPin?: string;
   rating?: number;       // متوسط التقييم بالنجوم
   ratingCount?: number;  // عدد المقيمين
+  category?: string;     // تصنيف المتجر
+  freeDelivery?: boolean; // توصيل مجاني بناءً على إعدادات التاجر
+  freeDeliveryMinOrder?: number;
+  deliveryFee?: number;
+  workingHours?: {
+    isOpen24Hours?: boolean;
+    openTime?: string;
+    closeTime?: string;
+    isSplitShift?: boolean;
+    secondOpenTime?: string;
+    secondCloseTime?: string;
+    workingDays?: number[];
+    autoCloseForPrayer?: boolean;
+  };
 }
 
 export interface AdPackage {

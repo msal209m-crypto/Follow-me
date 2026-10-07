@@ -517,6 +517,7 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   const [editPhone, setEditPhone] = useState('');
   const [editVillage, setEditVillage] = useState('');
   const [editStatus, setEditStatus] = useState<'ACTIVE' | 'SUSPENDED'>('ACTIVE');
+  const [editFreeDelivery, setEditFreeDelivery] = useState<boolean>(false);
   const [suspendModalStore, setSuspendModalStore] = useState<StoreDirectoryRecord | null>(null);
   const [suspendReasonInput, setSuspendReasonInput] = useState('');
 
@@ -594,6 +595,7 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
     setEditPhone(store.phone);
     setEditVillage(store.cityOrVillage);
     setEditStatus(store.status || 'ACTIVE');
+    setEditFreeDelivery(Boolean(store.freeDelivery || store.promoTag?.includes('توصيل مجاني')));
   };
 
   const handleSaveStoreEdit = (storeId: string) => {
@@ -607,6 +609,8 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
           phone: editPhone.trim() || s.phone,
           cityOrVillage: editVillage.trim() || s.cityOrVillage,
           status: editStatus,
+          freeDelivery: editFreeDelivery,
+          promoTag: editFreeDelivery ? 'توصيل مجاني 🛵' : (s.promoTag?.includes('توصيل مجاني') ? 'متوفر الآن' : s.promoTag),
         };
       }
       return s;
@@ -614,7 +618,7 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
     saveStoresDirectory(updated);
     setStores(updated);
     setEditingStoreId(null);
-    showToast('تم تحديث بيانات المتجر بنجاح بواسطة المطور');
+    showToast('تم تحديث بيانات المتجر وإعدادات التوصيل بنجاح');
   };
 
   const refreshStoresAndOrders = () => {
@@ -3121,6 +3125,17 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                               <option value="SUSPENDED">موقوف (مجمد)</option>
                             </select>
                           </div>
+                          <div className="flex items-center gap-2 pt-4">
+                            <label className="flex items-center gap-2 text-xs font-bold text-emerald-400 cursor-pointer bg-slate-900 border border-emerald-500/30 px-3 py-1.5 rounded-lg">
+                              <input
+                                type="checkbox"
+                                checked={editFreeDelivery}
+                                onChange={(e) => setEditFreeDelivery(e.target.checked)}
+                                className="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-800"
+                              />
+                              <span>خدمة توصيل مجاني 🛵</span>
+                            </label>
+                          </div>
                         </div>
 
                         <div className="flex justify-end gap-2 pt-2">
@@ -3163,6 +3178,12 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                               }`}>
                                 {store.status === 'SUSPENDED' ? '⛔ موقوف / محظور' : '✅ نشط'}
                               </span>
+                              {(store.freeDelivery || store.promoTag?.includes('توصيل مجاني')) && (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 border border-emerald-400 flex items-center gap-1 shadow-xs">
+                                  <Truck className="w-3 h-3 text-slate-950" />
+                                  <span>توصيل مجاني 🛵</span>
+                                </span>
+                              )}
                             </div>
                             <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-3 flex-wrap">
                               <span>👤 {store.ownerName}</span>

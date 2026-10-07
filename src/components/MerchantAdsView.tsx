@@ -8,7 +8,7 @@ export const MerchantAdsView: React.FC = () => {
   const { currentUser } = useAuth();
   const merchantId = currentUser?.uid || '';
   const merchantName = currentUser?.displayName || 'التاجر المعلن';
-  const merchantVillage = (currentUser as any)?.village || 'قرية الفصور';
+  const merchantVillage = (currentUser as any)?.village || '';
 
   const [ads, setAds] = useState<AdRecord[]>([]);
   const [activePackageId, setActivePackageId] = useState(DEFAULT_AD_PACKAGES[0].id);

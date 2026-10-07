@@ -120,7 +120,7 @@ export function handleAdStoreVisit(
   const matchedStore = findMatchingStoreForAd(ad);
 
   const targetStoreId = matchedStore?.id || ad.storeId || ad.merchantId || 'default';
-  const targetVillage = matchedStore?.cityOrVillage || ad.village || 'قرية الانهوم';
+  const targetVillage = matchedStore?.cityOrVillage || ad.village || '';
   const targetStoreName = matchedStore?.name || ad.storeName || ad.title || 'متجر القرية';
 
   const pendingData: PendingAdRedirect = {

@@ -36,7 +36,7 @@ import {
 } from '../data/initialData';
 import { translations, Translations } from '../i18n/translations';
 import { sanitizeProductImage, DEFAULT_PRODUCT_IMAGE } from '../utils/imageUtils';
-import { saveStoreProducts } from '../services/deliveryService';
+import { saveStoreProducts, getStoresDirectory, saveStoresDirectory } from '../services/deliveryService';
 
 // Sets of dummy demo IDs used only to purge and prevent unwanted mock data pre-fill
 const DEMO_ITEM_IDS = new Set(INITIAL_ITEMS.map((i) => i.id));
@@ -1008,6 +1008,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (canWriteToCloud && currentUser) {
         safeSetDoc(doc(db, 'users', currentUser.uid, 'settings', 'store_config'), updated, { merge: true }).catch(console.warn);
       }
+
+      try {
+        const stores = getStoresDirectory();
+        let changed = false;
+        const updatedStores = stores.map((s) => {
+          const matches =
+            (activeMerchantId && activeMerchantId !== 'guest' && (s.merchantId === activeMerchantId || s.id === activeMerchantId)) ||
+            (s.phone && updated.phone && s.phone.replace(/\D/g, '') === updated.phone.replace(/\D/g, '')) ||
+            (s.name === prev.storeName);
+          if (matches) {
+            changed = true;
+            return {
+              ...s,
+              name: updated.storeName || s.name,
+              phone: updated.phone || s.phone,
+              address: updated.address || s.address,
+              logo: updated.storeLogo !== undefined ? updated.storeLogo : s.logo,
+              coverPhoto: updated.storeCover !== undefined ? updated.storeCover : s.coverPhoto,
+              storeIcon: updated.storeIcon !== undefined ? updated.storeIcon : s.storeIcon,
+              tagline: updated.tagline !== undefined ? updated.tagline : s.tagline,
+              freeDelivery: updated.freeDelivery ?? s.freeDelivery,
+              freeDeliveryMinOrder: updated.freeDeliveryMinOrder ?? s.freeDeliveryMinOrder,
+              deliveryFee: updated.deliveryFee ?? s.deliveryFee,
+            };
+          }
+          return s;
+        });
+        if (changed) {
+          saveStoresDirectory(updatedStores);
+        }
+      } catch (err) {
+        console.warn('Error syncing store directory record on settings update:', err);
+      }
+
       return updated;
     });
   };

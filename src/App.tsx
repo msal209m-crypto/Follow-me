@@ -579,7 +579,7 @@ const PortalRouter: React.FC = () => {
 
   const handleSwitchToMerchant = (storeInfo?: { name?: string; village?: string; isPro?: boolean; merchantPin?: string }) => {
     const activeRole = getActiveSessionRole();
-    if (activeRole !== 'MERCHANT' && activeRole !== 'DEVELOPER' && !currentUser) {
+    if (activeRole !== 'MERCHANT' && activeRole !== 'DEVELOPER') {
       setRbacInitialRole('MERCHANT');
       setShowRBACAuthModal(true);
       return;

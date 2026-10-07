@@ -32,19 +32,6 @@ export interface AuthModalProps {
   onCloseToStore?: () => void;
 }
 
-const FIXED_VILLAGES = [
-  'قرية الفصور',
-  'قرية الحقالي',
-  'قرية الباركة',
-  'قرية الانهوم',
-  'قرية مشيجبه',
-  'سوق حول جباري',
-  'قرية المداد',
-  'قرية الجامع',
-  'قرية المسيلة',
-  'قرية المكيل',
-];
-
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
@@ -74,7 +61,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>('SA');
   const currentCountryObj: CountryInfo = SUPPORTED_COUNTRIES.find((c) => c.code === selectedCountryCode) || SUPPORTED_COUNTRIES[0];
 
-  const [village, setVillage] = useState(FIXED_VILLAGES[0]);
+  const [village, setVillage] = useState('');
   const [idCardPhoto, setIdCardPhoto] = useState<string>('');
   const [idCardUploading, setIdCardUploading] = useState(false);
   const [ocrExtracted, setOcrExtracted] = useState(false);
@@ -560,21 +547,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 <div>
                   <label className="block text-xs text-slate-300 mb-1 font-medium">
-                    {language === 'ar' ? 'القرية التابعة' : 'Village Name'}
+                    {language === 'ar' ? 'الموقع الجغرافي / الحي / المدينة' : 'Location / Area / City'}
                   </label>
                   <div className="relative">
                     <MapPin className={`w-4 h-4 text-slate-400 absolute ${isRTL ? 'right-3' : 'left-3'} top-2.5`} />
-                    <select
+                    <input
+                      type="text"
                       value={village}
                       onChange={(e) => setVillage(e.target.value)}
+                      placeholder={language === 'ar' ? 'اكتب موقعك أو اسم الحي / القرية' : 'Enter your location or area'}
                       className={`w-full bg-slate-950 border border-slate-700 rounded-xl ${
                         isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
                       } py-2 text-xs text-white focus:outline-none focus:border-emerald-500`}
-                    >
-                      {FIXED_VILLAGES.map((v) => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
                 </div>
               </>

@@ -42,8 +42,13 @@ import {
   Star,
   Wallet,
   Navigation,
-  Bot
+  Bot,
+  Menu,
+  LocateFixed,
+  Compass,
+  Layers
 } from 'lucide-react';
+import { CoffeeTreeLogo } from './CoffeeTreeLogo';
 import { VillageWalletModal } from './VillageWalletModal';
 import { LiveDriverTrackerModal } from './LiveDriverTrackerModal';
 import { AIMerchantAssistantModal } from './AIMerchantAssistantModal';
@@ -77,7 +82,6 @@ import {
 import {
   getApprovedMerchantsByVillage,
   initSupabaseRealtime,
-  FIXED_VILLAGES_LIST,
   registerCustomerAccount,
   getCustomersLocalCache,
 } from '../services/supabaseQaryatiService';
@@ -85,6 +89,10 @@ import { subscribeToVillageStores, fetchAllStores } from '../services/crossDevic
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
 import { StorePrayerClosedBanner } from './StorePrayerClosedBanner';
 import { AdBannerWidget } from './AdBannerWidget';
+import { getStoreLiveStatus } from '../utils/storeWorkingHours';
+import { OrderDeliveryMiniMap } from './OrderDeliveryMiniMap';
+import { VillageMapPickerModal } from './VillageMapPickerModal';
+import { googleReverseGeocode } from '../services/googleMapsService';
 
 interface VillageStoreViewProps {
   items: Item[];
@@ -125,6 +133,9 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isLiveTrackerOpen, setIsLiveTrackerOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const [isSideMenuOpen, setIsSideMenuOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [activeBottomNav, setActiveBottomNav] = useState<'home' | 'orders' | 'wallet' | 'cart' | 'profile'>('home');
   const [walletBalance, setWalletBalance] = useState(() => getVillageWallet().balance);
 
   // Sync wallet balance
@@ -140,6 +151,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
   // Customer Session & Identity (RBAC Customer)
   const [activeCustomer, setActiveCustomer] = useState(() => getActiveCustomer());
+  const [isCustomerHubOpen, setIsCustomerHubOpen] = useState(false);
   const [showCustomerAuthModal, setShowCustomerAuthModal] = useState(false);
   const [customerModalError, setCustomerModalError] = useState<string | null>(null);
   const [customerModalSuccess, setCustomerModalSuccess] = useState<string | null>(null);
@@ -227,21 +239,25 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   const [allStores, setAllStores] = useState<StoreDirectoryRecord[]>(() =>
     getStoresDirectory().filter((s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false)
   );
-  // Default to user's village if available, otherwise 'قرية الانهوم'
-  const [selectedVillage, setSelectedVillage] = useState<string>(() => {
-    const cust = getActiveCustomer();
-    if (cust?.village && cust.village.trim()) return cust.village.trim();
-    return 'قرية الانهوم';
-  });
-  const [villageSearchQuery, setVillageSearchQuery] = useState<string>('');
-  const [selectedStoreId, setSelectedStoreId] = useState<string>(() => {
-    try {
-      const target = sessionStorage.getItem('qaryati_target_store_id') || localStorage.getItem('qaryati_target_store_id');
-      if (target) return target;
-    } catch {}
-    return 'default';
-  });
+  // Default to ALL so all stores show by default, or user-selected village/location
+  const [selectedVillage, setSelectedVillage] = useState<string>('ALL');
+  const [selectedStoreId, setSelectedStoreId] = useState<string>('default');
   const [visitedAdNotice, setVisitedAdNotice] = useState<{ storeName: string; village: string } | null>(null);
+
+  // GPS & Location States for dynamic nearby filtering
+  const [isLocatingGPS, setIsLocatingGPS] = useState<boolean>(false);
+  const [locationToast, setLocationToast] = useState<string | null>(null);
+  const [isLocationSelectorModalOpen, setIsLocationSelectorModalOpen] = useState<boolean>(false);
+  const [customVillageInput, setCustomVillageInput] = useState<string>('');
+
+  // Live real-time tick to update store open/closed statuses and prayer pauses automatically
+  const [, setLiveTimeTick] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLiveTimeTick(Date.now());
+    }, 20000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Sync village and store when direct ad navigation event is fired
   useEffect(() => {
@@ -408,67 +424,185 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     return () => window.removeEventListener('qaryati:dev-settings-updated', handleDevSettingsUpdate);
   }, []);
 
-  // Dynamic village list extracted from active stores
+  // Dynamic location list extracted purely from registered active stores
   const villageList = useMemo(() => {
-    const villages = new Set<string>();
-    allStores.forEach(s => {
+    const locations = new Set<string>();
+    allStores.forEach((s) => {
       const v = (s.cityOrVillage || (s as any).village || '').trim();
-      if (v) villages.add(v);
+      if (v) locations.add(v);
     });
-    const list = Array.from(villages).sort();
-    if (list.length === 0) return ['الموقع الحالي'];
+    const list = Array.from(locations).sort();
     return list;
   }, [allStores]);
 
-  // Stores available in the selected village - strictly enforcing Village-First Filtering:
-  // Select * From merchants Where village_id = [Chosen_Village] And is_approved = true
+  // GPS Auto-detect handler
+  const handleDetectGPSLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationToast('خاصية تحديد الموقع الجغرافي غير مدعومة في متصفحك.');
+      setTimeout(() => setLocationToast(null), 4000);
+      return;
+    }
+    setIsLocatingGPS(true);
+    setLocationToast('جارٍ قراءة إحداثيات موقعك عبر الـ GPS 🛰️...');
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const detectedPlace = await googleReverseGeocode(latitude, longitude);
+          if (detectedPlace && detectedPlace.trim()) {
+            const clean = detectedPlace.trim();
+            // Check if matches or contains any known store village
+            const matched = villageList.find(
+              (v) =>
+                v.toLowerCase().includes(clean.toLowerCase()) ||
+                clean.toLowerCase().includes(v.toLowerCase())
+            );
+            const finalLocation = matched || clean;
+            setSelectedVillage(finalLocation);
+            setSelectedStoreId('default');
+            setIsLocationSelectorModalOpen(false);
+            setLocationToast(`📍 تم تحديد موقعك: "${finalLocation}" • تظهر البقالات والمتاجر القريبة منك فقط`);
+          } else {
+            const fallback = villageList[0] || 'الموقع الحالي';
+            setSelectedVillage(fallback);
+            setSelectedStoreId('default');
+            setIsLocationSelectorModalOpen(false);
+            setLocationToast(`📍 تم تحديد موقعك بالقرب من: "${fallback}" • تظهر المتاجر القريبة`);
+          }
+        } catch (e) {
+          const fallback = villageList[0] || 'الموقع الحالي';
+          setSelectedVillage(fallback);
+          setSelectedStoreId('default');
+          setIsLocationSelectorModalOpen(false);
+          setLocationToast(`📍 تم تحديد موقعك بالقرب من: "${fallback}"`);
+        } finally {
+          setIsLocatingGPS(false);
+          setTimeout(() => setLocationToast(null), 5000);
+        }
+      },
+      (err) => {
+        setIsLocatingGPS(false);
+        setLocationToast('تعذر الوصول للـ GPS (يرجى تفعيل إذن الموقع أو اختيار منطقتك يدوياً).');
+        setTimeout(() => setLocationToast(null), 5000);
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  };
+
+  const handleSelectVillage = (villageName: string) => {
+    setSelectedVillage(villageName);
+    setSelectedStoreId('default');
+    setIsLocationSelectorModalOpen(false);
+    if (villageName === 'ALL') {
+      setLocationToast('🌐 تم تفعيل عرض جميع المتاجر من كافة القرى والمناطق');
+    } else {
+      setLocationToast(`📍 تم تفعيل تصفية المتاجر القريبة في: "${villageName}"`);
+    }
+    setTimeout(() => setLocationToast(null), 4000);
+  };
+
+  const handleShowAllStores = () => {
+    setSelectedVillage('ALL');
+    setSelectedStoreId('default');
+    setIsLocationSelectorModalOpen(false);
+    setLocationToast('🌐 تم عرض جميع المتاجر من كافة القرى والمناطق');
+    setTimeout(() => setLocationToast(null), 4000);
+  };
+
+  // Stores available in the selected village and filtered by top search and circular categories
   const availableStores = useMemo(() => {
     const approvedStores = allStores.filter(
       (s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false
     );
     let result = approvedStores;
     if (selectedVillage !== 'ALL') {
-      result = result.filter(
-        (s) => {
-          const vill = (s.cityOrVillage || (s as any).village || '').trim();
-          const target = selectedVillage.trim();
-          return vill === target || vill.includes(target) || target.includes(vill);
-        }
-      );
+      result = result.filter((s) => {
+        const vill = (s.cityOrVillage || (s as any).village || '').trim();
+        const target = selectedVillage.trim();
+        return vill === target || vill.includes(target) || target.includes(vill);
+      });
     }
-    if (villageSearchQuery.trim()) {
-      const q = villageSearchQuery.trim().toLowerCase();
+    // Filter by circular category if selected
+    if (selectedCategory && selectedCategory !== 'ALL') {
+      const cat = selectedCategory.toLowerCase();
+      result = result.filter((s) => {
+        const storeCat = `${(s as any).category || ''} ${(s as any).classification || ''} ${(s as any).storeType || ''} ${s.name || ''}`.toLowerCase();
+        
+        if (cat === 'مغذي') {
+          return storeCat.includes('مغذي') || storeCat.includes('بقالة') || storeCat.includes('تموين') || storeCat.includes('سوبر') || storeCat.includes('مواد غذائية');
+        }
+        if (cat === 'مطاعم') {
+          return storeCat.includes('مطعم') || storeCat.includes('مطاعم') || storeCat.includes('برجر') || storeCat.includes('وجبات') || storeCat.includes('شاورما') || storeCat.includes('مشويات') || storeCat.includes('أكلات') || storeCat.includes('بيتزا');
+        }
+        if (cat === 'صيدليات') {
+          return storeCat.includes('صيدل') || storeCat.includes('دواء') || storeCat.includes('طبي') || storeCat.includes('صحة') || storeCat.includes('علاج');
+        }
+        if (cat === 'مخبوزات') {
+          return storeCat.includes('مخبز') || storeCat.includes('مخبوزات') || storeCat.includes('حلويات') || storeCat.includes('معجنات') || storeCat.includes('كيك') || storeCat.includes('أفران');
+        }
+        if (cat === 'مقاهي') {
+          return storeCat.includes('مقهى') || storeCat.includes('مقاهي') || storeCat.includes('كافيه') || storeCat.includes('بن') || storeCat.includes('قهوة') || storeCat.includes('شاي');
+        }
+        if (cat === 'خضار') {
+          return storeCat.includes('خضار') || storeCat.includes('فواكه') || storeCat.includes('لحم') || storeCat.includes('ملحمة') || storeCat.includes('دواجن') || storeCat.includes('طازج');
+        }
+        if (cat === 'خدمات') {
+          return storeCat.includes('خدم') || storeCat.includes('مغسل') || storeCat.includes('صيانة') || storeCat.includes('خياط') || storeCat.includes('إلكترون') || storeCat.includes('اتصالات');
+        }
+        return storeCat.includes(cat);
+      });
+    }
+    // Filter by top search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
       result = result.filter(
         (s) =>
           s.name.toLowerCase().includes(q) ||
           s.cityOrVillage.toLowerCase().includes(q) ||
-          s.ownerName?.toLowerCase().includes(q)
+          s.ownerName?.toLowerCase().includes(q) ||
+          ((s as any).category && (s as any).category.toLowerCase().includes(q))
       );
     }
     return result;
-  }, [allStores, selectedVillage, villageSearchQuery]);
+  }, [allStores, selectedVillage, searchQuery, selectedCategory]);
 
-  // Currently active selected store target
+  // Currently active selected store target with merchant settings
   const activeSelectedStore = useMemo(() => {
     if (selectedStoreId === 'default') {
       return {
+        id: 'default',
         name: settings.storeName || 'متجر قريتي',
         phone: settings.phone || '',
         village: settings.address || '',
+        freeDelivery: settings.freeDelivery ?? false,
+        freeDeliveryMinOrder: settings.freeDeliveryMinOrder,
+        deliveryFee: settings.deliveryFee ?? 10,
+        isPro: true,
       };
     }
     const found = allStores.find((s) => s.id === selectedStoreId);
     if (found) {
       return {
+        ...found,
+        id: found.id,
         name: found.name,
         phone: found.phone,
         village: found.cityOrVillage,
+        freeDelivery: found.freeDelivery ?? false,
+        freeDeliveryMinOrder: found.freeDeliveryMinOrder,
+        deliveryFee: found.deliveryFee ?? 10,
       };
     }
     return {
+      id: 'default',
       name: settings.storeName || 'متجر قريتي',
       phone: settings.phone || '',
       village: settings.address || '',
+      freeDelivery: settings.freeDelivery ?? false,
+      freeDeliveryMinOrder: settings.freeDeliveryMinOrder,
+      deliveryFee: settings.deliveryFee ?? 10,
+      isPro: false,
     };
   }, [selectedStoreId, allStores, settings]);
 
@@ -634,6 +768,28 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     0
   );
 
+  // Check if active store offers free delivery based on merchant settings and cart amount
+  const isSelectedStoreFreeDelivery = useMemo(() => {
+    if (activeSelectedStore.freeDelivery) {
+      if (activeSelectedStore.freeDeliveryMinOrder && activeSelectedStore.freeDeliveryMinOrder > 0) {
+        return totalCartPrice >= activeSelectedStore.freeDeliveryMinOrder;
+      }
+      return true;
+    }
+    if ((activeSelectedStore as any).promoTag?.includes('توصيل مجاني')) {
+      return true;
+    }
+    if (selectedStoreId === 'default' && settings.freeDelivery) {
+      if (settings.freeDeliveryMinOrder && settings.freeDeliveryMinOrder > 0) {
+        return totalCartPrice >= settings.freeDeliveryMinOrder;
+      }
+      return true;
+    }
+    return false;
+  }, [activeSelectedStore, totalCartPrice, selectedStoreId, settings]);
+
+  const activeDeliveryFee = isSelectedStoreFreeDelivery ? 0 : (activeSelectedStore.deliveryFee ?? 10);
+
   // Clean WhatsApp number
   const getWhatsAppTargetPhone = () => {
     const raw = customStorePhone || settings.phone || '';
@@ -706,7 +862,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     const validName = customerName.trim() || 'عميل المتجر';
     const validPhone = customerPhone.trim() || (customStorePhone || '05xxxxxxxx');
     const validAddress = customerAddress.trim() || (settings.address ? `حي ${settings.address}` : 'القرية');
-    const deliveryFee = 10;
+    const deliveryFee = activeDeliveryFee;
     const subtotal = totalCartPrice;
     const totalAmount = subtotal + deliveryFee;
 
@@ -875,746 +1031,869 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
         </div>
       )}
 
-      {/* Top Customer Store Header */}
-      <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-slate-800 shadow-md">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-          {/* Logo & Store Branding */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Back to Portals Button */}
+      {/* ================================================================= */}
+      {/* TOP HEADER: شريط علوي موحد متناسق مع هوية شجرة البن */}
+      {/* ================================================================= */}
+      <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-lg border-b border-slate-800 shadow-md">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-3">
+          {/* Start (Right in RTL): Menu & Notifications */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Menu Button (فتح القائمة والخيارات الجانبية) */}
             <button
-              onClick={onOpenLanding}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition-all flex items-center justify-center border border-slate-700/80 shadow-xs cursor-pointer"
-              title="الرجوع إلى القائمة الرئيسية"
+              type="button"
+              onClick={() => setIsSideMenuOpen(true)}
+              className="p-2 sm:p-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-750 text-slate-200 hover:text-white transition-all flex items-center justify-center border border-slate-700/80 shadow-xs cursor-pointer active:scale-95"
+              title="القائمة الرئيسية"
+              aria-label="القائمة الرئيسية"
             >
-              {isRTL ? <ArrowRight className="w-4 h-4 text-emerald-400" /> : <ArrowLeft className="w-4 h-4 text-emerald-400" />}
+              <Menu className="w-5 h-5 text-emerald-400" />
             </button>
 
-            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-              <div
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-emerald-500/40 shadow-lg shadow-emerald-950/40 shrink-0 bg-slate-900"
-              >
-                <img
-                  src="/icon.png"
-                  alt="شعار قريتي"
-                  className="w-full h-full object-cover"
-                />
+            {/* Notifications Button (الإشعارات والتنبيهات) */}
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen(true)}
+              className="relative p-2 sm:p-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-750 text-slate-200 hover:text-white transition-all flex items-center justify-center border border-slate-700/80 shadow-xs cursor-pointer active:scale-95"
+              title="الإشعارات وتنبيهات الطلبات"
+              aria-label="الإشعارات"
+            >
+              <Bell className="w-5 h-5 text-amber-400" />
+              {trackedOrder && trackedOrder.status !== 'CANCELLED' && trackedOrder.status !== 'DELIVERED' ? (
+                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping ring-2 ring-slate-900" />
+              ) : trackedOrder && trackedOrder.status === 'DELIVERED' ? (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-slate-900" />
+              ) : (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-slate-500 ring-2 ring-slate-900" />
+              )}
+            </button>
+          </div>
+
+          {/* Center: Logo (Coffee Tree) & App Branding */}
+          <div
+            onClick={() => {
+              setSelectedStoreId('default');
+              setSelectedCategory('ALL');
+              setSearchQuery('');
+            }}
+            className="flex items-center gap-2 cursor-pointer select-none group"
+            title="الرئيسية - قريتي"
+          >
+            <CoffeeTreeLogo size={36} />
+            <div className="flex flex-col text-center">
+              <div className="flex items-center gap-1.5 justify-center">
+                <h1 className="font-black text-base sm:text-lg text-white leading-none tracking-tight group-hover:text-emerald-400 transition-colors">
+                  قريتي
+                </h1>
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  {selectedVillage === 'ALL' ? 'المنصة الموحدة' : selectedVillage}
+                </span>
               </div>
-              <div className="flex flex-col justify-center gap-0.5 max-w-[150px] sm:max-w-xs">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <h1 className="font-bold text-sm text-white leading-none truncate">
-                    {settings.storeName || 'متجر قريتي'}
-                  </h1>
-                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    مفتوح
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-400 truncate leading-none">
-                  {settings.address || 'تسوق واطلب مباشرة'}
-                </p>
-              </div>
+              <p className="text-[10px] text-amber-300/90 font-medium leading-tight mt-0.5">
+                شجرة البن • المتاجر والخدمات
+              </p>
             </div>
           </div>
 
-          {/* Action Buttons: Tracking, Cart, Share & Merchant Portal */}
+          {/* End (Left in RTL): Shopping Cart & Customer Profile */}
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Active Order Tracker Button */}
+            {/* Active Order Tracker Shortcut (if active) */}
             {trackedOrder && trackedOrder.status !== 'CANCELLED' && (
               <button
+                type="button"
                 onClick={() => setIsTrackingModalOpen(true)}
-                className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
-                title="متابعة حالة الطلب الحالي المباشرة"
+                className={`hidden md:flex px-2.5 py-1.5 rounded-xl border text-xs font-bold items-center gap-1.5 transition-all shadow-xs ${
+                  trackedOrder.status === 'DELIVERED'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 hover:bg-emerald-500/30'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
+                }`}
+                title={trackedOrder.status === 'DELIVERED' ? 'تم استلام الطلب بنجاح' : 'متابعة حالة الطلب الحالي'}
               >
-                <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-                <span className="text-[11px] sm:text-xs">متابعة طلبي</span>
-                <span className="font-mono text-[10px] font-black bg-amber-400/20 px-1 py-0.5 rounded">
-                  #{trackedOrder.orderNumber}
-                </span>
+                {trackedOrder.status === 'DELIVERED' ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-[11px]">تم استلام الطلب ✓</span>
+                  </>
+                ) : (
+                  <>
+                    <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                    <span className="text-[11px]">متابعة طلبي</span>
+                  </>
+                )}
               </button>
             )}
 
-            {/* Digital Village Wallet Header Button */}
-            <button
-              onClick={() => setIsWalletModalOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-950 to-teal-900 hover:from-emerald-900 hover:to-teal-800 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
-              title="فتح محفظة القرية الرقمية وشحن الرصيد"
-            >
-              <Wallet className="w-4 h-4 text-emerald-400" />
-              <span className="hidden sm:inline">محفظتي:</span>
-              <span className="font-black font-mono text-emerald-300">{formatGlobalCurrency(walletBalance)}</span>
-            </button>
-
-            {/* Share Link Button */}
-            <button
-              onClick={handleShareStoreLink}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold border border-slate-700/80 cursor-pointer shadow-xs"
-              title="مشاركة رابط هذا المتجر المباشر عبر الواتساب ووسائل التواصل"
-            >
-              <Share2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-[11px] sm:text-xs">{copiedLink ? 'تم النسخ!' : 'مشاركة'}</span>
-            </button>
-
             {/* Shopping Cart Button */}
             <button
+              type="button"
               onClick={() => setIsCartOpen(true)}
-              className="relative px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-md shadow-emerald-900/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-              title="فتح سلة التسوق ومعاينة الأصناف المختارة"
+              className="relative p-2 sm:px-3 sm:py-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition-all active:scale-95 cursor-pointer"
+              title="فتح سلة التسوق"
             >
-              <ShoppingCart className="w-4 h-4" />
-              <span>السلة</span>
+              <ShoppingCart className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              <span className="hidden sm:inline">السلة</span>
               {totalCartCount > 0 && (
                 <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black leading-none animate-bounce">
                   {totalCartCount}
                 </span>
               )}
             </button>
+
+            {/* Customer Account Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (!activeCustomer) {
+                  setShowCustomerAuthModal(true);
+                } else {
+                  setIsCustomerHubOpen(true);
+                }
+              }}
+              className="p-2 sm:p-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-750 text-slate-200 hover:text-white transition-all flex items-center justify-center border border-slate-700/80 cursor-pointer shadow-xs active:scale-95"
+              title={activeCustomer ? activeCustomer.name : 'تسجيل الدخول / حساب العميل'}
+            >
+              {activeCustomer ? (
+                <div className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center font-black text-[11px]">
+                  {activeCustomer.name.slice(0, 1)}
+                </div>
+              ) : (
+                <User className="w-5 h-5 text-emerald-400" />
+              )}
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Developer Customizable Top Banner */}
-      {(devSettings.storefrontBannerText || devSettings.developerAnnouncement) && (
-        <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 border-b border-emerald-500/40 px-4 py-2 text-emerald-200 text-center text-xs font-bold shadow-md flex items-center justify-center gap-2 z-20">
-          <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-          <span>{devSettings.storefrontBannerText || devSettings.developerAnnouncement}</span>
-        </div>
-      )}
-
-      {/* Promoted Ads Banner Widget */}
-      <div className="max-w-6xl mx-auto px-4 mt-4 mb-1">
-        <AdBannerWidget currentVillage={selectedVillage} isDarkMode={true} isRTL={isRTL} />
-      </div>
-
-      {/* Visited Store Celebration / Direct Redirect Banner */}
-      {visitedAdNotice && (
-        <div className="max-w-6xl mx-auto px-4 my-2 animate-in fade-in slide-in-from-top-3 duration-300">
-          <div className="bg-gradient-to-r from-emerald-900/90 via-teal-900/90 to-emerald-950/90 border-2 border-emerald-400/80 rounded-2xl p-3.5 sm:p-4 text-white shadow-xl flex items-center justify-between gap-3 backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-400 text-slate-950 flex items-center justify-center font-black shrink-0 shadow-md">
-                <Store className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-black bg-emerald-400/20 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-lg">
-                    🛍️ تم توجيهك للمتجر المعلن عنه
-                  </span>
-                  {visitedAdNotice.village && (
-                    <span className="text-[11px] text-amber-300 font-medium">
-                      📍 {visitedAdNotice.village}
-                    </span>
-                  )}
-                </div>
-                <h4 className="text-sm sm:text-base font-black text-white mt-0.5">
-                  أهلاً بك في متجر {visitedAdNotice.storeName}! تصفح المنتجات وأضفها لسلتك للطلب المباشر.
-                </h4>
-              </div>
-            </div>
-
+      {/* ================================================================= */}
+      {/* SEARCH BAR (شريط البحث الواسع المرن في منتصف الشاشة) */}
+      {/* ================================================================= */}
+      <div className="max-w-4xl mx-auto w-full px-4 pt-3.5 pb-1">
+        <div className="relative flex items-center w-full shadow-lg rounded-2xl bg-slate-900/90 border border-slate-800/90 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all p-1">
+          <div className="pr-3 text-emerald-400 shrink-0">
+            <Search className="w-5 h-5" />
+          </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="ابحث عن المتاجر والخدمات في قريتك..."
+            className="w-full bg-transparent border-none py-2 px-2 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-hidden"
+          />
+          {searchQuery && (
             <button
               type="button"
-              onClick={() => setVisitedAdNotice(null)}
-              className="p-1.5 text-slate-300 hover:text-white bg-slate-900/60 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer border border-slate-700/60 shrink-0"
-              title="إغلاق التنبيه"
+              onClick={() => setSearchQuery('')}
+              className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
+              title="مسح البحث"
             >
               <X className="w-4 h-4" />
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Hero Welcome Bar */}
-      <div className="bg-gradient-to-b from-slate-900 via-slate-900/80 to-slate-950 border-b border-slate-800/60 py-6 px-4">
-        <div className="max-w-6xl mx-auto text-center">
-          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 mb-3 shadow-xs">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            {devSettings.storefrontBadgeText || 'متجر القرية والعملاء - تصفح المنتجات والطلب الفوري'}
-          </span>
-          <h2 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">
-            {devSettings.storefrontHeaderTitle || `أهلاً بكم في ${settings.storeName || 'متجر قريتي'}`}
-          </h2>
-          <p className="mt-2 text-xs sm:text-sm text-slate-300 max-w-xl mx-auto leading-relaxed">
-            {devSettings.storefrontSubTitle || 'اختر ما تحتاجه من أصناف، أضفها إلى سلتك، واضغط زر إرسال الطلب ليتواصل معك المتجر فوراً عبر الواتساب وتجهيز طلبك.'}
-          </p>
+          )}
+          {/* Village Filter Badge Button */}
+          <button
+            type="button"
+            onClick={() => setIsLocationSelectorModalOpen(true)}
+            className="pl-2 shrink-0 flex items-center gap-1 text-[11px] text-amber-300 hover:text-amber-200 font-bold bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 px-2.5 py-1 rounded-xl transition-colors cursor-pointer"
+            title="تحديد أو تغيير الموقع"
+          >
+            <MapPin className="w-3.5 h-3.5 text-amber-400" />
+            <span className="truncate max-w-[120px]">{selectedVillage === 'ALL' ? 'كل القرى' : selectedVillage}</span>
+          </button>
         </div>
       </div>
 
-      {/* Customer Account & Village/Store Selector Toolbar */}
-      <div className="bg-slate-900/95 border-b border-slate-800/80 px-4 py-3 shadow-inner">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Customer Profile Status */}
-          <div className="flex items-center gap-2.5">
-            {activeCustomer ? (
-              <div className="flex items-center gap-2 bg-emerald-950/60 border border-emerald-500/40 px-3 py-1.5 rounded-2xl">
-                <div className="w-7 h-7 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center font-black text-xs">
-                  <UserCheck className="w-4 h-4" />
-                </div>
-                <div className="text-xs">
-                  <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
-                    <span>مرحباً، {activeCustomer.name}</span>
-                    {isCustomerApproved(activeCustomer) ? (
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                        <span>معتمد للشراء والطلب ✓</span>
-                      </span>
-                    ) : (
-                      <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-black flex items-center gap-1 animate-pulse">
-                        <Clock className="w-3 h-3 text-amber-400" />
-                        <span>قيد مراجعة وتدقيق الهوية ⏳</span>
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[10px] text-slate-400 font-mono" dir="ltr">
-                    {activeCustomer.phone}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    clearActiveCustomer();
-                    setActiveCustomer(null);
-                  }}
-                  className="mr-2 p-1 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-rose-950/40 transition-colors cursor-pointer"
-                  title="تسجيل خروج العميل"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
+      {/* ================================================================= */}
+      {/* LOCATION & NEARBY FILTER BAR (شريط تحديد الموقع والمتاجر القريبة) */}
+      {/* ================================================================= */}
+      <div className="max-w-4xl mx-auto w-full px-4 pt-1 pb-1">
+        <div className="flex items-center justify-between gap-2 p-2 sm:p-2.5 rounded-2xl bg-slate-900/95 border border-slate-800 shadow-md flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={`p-2 rounded-xl shrink-0 ${selectedVillage === 'ALL' ? 'bg-slate-800 text-slate-300' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'}`}>
+              <MapPin className={`w-4 h-4 ${selectedVillage !== 'ALL' ? 'animate-bounce' : ''}`} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-400">النطاق الجغرافي:</span>
+                <span className="text-xs font-black text-white truncate">
+                  {selectedVillage === 'ALL' ? '🌐 جميع المتاجر (كافة المناطق)' : `📍 ${selectedVillage}`}
+                </span>
+                {selectedVillage !== 'ALL' ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    المتاجر القريبة منك فقط
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                    عرض الكل
+                  </span>
+                )}
               </div>
-            ) : (
+              <p className="text-[10px] text-slate-400 truncate">
+                {selectedVillage === 'ALL'
+                  ? 'يتم عرض جميع المتاجر. يمكنك تحديد موقعك لحصر البقالات القريبة منك فقط.'
+                  : `يتم حصر البقالات والمتاجر في نطاق ${selectedVillage}. اضغط "عرض الكل" لرؤية باقي المناطق.`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0 mr-auto">
+            {selectedVillage !== 'ALL' && (
               <button
                 type="button"
-                onClick={() => setShowCustomerAuthModal(true)}
-                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-emerald-500/50 text-slate-200 px-3.5 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+                onClick={handleShowAllStores}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-all cursor-pointer border border-slate-700 flex items-center gap-1.5 shadow-xs active:scale-95"
+                title="عرض جميع المتاجر والقرى"
               >
-                <User className="w-4 h-4 text-emerald-400" />
-                <span>تسجيل دخول العميل (الاسم والجوال)</span>
+                <span>عرض جميع المتاجر 🌐</span>
               </button>
             )}
-          </div>
 
-          {/* Village and Store Picker */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Village Selector */}
-            <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs">
-              <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <select
-                aria-label="تحديد القرية أو الحي"
-                value={selectedVillage}
-                onChange={(e) => {
-                  setSelectedVillage(e.target.value);
-                  setSelectedStoreId('default');
+            <button
+              type="button"
+              onClick={handleDetectGPSLocation}
+              disabled={isLocatingGPS}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95 border ${
+                isLocatingGPS
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
+                  : selectedVillage !== 'ALL'
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-emerald-950/30'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-400 shadow-emerald-500/20'
+              }`}
+              title="تحديد الموقع المباشر عبر الـ GPS"
+            >
+              {isLocatingGPS ? (
+                <>
+                  <Clock className="w-3.5 h-3.5 animate-spin" />
+                  <span>جارٍ التحديد...</span>
+                </>
+              ) : (
+                <>
+                  <LocateFixed className="w-3.5 h-3.5" />
+                  <span>تحديد موقعي (GPS)</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsLocationSelectorModalOpen(true)}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer border border-slate-700 flex items-center gap-1 shadow-xs active:scale-95"
+              title="اختيار القرية أو المنطقة يدوياً"
+            >
+              <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">تغيير</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Location feedback banner/toast */}
+        {locationToast && (
+          <div className="mt-2 p-2.5 rounded-xl bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 text-xs font-bold flex items-center justify-between gap-2 shadow-lg animate-in fade-in slide-in-from-top-1">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{locationToast}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLocationToast(null)}
+              className="p-1 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ================================================================= */}
+      {/* HORIZONTAL SCROLL CATEGORIES (الأقسام الأفقية بأيقونات دائرية ملونة) */}
+      {/* ================================================================= */}
+      <div className="max-w-6xl mx-auto w-full px-4 pt-2 pb-1">
+        <div className="flex items-center gap-3 sm:gap-4 overflow-x-auto pb-2 scrollbar-none no-scrollbar">
+          {[
+            { id: 'ALL', name: 'الكل', emoji: '🏪', bg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
+            { id: 'مغذي', name: 'مغذي وبقالة', emoji: '🛒', bg: 'bg-green-500/20 text-green-300 border-green-500/40' },
+            { id: 'مطاعم', name: 'مطاعم', emoji: '🍔', bg: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
+            { id: 'مخبوزات', name: 'مخبوزات', emoji: '🥐', bg: 'bg-orange-500/20 text-orange-300 border-orange-500/40' },
+            { id: 'صيدليات', name: 'صيدليات', emoji: '💊', bg: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' },
+            { id: 'مقاهي', name: 'مقاهي وبن', emoji: '☕', bg: 'bg-amber-900/40 text-amber-200 border-amber-600/50' },
+            { id: 'خضار', name: 'خضار وفواكه', emoji: '🍎', bg: 'bg-lime-500/20 text-lime-300 border-lime-500/40' },
+            { id: 'خدمات', name: 'خدمات سريعة', emoji: '⚡', bg: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
+          ].map((cat) => {
+            const isCatActive = selectedCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => {
+                  if (selectedCategory === cat.id && cat.id !== 'ALL') {
+                    setSelectedCategory('ALL');
+                  } else {
+                    setSelectedCategory(cat.id);
+                  }
                 }}
-                className="bg-transparent text-slate-200 focus:outline-hidden text-xs font-bold cursor-pointer"
+                className="flex flex-col items-center gap-1.5 shrink-0 group cursor-pointer"
               >
-                <option value="ALL" className="bg-slate-900 text-white">كل القرى والأحياء</option>
-                {villageList.map((vil) => (
-                  <option key={vil} value={vil} className="bg-slate-900 text-white">
-                    {vil}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Store Selector */}
-            <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs">
-              <Store className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-              <select
-                aria-label="اختيار المتجر"
-                value={selectedStoreId}
-                onChange={(e) => setSelectedStoreId(e.target.value)}
-                className="bg-transparent text-slate-200 focus:outline-hidden text-xs font-bold cursor-pointer max-w-[180px] truncate"
-              >
-                <option value="default" className="bg-slate-900 text-white">
-                  {settings.storeName || 'متجر قريتي'} (الأساسي)
-                </option>
-                {availableStores.map((st) => (
-                  <option key={st.id} value={st.id} className="bg-slate-900 text-white">
-                    {st.name} {st.isPro ? '👑' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {/* Adhan & Prayer Times Widget */}
-            {devSettings.storefrontShowAdhan !== false && (
-              <AdhanTopBarWidget isRTL={isRTL} isDarkMode={true} compact={false} />
-            )}
-          </div>
+                <div
+                  className={`w-13 h-13 sm:w-15 sm:h-15 rounded-full flex items-center justify-center text-xl sm:text-2xl border-2 transition-all shadow-md group-hover:scale-105 active:scale-95 ${
+                    isCatActive
+                      ? 'border-emerald-400 bg-emerald-500/25 ring-3 ring-emerald-500/30 shadow-emerald-500/20'
+                      : 'border-slate-800 bg-slate-900/90 hover:border-slate-700'
+                  }`}
+                >
+                  <span>{cat.emoji}</span>
+                </div>
+                <span
+                  className={`text-[11px] sm:text-xs transition-colors text-center whitespace-nowrap ${
+                    isCatActive ? 'text-emerald-400 font-black' : 'text-slate-300 group-hover:text-white font-medium'
+                  }`}
+                >
+                  {cat.name}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-5 sm:gap-6">
+      <main className="flex-1 max-w-6xl mx-auto w-full px-3 sm:px-6 py-4 pb-28 flex flex-col gap-5">
         {/* Prayer Time Closed Banner (if active) */}
         <StorePrayerClosedBanner isRTL={isRTL} />
 
         {/* ================================================================= */}
-        {/* GEOGRAPHIC VILLAGE SEARCH & SELECTION SYSTEM (نظام القرى والبحث الجغرافي) */}
+        {/* VILLAGES & STORES DIRECTORY (عرض المتاجر والقرى - تظهر عند عدم اختيار متجر) */}
         {/* ================================================================= */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xl space-y-4">
-          {/* Header & Village Search Input */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
-                <MapPin className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                  <span>نظام القرى والبحث الجغرافي</span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
-                    {selectedVillage === 'ALL' ? 'كافة القرى' : selectedVillage}
+        {selectedStoreId === 'default' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-none py-1">
+                <button
+                  type="button"
+                  onClick={handleShowAllStores}
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer border ${
+                    selectedVillage === 'ALL'
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow-sm'
+                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <span>جميع المتاجر (الكل)</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">
+                    {allStores.length}
                   </span>
-                </h2>
-                <p className="text-xs text-slate-400">
-                  {selectedVillage === 'ALL'
-                    ? 'يتم الآن عرض كافة المتاجر والبقالات في جميع القرى بالنظام'
-                    : `تظهر الآن متاجر وبقالات (${selectedVillage}) فقط`}
-                </p>
+                </button>
+
+                {villageList.map((vil) => {
+                  const isSelected = selectedVillage === vil;
+                  const storeCount = allStores.filter((s) => s.cityOrVillage === vil || s.cityOrVillage?.includes(vil)).length;
+                  return (
+                    <button
+                      key={vil}
+                      type="button"
+                      onClick={() => handleSelectVillage(vil)}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer border ${
+                        isSelected
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow-sm'
+                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
+                      }`}
+                    >
+                      <div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-slate-950' : 'bg-emerald-400'}`} />
+                      <span>{vil}</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+                        {storeCount}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="text-xs text-slate-400 hidden sm:flex items-center gap-1.5 shrink-0 font-medium">
+                <Store className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{availableStores.length} متجر متاح</span>
               </div>
             </div>
 
-            {/* All Villages Button & Village Search input */}
-            <div className="flex items-center gap-2 flex-1 max-w-md">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 right-3 text-emerald-400" />
-                <input
-                  type="text"
-                  value={villageSearchQuery}
-                  onChange={(e) => setVillageSearchQuery(e.target.value)}
-                  placeholder="ابحث باسم القرية (مثال: الانهوم، الفصور...) أو المتجر"
-                  className="w-full bg-slate-950 border border-slate-700/80 rounded-xl py-2 pr-9 pl-8 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-500"
-                />
-                {villageSearchQuery && (
+            {/* Section Header - المتاجر القريبة حسب الموقع أو كل المتاجر */}
+            <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                  <Store className="w-5 h-5 text-emerald-400" />
+                  <span>
+                    {selectedVillage !== 'ALL' ? `المتاجر القريبة في ${selectedVillage}` : 'جميع المتاجر والخدمات المتاحة'}
+                  </span>
+                </h3>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  {availableStores.length} متجر
+                </span>
+                {selectedVillage !== 'ALL' && (
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    <span>نطاق موقعك المحدد</span>
+                  </span>
+                )}
+                {selectedCategory !== 'ALL' && (
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                    قسم: {selectedCategory}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {selectedVillage !== 'ALL' ? (
                   <button
                     type="button"
-                    onClick={() => setVillageSearchQuery('')}
-                    className="absolute top-1/2 -translate-y-1/2 left-2.5 text-slate-400 hover:text-white p-1"
+                    onClick={handleShowAllStores}
+                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer flex items-center gap-1"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <span>عرض كافة المتاجر ({allStores.length}) ←</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleDetectGPSLocation}
+                    className="text-xs font-bold text-amber-400 hover:text-amber-300 hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    <LocateFixed className="w-3.5 h-3.5" />
+                    <span>تحديد موقعي لعرض الأقرب</span>
                   </button>
                 )}
+              </div>
+            </div>
+
+            {/* Stores Grid or Empty State */}
+            {availableStores.length === 0 ? (
+              <div className="p-8 text-center bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl space-y-3">
+                <Store className="w-12 h-12 text-slate-600 mx-auto" />
+                <div>
+                  <p className="text-base font-black text-white">
+                    {selectedCategory !== 'ALL'
+                      ? `لا توجد متاجر أو شركاء مسجلين في قسم (${selectedCategory}) ${selectedVillage !== 'ALL' ? `في ${selectedVillage}` : ''}`
+                      : selectedVillage === 'ALL'
+                      ? 'لا توجد متاجر مطابقة لبحثك حالياً'
+                      : `لا توجد متاجر مسجلة في ${selectedVillage} حتى الآن`}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    يمكنك استعراض كافة المتاجر من جميع القرى والمناطق، أو تسجيل متجر كشريك معتمد
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-2 pt-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleShowAllStores}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-md active:scale-95"
+                  >
+                    <span>عرض جميع المتاجر المتاحة ({allStores.length}) 🌐</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsLocationSelectorModalOpen(true)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 border border-slate-700 shadow-md active:scale-95"
+                  >
+                    <MapPin className="w-4 h-4 text-amber-400" />
+                    <span>تغيير الموقع / اختيار قرية أخرى</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onOpenAuthModal) {
+                        onOpenAuthModal('MERCHANT');
+                      } else {
+                        onOpenMerchantPortal();
+                      }
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 border border-slate-700 shadow-xs active:scale-95"
+                  >
+                    <Plus className="w-4 h-4 text-emerald-400" />
+                    <span>تسجيل متجر جديد</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                  {availableStores.map((st) => {
+                    const ratingVal = st.rating || 4.8;
+                    const ratingCount = st.ratingCount || 24;
+                    const storeCover = (st as any).coverPhoto || (st as any).storeCover || (st as any).cover || (st as any).photo || null;
+                    const storeLogo = (st as any).logo || (st as any).storeLogo || (st as any).photo || null;
+                    const storeIcon = (st as any).storeIcon || null;
+                    const storeTagline = (st as any).tagline || null;
+                    const promoTag = (st as any).promoTag || (st.isPro ? 'توصيل سريع' : 'متوفر الآن');
+                    const liveStatus = getStoreLiveStatus(st, settings);
+                    const isFreeDelivery = Boolean(
+                      st.freeDelivery ||
+                      (st as any).promoTag?.includes('توصيل مجاني') ||
+                      (st.id === 'store-alrezq') ||
+                      (selectedStoreId === 'default' && st.id === selectedStoreId && settings.freeDelivery)
+                    );
+
+                    return (
+                      <div
+                        key={st.id}
+                        onClick={() => {
+                          setSelectedStoreId(st.id);
+                          window.scrollTo({ top: 120, behavior: 'smooth' });
+                        }}
+                        className="p-2.5 sm:p-3 rounded-2xl sm:rounded-3xl border border-slate-800/90 bg-[#151821] hover:bg-[#1a1e2b] hover:border-emerald-500/60 shadow-lg hover:shadow-2xl transition-all cursor-pointer flex flex-col items-center text-center group hover:-translate-y-1 relative overflow-hidden"
+                      >
+                        {/* Top Cover Banner with Centered Floating Logo Badge */}
+                        <div className="w-full h-28 sm:h-32 rounded-xl sm:rounded-2xl relative overflow-hidden bg-slate-900 border border-slate-800 flex items-center justify-center shadow-inner group-hover:scale-[1.02] transition-transform">
+                          {storeCover ? (
+                            <img
+                              src={storeCover}
+                              alt={st.name}
+                              className="w-full h-full object-cover brightness-[0.7] group-hover:brightness-[0.8] transition-all"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-tr from-slate-950 via-slate-900 to-emerald-950/60" />
+                          )}
+
+                          {/* Floating Store Logo Badge (Central White Tile like in Screenshot) */}
+                          <div className="absolute inset-0 m-auto w-13 h-13 sm:w-15 sm:h-15 rounded-2xl bg-white shadow-2xl p-1.5 flex items-center justify-center text-slate-900 font-black border border-white/50 group-hover:scale-110 transition-transform z-10">
+                            {storeLogo && (storeLogo.startsWith('http') || storeLogo.startsWith('data:image')) ? (
+                              <img
+                                src={storeLogo}
+                                alt={st.name}
+                                className="w-full h-full object-contain rounded-xl"
+                              />
+                            ) : storeLogo || storeIcon ? (
+                              <span className="text-2xl sm:text-3xl select-none" role="img" aria-label="store icon">
+                                {storeLogo || storeIcon}
+                              </span>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center">
+                                <Store className="w-6 h-6 text-emerald-600" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Free Delivery Badge (شارة توصيل مجاني بناءً على إعدادات التاجر) */}
+                          {isFreeDelivery && (
+                            <span className="absolute top-2 left-2 text-[9px] sm:text-[10px] bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 text-white font-black px-2 py-0.5 rounded-lg shadow-lg z-10 flex items-center gap-1 border border-emerald-400/40 animate-pulse">
+                              <Truck className="w-3 h-3 text-emerald-100" />
+                              <span>توصيل مجاني 🛵</span>
+                            </span>
+                          )}
+
+                          {/* Pro/Verified Badge */}
+                          {st.isPro && (
+                            <span className="absolute top-2 right-2 text-[9px] bg-amber-500 text-slate-950 font-black px-1.5 py-0.5 rounded-md shadow-md z-10">
+                              👑 معتمد
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Store Info & Status */}
+                        <div className="w-full mt-2.5 flex flex-col items-center">
+                          {/* Store Name */}
+                          <h4 className="text-sm sm:text-base font-black text-white group-hover:text-emerald-300 transition-colors line-clamp-1 w-full text-center">
+                            {st.name}
+                          </h4>
+
+                          {/* Tagline if configured */}
+                          {storeTagline && (
+                            <p className="text-[10px] text-emerald-400/90 font-medium line-clamp-1 w-full text-center mt-0.5">
+                              {storeTagline}
+                            </p>
+                          )}
+
+                          {/* Live Status (مفتوح الآن / مغلق) */}
+                          <div className="mt-1 flex items-center justify-center gap-1.5 text-xs font-bold">
+                            <span className={`w-2 h-2 rounded-full ${liveStatus.dotColor}`} />
+                            <span className={liveStatus.isOpen ? 'text-emerald-400' : 'text-slate-400'}>
+                              {liveStatus.badgeText}
+                            </span>
+                          </div>
+
+                          {/* Free Delivery Tag or Promo Tag */}
+                          {isFreeDelivery ? (
+                            <div className="mt-1 flex items-center justify-center">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                <Truck className="w-3 h-3 text-emerald-400" />
+                                <span>توصيل مجاني</span>
+                                {st.freeDeliveryMinOrder ? ` (+${st.freeDeliveryMinOrder} ${settings.currency || 'ر.س'})` : ''}
+                              </span>
+                            </div>
+                          ) : (
+                            promoTag && (
+                              <div className="text-[11px] text-slate-300 font-medium mt-0.5 line-clamp-1">
+                                {promoTag}
+                              </div>
+                            )
+                          )}
+
+                          {/* Rating */}
+                          <div className="text-xs font-bold text-amber-400 flex items-center justify-center gap-1 mt-1 font-mono">
+                            <span>⭐ {ratingVal.toFixed(1)}</span>
+                            <span className="text-[10px] text-slate-500 font-normal">({ratingCount})</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+          </div>
+        )}
+
+        {/* Customer Pending Verification Notice (only if pending) */}
+        {activeCustomer && !isCustomerApproved(activeCustomer) && (
+          <div className="p-3 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-3 shadow-md">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+              <div>
+                <strong className="text-amber-300 block text-xs">حسابك قيد مراجعة وتدقيق الهوية (KYC) ⏳</strong>
+                <span className="text-[11px] text-amber-200/90">
+                  بمجرد اعتماد وتوثيق الهوية، سيُتاح لك فوراً إضافة المنتجات إلى السلة وإتمام الطلبات.
+                </span>
+              </div>
+            </div>
+            <span className="px-2 py-0.5 rounded-lg bg-amber-600/30 text-amber-300 font-mono text-[10px] font-bold border border-amber-500/40 shrink-0">
+              قيد التدقيق
+            </span>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* PRODUCTS CATALOG: لا تظهر إلا إذا ضغط المستخدم على المتجر واختاره */}
+        {/* ================================================================= */}
+        {selectedStoreId !== 'default' && (
+          <div className="space-y-4 animate-in fade-in duration-300">
+            {/* Active Selected Store Header Banner */}
+            <div className="bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-900 border-2 border-emerald-500/50 rounded-3xl p-4 sm:p-5 shadow-xl flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white text-slate-950 flex items-center justify-center font-black shrink-0 shadow-lg border border-white/80 p-1 overflow-hidden">
+                  {(() => {
+                    const activeLogo = (activeSelectedStore as any).logo || (activeSelectedStore as any).storeLogo;
+                    const activeIcon = (activeSelectedStore as any).storeIcon;
+                    if (activeLogo && (activeLogo.startsWith('http') || activeLogo.startsWith('data:image'))) {
+                      return (
+                        <img
+                          src={activeLogo}
+                          alt={activeSelectedStore.name}
+                          className="w-full h-full object-contain rounded-xl"
+                        />
+                      );
+                    }
+                    if (activeLogo || activeIcon) {
+                      return (
+                        <span className="text-2xl sm:text-3xl select-none" role="img">
+                          {activeLogo || activeIcon}
+                        </span>
+                      );
+                    }
+                    return <Store className="w-7 h-7 text-emerald-600" />;
+                  })()}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 shadow-xs">
+                      قائمة منتجات المتجر 🛍️
+                    </span>
+                    <span className="text-xs text-amber-300 font-bold">
+                      📍 {activeSelectedStore.village}
+                    </span>
+                    {isSelectedStoreFreeDelivery && (
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 border border-emerald-400 flex items-center gap-1 shadow-sm">
+                        <Truck className="w-3 h-3 text-slate-950" />
+                        <span>توصيل مجاني 🛵</span>
+                        {activeSelectedStore.freeDeliveryMinOrder ? ` (فوق ${activeSelectedStore.freeDeliveryMinOrder} ${settings.currency || 'ر.س'})` : ''}
+                      </span>
+                    )}
+                    {(() => {
+                      const currentStoreObj = allStores.find((s) => s.id === selectedStoreId) || (activeSelectedStore as any);
+                      const status = getStoreLiveStatus(currentStoreObj, settings);
+                      return (
+                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black border shadow-xs ${status.badgeBg} ${status.badgeBorder} ${status.badgeTextClass}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`} />
+                          <span>{status.badgeText}</span>
+                          {status.detailText && (
+                            <span className="opacity-85 text-[9px] font-normal border-r border-current/20 pr-1 mr-0.5">
+                              {status.detailText}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <h3 className="text-base sm:text-lg font-black text-white truncate mt-0.5">
+                    {activeSelectedStore.name}
+                  </h3>
+                  {(activeSelectedStore as any).tagline && (
+                    <p className="text-[11px] text-emerald-300/90 font-medium truncate mt-0.5">
+                      {(activeSelectedStore as any).tagline}
+                    </p>
+                  )}
+                </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedVillage('ALL');
-                  setVillageSearchQuery('');
-                  setSelectedStoreId('default');
-                }}
-                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 flex items-center gap-1.5 border shadow-sm ${
-                  selectedVillage === 'ALL'
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-emerald-500/20'
-                    : 'bg-slate-800 hover:bg-slate-750 text-slate-200 border-slate-700'
-                }`}
+                onClick={() => setSelectedStoreId('default')}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-emerald-300 hover:text-white text-xs font-bold transition-all cursor-pointer border border-emerald-500/30 shadow-md shrink-0 flex items-center gap-1.5 active:scale-95"
               >
-                <Store className="w-3.5 h-3.5" />
-                <span>جميع القرى</span>
+                <ArrowRight className="w-4 h-4" />
+                <span>العودة لقائمة المتاجر</span>
               </button>
             </div>
-          </div>
 
-          {/* Horizontal Village Switcher Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 no-scrollbar">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedVillage('ALL');
-                setSelectedStoreId('default');
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer border ${
-                selectedVillage === 'ALL'
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-sm'
-                  : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
-              }`}
-            >
-              <span>جميع القرى</span>
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">
-                {allStores.length}
-              </span>
-            </button>
-
-            {villageList.map((vil) => {
-              const isSelected = selectedVillage === vil;
-              const storeCount = allStores.filter((s) => s.cityOrVillage === vil || s.cityOrVillage?.includes(vil)).length;
-              return (
-                <button
-                  key={vil}
-                  type="button"
-                  onClick={() => {
-                    setSelectedVillage(vil);
-                    setSelectedStoreId('default');
-                    setVillageSearchQuery('');
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer border ${
-                    isSelected
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-sm shadow-emerald-500/20 font-black'
-                      : 'bg-slate-950/80 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
-                  }`}
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-                  <span>{vil}</span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
-                    {storeCount}
+            {/* Products List Controls Header */}
+            <div className="flex items-center justify-between gap-3 pt-1 border-b border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-emerald-400" />
+                <h4 className="text-sm font-bold text-white">
+                  أصناف المتجر ({filteredItems.length}):
+                </h4>
+                {selectedCategory !== 'ALL' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    قسم: {selectedCategory}
                   </span>
-                </button>
-              );
-            })}
-          </div>
+                )}
+              </div>
 
-          {/* List of Stores Registered in this Village or All Villages */}
-          <div className="space-y-3 pt-2 border-t border-slate-800/80">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <h4 className="text-xs sm:text-sm font-bold text-slate-200 flex items-center gap-2">
-                <Store className="w-4 h-4 text-emerald-400" />
-                <span>
-                  {selectedVillage === 'ALL'
-                    ? `كافة المتاجر والبقالات بالمنصة (${availableStores.length}):`
-                    : `المتاجر والبقالات في ${selectedVillage} (${availableStores.length}):`}
-                </span>
-              </h4>
-              <span className="text-[11px] text-slate-400">
-                انقر على أي متجر أو بقالة لتصفح بضائعها والطلب الفوري
-              </span>
+              <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors select-none">
+                <input
+                  type="checkbox"
+                  checked={onlyInStock}
+                  onChange={(e) => setOnlyInStock(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-800"
+                />
+                <span>المتوفر فقط</span>
+              </label>
             </div>
 
-            {availableStores.length === 0 ? (
-              <div className="p-8 text-center bg-slate-950/40 border border-dashed border-slate-800 rounded-2xl space-y-2">
-                <Store className="w-10 h-10 text-slate-600 mx-auto" />
-                <p className="text-sm font-bold text-slate-300">
-                  {selectedVillage === 'ALL'
-                    ? 'لا توجد متاجر مطابقة لبحثك حالياً'
-                    : `لا توجد بقالات مسجلة في ${selectedVillage} حتى الآن`}
+            {/* Products Grid */}
+            {filteredItems.length === 0 ? (
+              <div className="text-center py-16 px-4 bg-slate-900/50 rounded-2xl border border-slate-800/80 flex flex-col items-center justify-center">
+                <div className="w-16 h-16 rounded-2xl bg-slate-800/80 flex items-center justify-center text-slate-500 mb-3">
+                  <Store className="w-8 h-8" />
+                </div>
+                <h3 className="text-base font-bold text-white mb-1">لا توجد منتجات مطابقة لهذا المتجر</h3>
+                <p className="text-xs text-slate-400 max-w-sm">
+                  جرب إزالة تحديد المتوفر فقط أو تغيير تصنيف البحث.
                 </p>
-                <p className="text-xs text-slate-500">
-                  يمكنك تصفح متاجر القرى المجاورة أو عرض كافة المتاجر بالمنظومة
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedVillage('ALL');
-                    setVillageSearchQuery('');
-                  }}
-                  className="mt-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-emerald-400 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 border border-emerald-500/30 shadow-md"
-                >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>تصفح كافة القرى الأخرى</span>
-                </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {availableStores.map((st) => {
-                  const isSelected = selectedStoreId === st.id;
-                  const ratingVal = st.rating || 5;
-                  const ratingCount = st.ratingCount || 0;
+              <div
+                id="products-container"
+                className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 gap-3.5 sm:gap-4"
+              >
+                {filteredItems.map((item) => {
+                  const inCart = cart[item.id];
+                  const isAvailable = item.quantity > 0 && item.available !== false;
+                  const currency = settings.currency || 'ر.س';
+                  const productImage = item.image || item.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60';
+
                   return (
                     <div
-                      key={st.id}
-                      onClick={() => setSelectedStoreId(st.id)}
-                      className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 ${
-                        isSelected
-                          ? 'bg-emerald-950/40 border-emerald-500/70 shadow-lg shadow-emerald-950/30 ring-1 ring-emerald-500/50'
-                          : 'bg-slate-950/80 hover:bg-slate-900 border-slate-800 hover:border-slate-700'
-                      }`}
+                      key={item.id}
+                      className="bg-slate-900/95 hover:bg-slate-900 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-3 sm:p-4 flex flex-col justify-between transition-all duration-200 shadow-sm hover:shadow-md relative group"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shrink-0">
-                            <Store className="w-5 h-5" />
+                      <div>
+                        {/* Product Image & Badges */}
+                        <div className="relative w-full h-32 sm:h-40 mb-3 rounded-xl overflow-hidden bg-slate-950/80 border border-slate-800">
+                          <img
+                            src={productImage}
+                            alt={item.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60';
+                            }}
+                          />
+
+                          {/* Availability Badge */}
+                          <div className="absolute top-2 right-2">
+                            {isAvailable ? (
+                              <span className="text-[10px] font-bold text-emerald-300 bg-slate-950/85 backdrop-blur border border-emerald-500/30 px-2 py-0.5 rounded-md shadow">
+                                متوفر
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-rose-300 bg-slate-950/85 backdrop-blur border border-rose-500/30 px-2 py-0.5 rounded-md shadow">
+                                نفذ
+                              </span>
+                            )}
                           </div>
-                          <div className="min-w-0">
-                            <h5 className="font-black text-white text-sm leading-tight flex items-center gap-1.5 truncate">
-                              <span className="truncate">{st.name}</span>
-                              {st.isPro && <span className="text-xs shrink-0" title="تاجر معتمد">👑</span>}
-                            </h5>
-                            <div className="inline-flex items-center gap-1 mt-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                              <MapPin className="w-3 h-3 shrink-0" />
-                              <span className="truncate">{st.cityOrVillage}</span>
+
+                          {/* Category Badge */}
+                          {item.category && (
+                            <div className="absolute bottom-2 right-2">
+                              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-950/80 backdrop-blur text-slate-300">
+                                {item.category}
+                              </span>
                             </div>
+                          )}
+                        </div>
+
+                        {/* Product Title & Info */}
+                        <div className="mb-2">
+                          <h3 className="font-bold text-sm text-white line-clamp-2 leading-snug group-hover:text-emerald-300 transition-colors">
+                            {item.name}
+                          </h3>
+                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                            {item.unit && <span>الوحدة: {item.unit}</span>}
                           </div>
                         </div>
-                        {isSelected && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-slate-950 shrink-0">
-                            المحدد للتسوق ✓
-                          </span>
-                        )}
                       </div>
 
-                      {/* Store Ratings (Stars) & Details */}
-                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                        <div className="flex items-center gap-1">
-                          <div className="flex text-amber-400">
-                            {[1, 2, 3, 4, 5].map((starIdx) => (
-                              <Star
-                                key={starIdx}
-                                className={`w-3.5 h-3.5 ${
-                                  starIdx <= Math.round(ratingVal)
-                                    ? 'fill-amber-400 text-amber-400'
-                                    : 'text-slate-600'
-                                }`}
-                              />
-                            ))}
+                      {/* Pricing & Cart Action */}
+                      <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-2">
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-xs text-slate-400">سعر البيع</span>
+                          <div className="text-sm sm:text-base font-extrabold text-emerald-400">
+                            {item.salePrice.toFixed(2)}{' '}
+                            <span className="text-xs font-normal text-slate-400">{currency}</span>
                           </div>
-                          <span className="text-xs font-mono font-bold text-amber-300 ml-1">
-                            {ratingVal.toFixed(1)}
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            ({ratingCount > 0 ? `${ratingCount} تقييم` : 'جديد'})
-                          </span>
                         </div>
 
-                        <span className="text-[11px] font-bold text-emerald-400">
-                          {isSelected ? 'المتجر النشط ✓' : 'تصفح البضائع ←'}
-                        </span>
+                        {/* Interactive Cart Buttons & 1-Click WhatsApp */}
+                        {inCart ? (
+                          <div className="flex items-center justify-between bg-slate-800/90 rounded-xl p-1 border border-emerald-500/40">
+                            <button
+                              onClick={() => updateQuantity(item.id, -1)}
+                              className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center transition-colors cursor-pointer"
+                              title="إنقاص"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="font-bold text-xs text-emerald-400">
+                              {inCart.quantity} {item.unit || ''}
+                            </span>
+                            <button
+                              onClick={() => updateQuantity(item.id, 1)}
+                              className="w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-colors cursor-pointer"
+                              title="زيادة"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => addToCart(item)}
+                              disabled={!isAvailable}
+                              className={`flex-1 py-2 px-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                isAvailable
+                                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm hover:shadow-emerald-950/50'
+                                  : 'bg-slate-800/40 text-slate-500 cursor-not-allowed border border-slate-800'
+                              }`}
+                            >
+                              <ShoppingCart className="w-3.5 h-3.5" />
+                              <span>{isAvailable ? 'إضافة للسلة' : 'غير متوفر'}</span>
+                            </button>
+                            {isAvailable && (
+                              <button
+                                onClick={() => handleDirectWhatsAppProduct(item)}
+                                className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl transition-colors cursor-pointer shrink-0"
+                                title="طلب هذا الصنف عبر الواتساب فوراً"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Customer Verification Status Banner */}
-        {activeCustomer && (
-          <div className="animate-in fade-in duration-200">
-            {isCustomerApproved(activeCustomer) ? (
-              <div className="p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between gap-3 shadow-md shadow-emerald-950/20">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <div>
-                    <strong className="text-white block text-xs">حسابك موثق ومعتمد رسمياً ✓</strong>
-                    <span className="text-[11px] text-emerald-300/90">
-                      يمكنك الآن تصفح كافة الأصناف وإضافتها إلى السلة وإتمام طلبك بكل سهولة وأمان.
-                    </span>
-                  </div>
-                </div>
-                <span className="hidden sm:inline-block px-2.5 py-1 rounded-xl bg-emerald-600/30 text-emerald-300 font-mono text-[10px] font-black border border-emerald-500/30">
-                  KYC VERIFIED
-                </span>
-              </div>
-            ) : (
-              <div className="p-3 rounded-2xl bg-amber-950/50 border border-amber-500/50 text-amber-200 text-xs flex items-center justify-between gap-3 shadow-md shadow-amber-950/20">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 animate-pulse">
-                    <Clock className="w-4 h-4 text-amber-400" />
-                  </div>
-                  <div>
-                    <strong className="text-amber-300 block text-xs">حسابك قيد مراجعة وتدقيق الهوية (KYC) ⏳</strong>
-                    <span className="text-[11px] text-amber-200/90">
-                      تم استلام بياناتك بنجاح. بمجرد اعتماد حسابك وتوثيق الهوية من قِبل إدارة القرية/المطور، سيُتاح لك فوراً إضافة المنتجات إلى السلة والشراء.
-                    </span>
-                  </div>
-                </div>
-                <span className="px-2.5 py-1 rounded-xl bg-amber-600/30 text-amber-300 font-mono text-[10px] font-black border border-amber-500/40 shrink-0">
-                  بانتظار الاعتماد ⏳
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Search & Category Filter */}
-        <div className="flex flex-col gap-3">
-          {/* Search bar & stock toggle */}
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <div className="relative flex-1 w-full">
-              <Search className="w-4 h-4 absolute top-1/2 -translate-y-1/2 right-3 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ابحث عن اسم المنتج، الصنف، أو القسم..."
-                className="w-full bg-slate-900/90 border border-slate-800 rounded-xl py-2.5 pr-9 pl-4 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute top-1/2 -translate-y-1/2 left-3 text-slate-400 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer self-start sm:self-center px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-800">
-              <input
-                type="checkbox"
-                checked={onlyInStock}
-                onChange={(e) => setOnlyInStock(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-800"
-              />
-              <span>عرض المتوفر فقط</span>
-            </label>
-          </div>
-
-          {/* Categories Pills */}
-          {categories.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-800">
-              <button
-                onClick={() => setSelectedCategory('ALL')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                  selectedCategory === 'ALL'
-                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                    : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
-                }`}
-              >
-                الكل ({items.length})
-              </button>
-              {categories.map((cat) => {
-                const count = items.filter((i) => i.category === cat).length;
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                      selectedCategory === cat
-                        ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                        : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
-                    }`}
-                  >
-                    {cat} ({count})
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Products Grid */}
-        {filteredItems.length === 0 ? (
-          <div className="text-center py-16 px-4 bg-slate-900/50 rounded-2xl border border-slate-800/80 flex flex-col items-center justify-center">
-            <div className="w-16 h-16 rounded-2xl bg-slate-800/80 flex items-center justify-center text-slate-500 mb-3">
-              <Store className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-bold text-white mb-1">لا توجد منتجات مطابقة</h3>
-            <p className="text-xs text-slate-400 max-w-sm">
-              جرب تغيير عبارة البحث أو اختيار قسم آخر، أو أزل تصفية المتوفر فقط.
-            </p>
-          </div>
-        ) : (
-          <div
-            id="products-container"
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3 sm:gap-4"
-          >
-            {filteredItems.map((item) => {
-              const inCart = cart[item.id];
-              const isAvailable = item.quantity > 0 && item.available !== false;
-              const currency = settings.currency || 'ر.س';
-              const productImage = item.image || item.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60';
-
-              return (
-                <div
-                  key={item.id}
-                  className="bg-slate-900/95 hover:bg-slate-900 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-200 shadow-sm hover:shadow-md relative group"
-                >
-                  <div>
-                    {/* Product Image & Badges */}
-                    <div className="relative w-full h-32 sm:h-36 mb-3 rounded-xl overflow-hidden bg-slate-950/80 border border-slate-800">
-                      <img
-                        src={productImage}
-                        alt={item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60';
-                        }}
-                      />
-
-                      {/* Availability Badge */}
-                      <div className="absolute top-2 right-2">
-                        {isAvailable ? (
-                          <span className="text-[10px] font-bold text-emerald-300 bg-slate-950/85 backdrop-blur border border-emerald-500/30 px-2 py-0.5 rounded-md shadow">
-                            متوفر
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-rose-300 bg-slate-950/85 backdrop-blur border border-rose-500/30 px-2 py-0.5 rounded-md shadow">
-                            نفذ
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Category Badge */}
-                      {item.category && (
-                        <div className="absolute bottom-2 right-2">
-                          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-950/80 backdrop-blur text-slate-300">
-                            {item.category}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Product Title & Info */}
-                    <div className="mb-2">
-                      <h3 className="font-bold text-sm text-white line-clamp-2 leading-snug group-hover:text-emerald-300 transition-colors">
-                        {item.name}
-                      </h3>
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-                        {item.unit && <span>الوحدة: {item.unit}</span>}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Pricing & Cart Action */}
-                  <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-2">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs text-slate-400">سعر البيع</span>
-                      <div className="text-sm sm:text-base font-extrabold text-emerald-400">
-                        {item.salePrice.toFixed(2)}{' '}
-                        <span className="text-xs font-normal text-slate-400">{currency}</span>
-                      </div>
-                    </div>
-
-                    {/* Interactive Cart Buttons & 1-Click WhatsApp */}
-                    {inCart ? (
-                      <div className="flex items-center justify-between bg-slate-800/90 rounded-xl p-1 border border-emerald-500/40">
-                        <button
-                          onClick={() => updateQuantity(item.id, -1)}
-                          className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center transition-colors cursor-pointer"
-                          title="إنقاص"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="font-bold text-xs text-emerald-400">
-                          {inCart.quantity} {item.unit || ''}
-                        </span>
-                        <button
-                          onClick={() => updateQuantity(item.id, 1)}
-                          className="w-7 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-colors cursor-pointer"
-                          title="زيادة"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-1.5">
-                        <button
-                          onClick={() => addToCart(item)}
-                          disabled={!isAvailable}
-                          className={`flex-1 py-2 px-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                            isAvailable
-                              ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm hover:shadow-emerald-950/50'
-                              : 'bg-slate-800/40 text-slate-500 cursor-not-allowed border border-slate-800'
-                          }`}
-                        >
-                          <ShoppingCart className="w-3.5 h-3.5" />
-                          <span>{isAvailable ? 'إضافة للسلة' : 'غير متوفر'}</span>
-                        </button>
-                        {isAvailable && (
-                          <button
-                            onClick={() => handleDirectWhatsAppProduct(item)}
-                            className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl transition-colors cursor-pointer shrink-0"
-                            title="طلب هذا الصنف عبر الواتساب فوراً"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
           </div>
         )}
       </main>
@@ -1853,15 +2132,23 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-slate-400">
-                    <span>أجرة التوصيل داخل القرية:</span>
-                    <span className="font-mono font-bold text-emerald-400">
-                      10.00 {settings.currency || 'ر.س'}
-                    </span>
+                    <span>أجرة التوصيل:</span>
+                    {isSelectedStoreFreeDelivery ? (
+                      <span className="font-mono font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-lg border border-emerald-500/30 flex items-center gap-1">
+                        <Truck className="w-3 h-3 text-emerald-400" />
+                        <span>مجاني 🎉</span>
+                        <span className="line-through text-slate-500 text-[10px] mr-1">10.00 {settings.currency || 'ر.س'}</span>
+                      </span>
+                    ) : (
+                      <span className="font-mono font-bold text-emerald-400">
+                        {activeDeliveryFee.toFixed(2)} {settings.currency || 'ر.س'}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between pt-1.5 border-t border-slate-800 text-sm font-extrabold text-white">
                     <span>المجموع الكلي:</span>
                     <div className="text-xl font-black text-emerald-400 font-mono">
-                      {(totalCartPrice + 10).toFixed(2)} {settings.currency || 'ر.س'}
+                      {(totalCartPrice + activeDeliveryFee).toFixed(2)} {settings.currency || 'ر.س'}
                     </div>
                   </div>
                 </div>
@@ -1938,6 +2225,14 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
             {/* Tracking Stepper Body */}
             <div className="p-4 sm:p-6 overflow-y-auto space-y-5">
+              {/* Interactive Live Mini-Map */}
+              <OrderDeliveryMiniMap
+                order={trackedOrder}
+                settings={settings}
+                isRTL={isRTL}
+                defaultExpanded={true}
+              />
+
               {/* Customer Secure Handover PIN & Confirmation Card */}
               {trackedOrder.status !== 'DELIVERED' ? (
                 <div className="bg-gradient-to-br from-amber-950/40 via-slate-950 to-emerald-950/30 border-2 border-amber-500/50 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-xl">
@@ -2395,7 +2690,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                   housePhoto: custModalHousePhoto.trim() || '',
                   idVerificationPhoto: custModalIdPhoto,
                   password: custModalPassword.trim() || 'user123',
-                  village: custModalVillage.trim() || selectedVillage || 'قرية الانهوم',
+                  village: custModalVillage.trim() || (selectedVillage !== 'ALL' ? selectedVillage : 'الموقع المحدد'),
                 });
 
                 if (!res.success) {
@@ -2562,6 +2857,98 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
         isDarkMode={true}
       />
 
+      {/* Customer Account Hub Modal (حساب العميل المتكامل) */}
+      {isCustomerHubOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 text-right relative">
+            <button
+              onClick={() => setIsCustomerHubOpen(false)}
+              className="absolute top-4 left-4 p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-black text-lg">
+                <UserCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">حساب العميل</h3>
+                <p className="text-xs text-emerald-400 font-bold">مرحباً بك، {activeCustomer?.name || 'العميل الكريم'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-400">رقم الجوال:</span>
+                <span className="text-white font-mono font-bold" dir="ltr">{activeCustomer?.phone || 'غير مسجل'}</span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-400">القرية التابع لها:</span>
+                <span className="text-white font-bold">{activeCustomer?.village || 'غير محدد'}</span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-400">حالة الاعتماد (KYC):</span>
+                <span className={activeCustomer?.isApproved ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
+                  {activeCustomer?.isApproved ? 'معتمد رسمياً ✓' : 'قيد المراجعة ⏳'}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomerHubOpen(false);
+                  setIsTrackingModalOpen(true);
+                }}
+                className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Clock className="w-4 h-4 text-amber-400" />
+                <span>تتبع الطلبات</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomerHubOpen(false);
+                  setIsWalletModalOpen(true);
+                }}
+                className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Wallet className="w-4 h-4 text-emerald-400" />
+                <span>محفظة القرية</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomerHubOpen(false);
+                  handleShareStoreLink();
+                }}
+                className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Share2 className="w-4 h-4 text-teal-400" />
+                <span>مشاركة التطبيق</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  clearActiveCustomer();
+                  setActiveCustomer(null);
+                  setIsCustomerHubOpen(false);
+                }}
+                className="p-3 rounded-2xl bg-rose-950/40 hover:bg-rose-900/55 border border-rose-800 text-rose-300 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>تسجيل الخروج</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <footer className="mt-auto border-t border-slate-800/80 bg-slate-900/40 py-5 px-4 text-center text-xs text-slate-500">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -2581,6 +2968,567 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
           </div>
         </div>
       </footer>
+
+      {/* ================================================================= */}
+      {/* FIXED BOTTOM NAVIGATION BAR: شريط التنقل السفلي الثابت والأنيق */}
+      {/* ================================================================= */}
+      <nav
+        aria-label="شريط التنقل السفلي"
+        className="fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/90 shadow-[0_-4px_20px_rgba(0,0,0,0.5)] py-2 px-3 sm:px-6"
+      >
+        <div className="max-w-md mx-auto flex items-center justify-around">
+          {/* Home */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveBottomNav('home');
+              setSelectedStoreId('default');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex flex-col items-center gap-1 transition-all cursor-pointer ${
+              activeBottomNav === 'home' && selectedStoreId === 'default'
+                ? 'text-emerald-400 font-black scale-105'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="relative">
+              <Store className="w-5 h-5" />
+              {activeBottomNav === 'home' && (
+                <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              )}
+            </div>
+            <span className="text-[10px]">الرئيسية</span>
+          </button>
+
+          {/* Orders / Live Tracker */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveBottomNav('orders');
+              if (trackedOrder && trackedOrder.status !== 'CANCELLED') {
+                setIsTrackingModalOpen(true);
+              } else {
+                setIsLiveTrackerOpen(true);
+              }
+            }}
+            className={`flex flex-col items-center gap-1 transition-all cursor-pointer relative ${
+              activeBottomNav === 'orders' ? 'text-amber-400 font-black scale-105' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="relative">
+              <Truck className="w-5 h-5" />
+              {trackedOrder && trackedOrder.status !== 'CANCELLED' && trackedOrder.status !== 'DELIVERED' && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              )}
+            </div>
+            <span className="text-[10px]">الطلبات</span>
+          </button>
+
+          {/* Village Wallet */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveBottomNav('wallet');
+              setIsWalletModalOpen(true);
+            }}
+            className={`flex flex-col items-center gap-1 transition-all cursor-pointer ${
+              activeBottomNav === 'wallet' ? 'text-emerald-400 font-black scale-105' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="relative">
+              <Wallet className="w-5 h-5" />
+            </div>
+            <span className="text-[10px]">المحفظة</span>
+          </button>
+
+          {/* Shopping Cart */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveBottomNav('cart');
+              setIsCartOpen(true);
+            }}
+            className={`flex flex-col items-center gap-1 transition-all cursor-pointer relative ${
+              activeBottomNav === 'cart' ? 'text-teal-400 font-black scale-105' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="relative">
+              <ShoppingCart className="w-5 h-5" />
+              {totalCartCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black leading-none animate-bounce">
+                  {totalCartCount}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px]">السلة</span>
+          </button>
+
+          {/* Customer Profile / Account */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveBottomNav('profile');
+              if (activeCustomer) {
+                setIsCustomerHubOpen(true);
+              } else {
+                setShowCustomerAuthModal(true);
+              }
+            }}
+            className={`flex flex-col items-center gap-1 transition-all cursor-pointer ${
+              activeBottomNav === 'profile' ? 'text-emerald-400 font-black scale-105' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className="relative">
+              {activeCustomer ? (
+                <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-black text-[10px]">
+                  {activeCustomer.name.slice(0, 1)}
+                </div>
+              ) : (
+                <User className="w-5 h-5" />
+              )}
+            </div>
+            <span className="text-[10px]">{activeCustomer ? 'حسابي' : 'دخول'}</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* ================================================================= */}
+      {/* SIDE MENU DRAWER MODAL: قائمة جانبية أنيقة لسهولة التنقل */}
+      {/* ================================================================= */}
+      {isSideMenuOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex justify-start animate-in fade-in duration-200">
+          <div className="bg-slate-900 border-l border-slate-800 w-full max-w-xs h-full p-5 flex flex-col justify-between shadow-2xl overflow-y-auto">
+            <div className="space-y-5">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <CoffeeTreeLogo size={32} />
+                  <div>
+                    <h3 className="font-black text-white text-base leading-none">قريتي</h3>
+                    <p className="text-[10px] text-amber-300 font-medium mt-0.5">منصة القرى والمتاجر الرقمية</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSideMenuOpen(false)}
+                  className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                  title="إغلاق"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Customer Profile Status */}
+              <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
+                {activeCustomer ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-black text-white">{activeCustomer.name}</div>
+                      <div className="text-[10px] text-emerald-400 font-mono" dir="ltr">{activeCustomer.phone}</div>
+                    </div>
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      معتمد ✓
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSideMenuOpen(false);
+                      setShowCustomerAuthModal(true);
+                    }}
+                    className="w-full py-2 px-3 rounded-xl bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-bold transition-all text-center border border-emerald-500/30 cursor-pointer"
+                  >
+                    تسجيل الدخول / إنشاء حساب عميل
+                  </button>
+                )}
+              </div>
+
+              {/* Navigation Items */}
+              <div className="space-y-1.5 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSideMenuOpen(false);
+                    setSelectedStoreId('default');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Store className="w-4 h-4 text-emerald-400" />
+                  <span>الرئيسية (كافة المتاجر)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSideMenuOpen(false);
+                    setIsLiveTrackerOpen(true);
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Truck className="w-4 h-4 text-amber-400" />
+                  <span>تتبع طلباتي الحية</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSideMenuOpen(false);
+                    setIsWalletModalOpen(true);
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Wallet className="w-4 h-4 text-emerald-400" />
+                  <span>محفظة القرية الرقمية</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSideMenuOpen(false);
+                    setIsAIModalOpen(true);
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Bot className="w-4 h-4 text-indigo-400" />
+                  <span>المساعد الذكي للقرية</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSideMenuOpen(false);
+                    handleShareStoreLink();
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Share2 className="w-4 h-4 text-teal-400" />
+                  <span>مشاركة رابط المنصة</span>
+                </button>
+              </div>
+
+              {/* Portal Links */}
+              <div className="pt-3 border-t border-slate-800 space-y-2">
+                <div className="text-[11px] font-bold text-slate-400 px-1">بوابات الشركاء والعمل:</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSideMenuOpen(false);
+                    onOpenMerchantPortal();
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 flex items-center gap-2.5 text-xs font-bold transition-all border border-slate-800 cursor-pointer"
+                >
+                  <Store className="w-4 h-4 text-emerald-400" />
+                  <span>بوابة التجار وإدارة المتجر 🔑</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSideMenuOpen(false);
+                    onOpenLanding();
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 text-slate-300 hover:text-amber-400 flex items-center gap-2.5 text-xs font-bold transition-all border border-slate-800 cursor-pointer"
+                >
+                  <ArrowRight className="w-4 h-4 text-amber-400" />
+                  <span>لوحة البوابات الرئيسية</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="pt-4 border-t border-slate-800 text-[10px] text-slate-500 text-center space-y-1">
+              <p>منصة قريتي الرقمية الموحدة © {new Date().getFullYear()}</p>
+              <p className="text-emerald-500/80">هوية شجرة البن الخولاني الأصيلة</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* NOTIFICATIONS MODAL (الإشعارات والتنبيهات المباشرة) */}
+      {/* ================================================================= */}
+      {isNotificationsOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-right relative">
+            <button
+              onClick={() => setIsNotificationsOpen(false)}
+              className="absolute top-4 left-4 p-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <Bell className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">مركز الإشعارات</h3>
+                <p className="text-xs text-slate-400">آخر المستجدات وعروض التوصيل لقرى المنصة</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+              {trackedOrder && trackedOrder.status !== 'CANCELLED' && (
+                trackedOrder.status === 'DELIVERED' ? (
+                  <div className="p-3.5 rounded-2xl bg-emerald-950/50 border border-emerald-500/50 flex items-start gap-3 shadow-md">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="text-xs font-black text-emerald-300">
+                        تم تسليم طلبك رقم #{trackedOrder.orderNumber} بنجاح ✅
+                      </div>
+                      <div className="text-[11px] text-slate-300 mt-0.5">
+                        تم توثيق استلام الطلب رسمياً من متجر {trackedOrder.storeName}. نشكرك لثقتك بمنصة قريتي!
+                      </div>
+                      <div className="flex items-center gap-3 mt-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsNotificationsOpen(false);
+                            setIsTrackingModalOpen(true);
+                          }}
+                          className="text-xs font-bold text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <span>عرض تفاصيل الفاتورة وتقييم المتجر والسائق ←</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            try {
+                              localStorage.removeItem('qaryati_customer_last_order_id');
+                            } catch {}
+                            setTrackedOrderId(null);
+                            setTrackedOrder(null);
+                            setIsNotificationsOpen(false);
+                          }}
+                          className="text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-750 cursor-pointer inline-flex items-center gap-1 bg-slate-800 px-2.5 py-1 rounded-lg transition-colors border border-slate-700"
+                        >
+                          <span>مسح وإخفاء الإشعار ✕</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/40 flex items-start gap-3 shadow-md">
+                    <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 animate-spin" />
+                    <div className="flex-1">
+                      <div className="text-xs font-black text-amber-300">
+                        {trackedOrder.status === 'NEW' && `طلبك رقم #${trackedOrder.orderNumber} قيد مراجعة وتأكيد المتجر ⏳`}
+                        {trackedOrder.status === 'ACCEPTED' && `طلبك رقم #${trackedOrder.orderNumber} تم قبوله وجارٍ تجهيزه 👨‍🍳`}
+                        {trackedOrder.status === 'READY_FOR_PICKUP' && `طلبك رقم #${trackedOrder.orderNumber} جاهز بانتظار استلام السائق 📦`}
+                        {(trackedOrder.status === 'OUT_FOR_DELIVERY' || trackedOrder.status === 'ON_THE_WAY') && `طلبك رقم #${trackedOrder.orderNumber} في الطريق إليك مع السائق 🛵`}
+                      </div>
+                      <div className="text-[11px] text-slate-300 mt-0.5">
+                        {(trackedOrder.status === 'OUT_FOR_DELIVERY' || trackedOrder.status === 'ON_THE_WAY')
+                          ? `السائق ${trackedOrder.driverName || 'المندوب'} في طريقه إليك الآن.`
+                          : 'يمكنك متابعة المندوب والوصول لحظياً عبر شاشة التتبع المباشر.'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsNotificationsOpen(false);
+                          setIsTrackingModalOpen(true);
+                        }}
+                        className="mt-2 text-xs font-bold text-amber-400 hover:underline cursor-pointer inline-flex items-center gap-1"
+                      >
+                        <span>فتح شاشة التتبع المباشر ←</span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              )}
+
+              <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-xs font-black text-white">عروض التوصيل والخصومات الحصرية</div>
+                  <div className="text-[11px] text-slate-300 mt-0.5">اطلب من كافة بقالات ومتاجر قريتك واستمتع بتوصيل فوري ودقيق لباب منزلك.</div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-start gap-3">
+                <Wallet className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-xs font-black text-white">رصيدك في محفظة القرية: {formatGlobalCurrency(walletBalance)}</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">يمكنك الشحن والدفع السريع بضغطة زر عند إتمام أي طلب.</div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen(false)}
+              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 font-bold text-xs transition-colors cursor-pointer"
+            >
+              إغلاق
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* LOCATION & GPS SELECTOR MODAL (نافذة اختيار وتحديد الموقع الجغرافي) */}
+      {/* ================================================================= */}
+      {isLocationSelectorModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-5 text-right relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setIsLocationSelectorModalOpen(false)}
+              className="absolute top-4 left-4 p-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Modal Header */}
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                <MapPin className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-white">تحديد الموقع والمتاجر القريبة</h3>
+                <p className="text-xs text-slate-400">حدد موقعك لحصر البقالات الأقرب لك، أو تصفح كافة المتاجر</p>
+              </div>
+            </div>
+
+            {/* Quick Action 1: GPS Auto Detect */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/60 to-teal-950/60 border border-emerald-500/40 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <LocateFixed className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-black text-white">تحديد الموقع التلقائي بالـ GPS</span>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  دقة فورية
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                استخدم موقع جهازك الحالي للتعرف على قريتك أو منطقتك تلقائياً وعرض المتاجر المحيطة بك فقط.
+              </p>
+              <button
+                type="button"
+                onClick={handleDetectGPSLocation}
+                disabled={isLocatingGPS}
+                className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-md shadow-emerald-950/50 active:scale-98 disabled:opacity-50"
+              >
+                {isLocatingGPS ? (
+                  <>
+                    <Clock className="w-4 h-4 animate-spin" />
+                    <span>جارٍ الاتصال بالأقمار الصناعية وقراءة الموقع...</span>
+                  </>
+                ) : (
+                  <>
+                    <LocateFixed className="w-4 h-4" />
+                    <span>📍 استخدام موقعي الحالي عبر الـ GPS</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Quick Action 2: Show ALL stores without filter */}
+            <button
+              type="button"
+              onClick={handleShowAllStores}
+              className={`w-full p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                selectedVillage === 'ALL'
+                  ? 'bg-emerald-500/20 border-emerald-400 text-white font-black'
+                  : 'bg-slate-950/60 hover:bg-slate-800/80 border-slate-800 text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center font-bold">
+                  🌐
+                </div>
+                <div className="text-right">
+                  <div className="text-xs font-black">عرض جميع المتاجر (كافة القرى والمناطق)</div>
+                  <div className="text-[10px] text-slate-400">إلغاء التقييد الجغرافي وتصفح كل الشركاء المسجلين</div>
+                </div>
+              </div>
+              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                {allStores.length} متجر
+              </span>
+            </button>
+
+            {/* List of Available Locations */}
+            {villageList.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between text-xs text-slate-400 font-bold px-1">
+                  <span>المواقع والمناطق المسجلة في التطبيق:</span>
+                  <span className="text-[10px]">{villageList.length} منطقة متاحة</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {villageList.map((vil) => {
+                    const isSelected = selectedVillage === vil;
+                    const storeCount = allStores.filter(
+                      (s) => s.cityOrVillage === vil || s.cityOrVillage?.includes(vil)
+                    ).length;
+                    return (
+                      <button
+                        key={vil}
+                        type="button"
+                        onClick={() => handleSelectVillage(vil)}
+                        className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-emerald-500/20 border-emerald-400 text-white font-black shadow-xs'
+                            : 'bg-slate-950/50 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <MapPin className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-emerald-400' : 'text-slate-500'}`} />
+                          <span className="text-xs truncate">{vil}</span>
+                        </div>
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400 shrink-0">
+                          {storeCount}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Custom Location Name Input */}
+            <div className="pt-2 border-t border-slate-800 space-y-2">
+              <label className="block text-xs font-bold text-slate-400">
+                أو اكتب اسم موقعك / حيك يدوياً:
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={customVillageInput}
+                  onChange={(e) => setCustomVillageInput(e.target.value)}
+                  placeholder="مثال: الحي الشرقي، وسط البلد، شمال الوادي..."
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (customVillageInput.trim()) {
+                      handleSelectVillage(customVillageInput.trim());
+                      setCustomVillageInput('');
+                    }
+                  }}
+                  disabled={!customVillageInput.trim()}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition-all cursor-pointer shadow-xs shrink-0"
+                >
+                  تطبيق الموقع
+                </button>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setIsLocationSelectorModalOpen(false)}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 font-bold text-xs transition-colors cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

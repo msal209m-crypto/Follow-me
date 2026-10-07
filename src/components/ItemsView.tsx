@@ -26,6 +26,10 @@ import {
   MapPin,
   FileSpreadsheet,
   Lock,
+  Tag,
+  FolderKanban,
+  X,
+  Check,
 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -41,6 +45,40 @@ import {
   ItemMovementSummary,
   formatRelativeDateTime,
 } from '../utils/itemActivity';
+
+export const getCategoryIcon = (categoryName: string): string => {
+  if (!categoryName) return '📦';
+  const lower = categoryName.toLowerCase();
+  if (lower.includes('غذاء') || lower.includes('غذائية') || lower.includes('تموين') || lower.includes('أغذية')) return '🥫';
+  if (lower.includes('مشروب') || lower.includes('عصير') || lower.includes('ماء') || lower.includes('مياه') || lower.includes('شاي') || lower.includes('قهوة') || lower.includes('مشروبات')) return '🧃';
+  if (lower.includes('لبن') || lower.includes('حليب') || lower.includes('جبن') || lower.includes('ألبان') || lower.includes('زبادي')) return '🧀';
+  if (lower.includes('خضار') || lower.includes('فاكهة') || lower.includes('فواكه') || lower.includes('طماطم')) return '🍎';
+  if (lower.includes('حلو') || lower.includes('شوكولا') || lower.includes('تسالي') || lower.includes('شيبس') || lower.includes('بسكويت') || lower.includes('حلويات')) return '🍫';
+  if (lower.includes('منظف') || lower.includes('صابون') || lower.includes('شامبو') || lower.includes('عناية') || lower.includes('غسيل') || lower.includes('منظفات')) return '🧼';
+  if (lower.includes('مجمد') || lower.includes('مثلج') || lower.includes('آيس') || lower.includes('برغر') || lower.includes('مجمدات')) return '❄️';
+  if (lower.includes('خبز') || lower.includes('مخبز') || lower.includes('كيك') || lower.includes('معجنات') || lower.includes('مخبوزات')) return '🥖';
+  if (lower.includes('لحم') || lower.includes('دجاج') || lower.includes('سمك') || lower.includes('لحوم') || lower.includes('دواجن')) return '🥩';
+  if (lower.includes('بهار') || lower.includes('توابل') || lower.includes('عطارة') || lower.includes('ملح') || lower.includes('بهارات')) return '🧂';
+  if (lower.includes('منزل') || lower.includes('أدوات') || lower.includes('بلاستيك') || lower.includes('سفرة')) return '🍳';
+  if (lower.includes('عطور') || lower.includes('تجميل') || lower.includes('كريم')) return '🧴';
+  if (lower.includes('إلكترون') || lower.includes('شاحن') || lower.includes('جوال') || lower.includes('بطارية')) return '🔌';
+  return '🏷️';
+};
+
+export const POPULAR_CATEGORY_SUGGESTIONS = [
+  'مواد غذائية',
+  'مشروبات وعصائر',
+  'ألبان وأجبان',
+  'خضار وفواكه',
+  'حلويات وتسالي',
+  'منظفات وعناية',
+  'مجمدات ومثلجات',
+  'مخبوزات وطازج',
+  'لحوم ودواجن',
+  'بهارات وتوابل',
+  'أدوات منزلية',
+  'أخرى ومتنوع',
+];
 
 type SortableField = keyof Item | 'lastSale' | 'lastPurchase';
 
@@ -84,6 +122,9 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
   const [selectedItemForTracking, setSelectedItemForTracking] = useState<Item | null>(null);
   const [itemToDelete, setItemToDelete] = useState<Item | null>(null);
   const [showBulkPriceModal, setShowBulkPriceModal] = useState<boolean>(false);
+  const [itemForCategoryModal, setItemForCategoryModal] = useState<Item | null>(null);
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState<boolean>(false);
+  const [newCategoryInput, setNewCategoryInput] = useState<string>('');
 
   const handleBulkUpdatePrices = async (updates: { id: string; salePrice: number; costPrice?: number }[]) => {
     for (const u of updates) {
@@ -230,14 +271,40 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
       ? ((expectedProfit / totalCostVal) * 100).toFixed(1)
       : '0.0';
 
-  // Unique categories
-  const categories = useMemo(() => {
-    const set = new Set<string>();
+  // Categories extraction & statistics
+  const categoryStats = useMemo(() => {
+    const counts: Record<string, { count: number; totalQty: number; totalValue: number }> = {};
+    let uncategorizedCount = 0;
+    let totalItems = 0;
+
     realTimeItems.forEach((item) => {
-      if (item.category) set.add(item.category);
+      totalItems++;
+      const cat = (item.category || '').trim();
+      if (!cat) {
+        uncategorizedCount++;
+      } else {
+        if (!counts[cat]) {
+          counts[cat] = { count: 0, totalQty: 0, totalValue: 0 };
+        }
+        counts[cat].count += 1;
+        const q = Number(item.quantity) || 0;
+        const s = Number(item.salePrice) || 0;
+        counts[cat].totalQty += q;
+        counts[cat].totalValue += q * s;
+      }
     });
-    return Array.from(set);
+
+    const categoryList = Object.keys(counts).sort((a, b) => counts[b].count - counts[a].count);
+
+    return {
+      categoryList,
+      counts,
+      uncategorizedCount,
+      totalItems,
+    };
   }, [realTimeItems]);
+
+  const categories = categoryStats.categoryList;
 
   // Filtered and sorted items
   const filteredItems = useMemo(() => {
@@ -251,8 +318,13 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
           String(item?.sku ?? '').toLowerCase().includes(query) ||
           (item.category && String(item.category).toLowerCase().includes(query));
 
+        const itemCat = (item.category || '').trim();
         const matchesCategory =
-          selectedCategory === 'ALL' || item.category === selectedCategory;
+          selectedCategory === 'ALL'
+            ? true
+            : selectedCategory === '__UNCATEGORIZED__'
+            ? !itemCat
+            : itemCat === selectedCategory;
 
         const matchesStock =
           !filterLowStockOnly || item.quantity <= (item.minStockAlert || 5);
@@ -603,6 +675,212 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
         </div>
       </div>
 
+      {/* ================================================================= */}
+      {/* CATEGORIES SYSTEM & PILLS BAR (نظام تصنيفات وأقسام المنتجات للمتجر) */}
+      {/* ================================================================= */}
+      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm space-y-3">
+        {/* Header of Categories Section */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+              <Layers className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-black text-white">
+                  أقسام وتصنيفات المنتجات (Categories)
+                </h3>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                  {categoryStats.categoryList.length} قسم
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                {selectedCategory === 'ALL'
+                  ? 'اختر أي قسم لتصفية الأصناف المعروضة أو اضغط "+ إضافة قسم" لإنشاء قسم جديد'
+                  : `يتم حالياً تصفية المعروض حسب: ${selectedCategory === '__UNCATEGORIZED__' ? 'أصناف بدون قسم' : selectedCategory}`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {selectedCategory !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('ALL')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+              >
+                <X className="w-3.5 h-3.5 text-rose-400" />
+                <span>إلغاء التصفية (عرض الكل)</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowAddCategoryModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>إضافة قسم جديد</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable Categories Chips */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+          {/* ALL CATEGORIES CHIP */}
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('ALL')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer border select-none ${
+              selectedCategory === 'ALL'
+                ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-950/40'
+                : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700 hover:bg-slate-850'
+            }`}
+          >
+            <span>🌟</span>
+            <span>جميع الأقسام</span>
+            <span
+              className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                selectedCategory === 'ALL'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              {categoryStats.totalItems}
+            </span>
+          </button>
+
+          {/* DYNAMIC CATEGORIES */}
+          {categoryStats.categoryList.map((cat) => {
+            const isSelected = selectedCategory === cat;
+            const catStat = categoryStats.counts[cat];
+            const icon = getCategoryIcon(cat);
+
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(isSelected ? 'ALL' : cat)}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer border select-none ${
+                  isSelected
+                    ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-950/40'
+                    : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-emerald-500/40 hover:bg-slate-850'
+                }`}
+              >
+                <span>{icon}</span>
+                <span>{cat}</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                    isSelected
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {catStat?.count ?? 0}
+                </span>
+              </button>
+            );
+          })}
+
+          {/* UNCATEGORIZED CHIP IF ANY */}
+          {categoryStats.uncategorizedCount > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                setSelectedCategory(
+                  selectedCategory === '__UNCATEGORIZED__' ? 'ALL' : '__UNCATEGORIZED__'
+                )
+              }
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer border select-none ${
+                selectedCategory === '__UNCATEGORIZED__'
+                  ? 'bg-amber-600 text-white border-amber-400 shadow-md shadow-amber-950/40'
+                  : 'bg-amber-950/30 text-amber-300 border-amber-800/60 hover:bg-amber-950/50'
+              }`}
+              title="أصناف لم يتم تحديد تصنيف لها بعد - اضغط لعرضها وتصنيفها"
+            >
+              <span>⚠️</span>
+              <span>بدون تصنيف</span>
+              <span
+                className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                  selectedCategory === '__UNCATEGORIZED__'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-amber-900/60 text-amber-200'
+                }`}
+              >
+                {categoryStats.uncategorizedCount}
+              </span>
+            </button>
+          )}
+
+          {/* ADD CATEGORY QUICK CHIP */}
+          <button
+            type="button"
+            onClick={() => setShowAddCategoryModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer border border-dashed border-slate-700 hover:border-emerald-500/60 text-slate-400 hover:text-emerald-300 bg-slate-950/50 hover:bg-slate-900"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>قسم جديد...</span>
+          </button>
+        </div>
+
+        {/* ACTIVE CATEGORY DETAILS SUMMARY BAR (when filtered) */}
+        {selectedCategory !== 'ALL' && (
+          <div className="bg-slate-950/80 border border-emerald-500/30 rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap text-xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">
+                {selectedCategory === '__UNCATEGORIZED__' ? '⚠️' : getCategoryIcon(selectedCategory)}
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-white">
+                    {selectedCategory === '__UNCATEGORIZED__' ? 'أصناف بحاجة لتصنيف' : selectedCategory}
+                  </span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold">
+                    {filteredItems.length} صنف معروض
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 flex items-center gap-3 mt-0.5 flex-wrap">
+                  <span>
+                    إجمالي كمية المخزون بالقسم:{' '}
+                    <strong className="text-emerald-300 font-mono">
+                      {categoryStats.counts[selectedCategory]?.totalQty ??
+                        filteredItems.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0)}
+                    </strong>{' '}
+                    وحدة
+                  </span>
+                  <span>•</span>
+                  <span>
+                    القيمة البيعية التقديرية:{' '}
+                    <strong className="text-emerald-300 font-mono">
+                      {(
+                        categoryStats.counts[selectedCategory]?.totalValue ??
+                        filteredItems.reduce(
+                          (acc, it) =>
+                            acc + (Number(it.quantity) || 0) * (Number(it.salePrice) || 0),
+                          0
+                        )
+                      ).toLocaleString()}{' '}
+                      {settings.currency}
+                    </strong>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenAddItem()}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>إضافة صنف لهذا القسم</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Filter & Search Bar */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-sm">
         {/* Search input with Camera button */}
@@ -666,9 +944,12 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
             className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-xs sm:text-sm text-slate-100 font-medium focus:outline-none focus:border-emerald-500 cursor-pointer"
           >
             <option value="ALL">{t.allCategories} ({realTimeItems.length})</option>
+            {categoryStats.uncategorizedCount > 0 && (
+              <option value="__UNCATEGORIZED__">⚠️ بدون تصنيف ({categoryStats.uncategorizedCount})</option>
+            )}
             {categories.map((cat) => (
               <option key={cat} value={cat}>
-                {cat}
+                {getCategoryIcon(cat)} {cat} ({categoryStats.counts[cat]?.count ?? 0})
               </option>
             ))}
           </select>
@@ -855,11 +1136,42 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
                             <div className="font-bold text-white text-sm group-hover:text-emerald-300 transition-colors">
                               {item.name}
                             </div>
-                            {item.category && (
-                              <div className="text-xs text-slate-300 mt-0.5 font-medium">
-                                {item.category} • {t.unitLabel}: {item.unit || (language === 'ar' ? 'حبة' : 'Piece')}
-                              </div>
-                            )}
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {item.category ? (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedCategory(item.category)}
+                                    className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition-colors cursor-pointer"
+                                    title="اضغط لتصفية وعرض أصناف هذا القسم فقط"
+                                  >
+                                    <span>{getCategoryIcon(item.category)}</span>
+                                    <span>{item.category}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setItemForCategoryModal(item)}
+                                    className="p-1 text-slate-400 hover:text-emerald-300 hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                                    title="تعديل قسم هذا الصنف"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setItemForCategoryModal(item)}
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-dashed border-amber-500/50 transition-colors cursor-pointer"
+                                  title="الصنف بدون قسم - اضغط لتعيين قسم له"
+                                >
+                                  <Tag className="w-2.5 h-2.5" />
+                                  <span>+ تعيين قسم للصنف</span>
+                                </button>
+                              )}
+                              <span className="text-[11px] text-slate-400 font-medium">
+                                • {t.unitLabel}: {item.unit || (language === 'ar' ? 'حبة' : 'Piece')}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -1165,6 +1477,248 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
         language={language}
         isRTL={isRTL}
       />
+
+      {/* Category Assign Modal for an individual item */}
+      {itemForCategoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                  <Tag className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-white text-sm">
+                    تعيين / تعديل قسم الصنف
+                  </h3>
+                  <p className="text-xs text-slate-400 truncate max-w-[240px]">
+                    {itemForCategoryModal.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setItemForCategoryModal(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Selection from existing categories */}
+            {categoryStats.categoryList.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300">
+                  أقسام متجرك الحالية:
+                </label>
+                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-950/60 rounded-xl border border-slate-800/80">
+                  {categoryStats.categoryList.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => {
+                        updateItem(itemForCategoryModal.id, { category: cat });
+                        showNotification?.(`تم نقل الصنف إلى قسم (${cat}) بنجاح!`, 'success');
+                        setItemForCategoryModal(null);
+                      }}
+                      className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+                        itemForCategoryModal.category === cat
+                          ? 'bg-emerald-600 text-white border-emerald-400 font-bold'
+                          : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-emerald-500/50 hover:bg-slate-800'
+                      }`}
+                    >
+                      <span>{getCategoryIcon(cat)}</span>
+                      <span>{cat}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Popular preset suggestions */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300">
+                أقسام وتصنيفات مقترحة:
+              </label>
+              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1 bg-slate-950/60 rounded-xl border border-slate-800/80">
+                {POPULAR_CATEGORY_SUGGESTIONS.filter(
+                  (c) => !categoryStats.categoryList.includes(c)
+                ).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => {
+                      updateItem(itemForCategoryModal.id, { category: c });
+                      showNotification?.(`تم تعيين قسم (${c}) للصنف بنجاح!`, 'success');
+                      setItemForCategoryModal(null);
+                    }}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 transition-all cursor-pointer"
+                  >
+                    <span>{getCategoryIcon(c)}</span>
+                    <span>{c}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Input */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const input = form.elements.namedItem('customCat') as HTMLInputElement;
+                const val = input.value.trim();
+                if (val) {
+                  updateItem(itemForCategoryModal.id, { category: val });
+                  showNotification?.(`تم حفظ وتعيين القسم (${val}) بنجاح!`, 'success');
+                  setItemForCategoryModal(null);
+                }
+              }}
+              className="space-y-2 pt-2 border-t border-slate-800"
+            >
+              <label className="text-xs font-bold text-slate-300 block">
+                أو اكتب اسم قسم مخصص جديد:
+              </label>
+              <div className="flex gap-2">
+                <input
+                  name="customCat"
+                  type="text"
+                  placeholder="مثال: مستلزمات الرحلات..."
+                  defaultValue={itemForCategoryModal.category || ''}
+                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-md"
+                >
+                  حفظ
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Category Modal */}
+      {showAddCategoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-md p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                  <FolderKanban className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-white text-sm">
+                    إضافة تصنيف / قسم جديد
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    أضف قسماً لترتيب وتصفية منتجات متجرك
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddCategoryModal(false);
+                  setNewCategoryInput('');
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Popular presets */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300">
+                اختر من الأقسام الجاهزة الشائعة:
+              </label>
+              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-slate-950/60 rounded-xl border border-slate-800/80">
+                {POPULAR_CATEGORY_SUGGESTIONS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategory(preset);
+                      showNotification?.(`تم تفعيل تصفية قسم (${preset})! يمكنك الآن إضافة منتجات إليه.`, 'info');
+                      setShowAddCategoryModal(false);
+                      setNewCategoryInput('');
+                    }}
+                    className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+                      categoryStats.categoryList.includes(preset)
+                        ? 'bg-slate-850 text-slate-400 border-slate-800'
+                        : 'bg-slate-900 hover:bg-emerald-950/40 text-slate-300 hover:text-emerald-300 border-slate-700 hover:border-emerald-500/50'
+                    }`}
+                  >
+                    <span>{getCategoryIcon(preset)}</span>
+                    <span>{preset}</span>
+                    {categoryStats.categoryList.includes(preset) && (
+                      <span className="text-[10px] text-emerald-400">✓ موجود</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Input */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const val = newCategoryInput.trim();
+                if (val) {
+                  setSelectedCategory(val);
+                  showNotification?.(`تم تفعيل تصفية قسم (${val})! اضغط "إضافة صنف" لإدراج منتجات فيه.`, 'info');
+                  setShowAddCategoryModal(false);
+                  setNewCategoryInput('');
+                }
+              }}
+              className="space-y-3 pt-2 border-t border-slate-800"
+            >
+              <div>
+                <label className="text-xs font-bold text-slate-300 block mb-1">
+                  أو اكتب اسم قسم مخصص:
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    placeholder="مثال: عروض وتخفيضات الأسبوع..."
+                    value={newCategoryInput}
+                    onChange={(e) => setNewCategoryInput(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  />
+                  {newCategoryInput && (
+                    <span className="absolute left-3 top-2 text-sm">
+                      {getCategoryIcon(newCategoryInput)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddCategoryModal(false);
+                    setNewCategoryInput('');
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>تأكيد وتفعيل القسم</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

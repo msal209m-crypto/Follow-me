@@ -38,6 +38,7 @@ import {
   MapPin,
   Compass,
   Code2,
+  Search,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -678,8 +679,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </div>
 
-          {/* Adhan & Prayer Times Widget */}
-          <AdhanTopBarWidget isDarkMode={true} isRTL={language === 'ar'} compact={true} />
+
 
           {/* 3. Stock Reorder Notifications Bell */}
           <div className="relative" ref={alertsMenuRef}>
@@ -1021,71 +1021,84 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         title={language === 'ar' ? 'الرئيسية - لوحة التحكم' : 'Main Dashboard'}
       >
         {/* Store Emblem */}
-        <div className="w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-emerald-400/40 shadow-md shadow-emerald-950/40 shrink-0 ring-1 ring-white/20 bg-slate-900">
-          <img
-            src="/icon.png"
-            alt="شعار قريتي"
-            className="w-full h-full object-cover"
-          />
+        <div className="w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-emerald-400/40 shadow-md shadow-emerald-950/40 shrink-0 ring-1 ring-white/20 bg-slate-900 flex items-center justify-center">
+          {settings.storeLogo && (settings.storeLogo.startsWith('http') || settings.storeLogo.startsWith('data:image')) ? (
+            <img
+              src={settings.storeLogo}
+              alt={settings.storeName || 'شعار المتجر'}
+              className="w-full h-full object-contain"
+            />
+          ) : settings.storeIcon ? (
+            <span className="text-xl sm:text-2xl select-none" role="img">{settings.storeIcon}</span>
+          ) : (
+            <img
+              src="/icon.png"
+              alt="شعار قريتي"
+              className="w-full h-full object-cover"
+            />
+          )}
         </div>
 
         {/* Store Name & Meta */}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 xs:gap-2 flex-wrap">
-            <h1 className="font-black text-sm xs:text-base sm:text-lg md:text-xl text-white tracking-tight leading-tight select-none truncate max-w-[200px] xs:max-w-xs sm:max-w-sm md:max-w-md">
-              {displayAppName}
+            <h1 className="font-black text-sm xs:text-base sm:text-lg md:text-xl text-white tracking-tight leading-tight select-none truncate max-w-[160px] xs:max-w-xs">
+              {settings.storeName || displayAppName}
             </h1>
+            {settings.tagline && (
+              <span className="hidden md:inline-block text-[11px] text-emerald-400/90 font-medium truncate max-w-xs">
+                • {settings.tagline}
+              </span>
+            )}
             {settings.address && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-[11px] font-bold text-emerald-300">
                 <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
                 <span>القرية: {settings.address}</span>
               </span>
             )}
-            <span className="hidden xs:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-[10px] font-bold text-purple-300">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
-              <span>حساب التاجر المحمي</span>
-            </span>
-            {/* Developer Tools Wrapper */}
-            {getActiveSessionRole() === 'DEVELOPER' && (
-              <div className="relative group">
-                <button
-                  type="button"
-                  onClick={onNavigateToAdmin}
-                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-[10px] font-bold text-rose-300 hover:bg-rose-500/20 transition-all"
-                  title="لوحة تحكم المطور"
-                >
-                  <Code2 className="w-3 h-3" />
-                  <span className="hidden sm:inline">مطور</span>
-                </button>
-              </div>
-            )}
           </div>
-
-          <p className="text-[11px] text-slate-400 truncate mt-0.5 flex items-center gap-1.5">
-            {settings.phone ? (
-              <span>{language === 'ar' ? `هاتف: ${settings.phone}` : `Tel: ${settings.phone}`}</span>
-            ) : (
-              <span>{language === 'ar' ? 'نظام إدارة المخزون والمبيعات ونقاط البيع' : 'Cloud POS & Inventory Suite'}</span>
-            )}
-            {settings.taxNumber && (
-              <>
-                <span className="text-slate-600">•</span>
-                <span className="font-mono text-[10px] text-slate-400">
-                  {language === 'ar' ? 'الرقم الضريبي:' : 'VAT:'} {settings.taxNumber}
-                </span>
-              </>
-            )}
-          </p>
         </div>
       </div>
 
+      {/* Unified Search & Order Tracking Bar */}
+      <div className="flex items-center gap-2 flex-1 max-w-md mx-2">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-emerald-400 absolute top-1/2 -translate-y-1/2 right-3" />
+          <input
+            type="text"
+            placeholder={language === 'ar' ? 'بحث فوري في الأصناف والمخزون...' : 'Search items & inventory...'}
+            onChange={(e) => {
+              const q = e.target.value;
+              window.dispatchEvent(new CustomEvent('qaryati:global-search', { detail: q }));
+            }}
+            className="w-full bg-slate-950 border border-slate-700/80 rounded-xl py-1.5 pr-9 pl-3 text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-500 shadow-inner"
+          />
+        </div>
+
+        {onOpenMerchantOrders && (
+          <button
+            type="button"
+            onClick={onOpenMerchantOrders}
+            className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-sm"
+            title="تتبع وإدارة طلبات التوصيل"
+          >
+            <Truck className="w-4 h-4 text-amber-400" />
+            <span className="hidden sm:inline">تتبع الطلبات</span>
+            {deliveryOrdersCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black">
+                {deliveryOrdersCount}
+              </span>
+            )}
+          </button>
+        )}
+      </div>
+
       {/* Merchant Operational Status & Developer-Managed Platform Broadcast (Read-Only) */}
-      <div className="flex-1 min-w-0 flex items-center justify-end gap-2.5">
-        {/* If the platform developer has published a global platform notice, display it strictly read-only with NO edit button */}
+      <div className="shrink-0 flex items-center justify-end gap-2.5">
         {developerAnnouncement ? (
           <div
             id="top-platform-announcement-pill"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs shadow-sm max-w-full md:max-w-md truncate"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs shadow-sm max-w-full truncate"
             title={developerAnnouncement}
           >
             <div className="w-5 h-5 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
@@ -1101,7 +1114,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </div>
           </div>
         ) : (
-          /* Store Operational Status Indicator */
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 text-emerald-400 text-xs font-bold shadow-sm">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>

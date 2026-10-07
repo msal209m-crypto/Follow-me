@@ -10,6 +10,7 @@ import {
   X,
   Printer,
   ChevronRight,
+  ChevronDown,
   Filter,
   User,
   MapPin,
@@ -17,11 +18,14 @@ import {
   ArrowRight,
   ArrowLeft,
   Bell,
-  ChefHat
+  ChefHat,
+  Compass,
+  Navigation
 } from 'lucide-react';
 import { DeliveryOrder, DeliveryOrderStatus, StoreSettings } from '../types';
 import { getDeliveryOrders, updateOrderStatus, playNotificationChime } from '../services/deliveryService';
 import { blockCustomerByMerchant, unblockCustomerByMerchant, isCustomerBlockedByMerchant } from '../services/rbacAuthService';
+import { OrderDeliveryMiniMap } from './OrderDeliveryMiniMap';
 
 interface MerchantOrdersModalProps {
   isOpen: boolean;
@@ -41,6 +45,14 @@ export const MerchantOrdersModal: React.FC<MerchantOrdersModalProps> = ({
   const [orders, setOrders] = useState<DeliveryOrder[]>(() => getDeliveryOrders());
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
+  const [openMaps, setOpenMaps] = useState<Record<string, boolean>>({});
+
+  const toggleOrderMap = (orderId: string) => {
+    setOpenMaps((prev) => ({
+      ...prev,
+      [orderId]: !prev[orderId],
+    }));
+  };
 
   const refreshOrders = () => {
     const updated = getDeliveryOrders();
@@ -518,6 +530,35 @@ export const MerchantOrdersModal: React.FC<MerchantOrdersModalProps> = ({
                             )}
                           </div>
                         )}
+
+                        {/* Interactive Mini-Map Toggle & Viewer */}
+                        <div className="pt-2 border-t border-slate-800/80">
+                          <button
+                            type="button"
+                            onClick={() => toggleOrderMap(order.id)}
+                            className="w-full py-1.5 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 text-emerald-400 hover:text-emerald-300 text-xs font-bold transition-all flex items-center justify-between border border-emerald-500/30 shadow-xs cursor-pointer active:scale-[0.99]"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Compass className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>خريطة مسار التوصيل وموقع العميل</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                              <span>{openMaps[order.id] ? 'إخفاء الخريطة' : 'عرض الخريطة'}</span>
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${openMaps[order.id] ? 'rotate-180' : ''}`} />
+                            </div>
+                          </button>
+
+                          {openMaps[order.id] && (
+                            <div className="mt-2 animate-in fade-in duration-200">
+                              <OrderDeliveryMiniMap
+                                order={order}
+                                settings={settings}
+                                isRTL={isRTL}
+                                defaultExpanded={false}
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Items List */}

@@ -18,6 +18,7 @@ import {
   IdCard,
   Camera,
   MapPin,
+  Tag,
 } from 'lucide-react';
 import {
   loginMerchant,
@@ -37,19 +38,6 @@ import { registerCustomerAccount } from '../services/supabaseQaryatiService';
 import { getPendingAdRedirect } from '../services/storeNavigationService';
 
 export type RBACRoleTab = 'MERCHANT' | 'DRIVER' | 'CUSTOMER' | 'DEVELOPER';
-
-const FIXED_VILLAGES = [
-  'قرية الفصور',
-  'قرية الحقالي',
-  'قرية الباركة',
-  'قرية الانهوم',
-  'قرية مشيجبه',
-  'سوق حول جباري',
-  'قرية المداد',
-  'قرية الجامع',
-  'قرية المسيلة',
-  'قرية المكيل',
-];
 
 export interface RBACAuthModalProps {
   isOpen: boolean;
@@ -88,7 +76,8 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
   const [merchantNationalId, setMerchantNationalId] = useState('');
   const [merchantPassword, setMerchantPassword] = useState('');
   const [merchantStoreName, setMerchantStoreName] = useState('');
-  const [merchantVillage, setMerchantVillage] = useState(FIXED_VILLAGES[0]);
+  const [merchantCategory, setMerchantCategory] = useState('مغذي وبقالة');
+  const [merchantVillage, setMerchantVillage] = useState('');
   const [merchantPhoto, setMerchantPhoto] = useState<string>('https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80');
   const [merchantIdPhoto, setMerchantIdPhoto] = useState<string>('');
 
@@ -105,7 +94,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerNationalId, setCustomerNationalId] = useState('');
-  const [customerVillage, setCustomerVillage] = useState(FIXED_VILLAGES[0]);
+  const [customerVillage, setCustomerVillage] = useState('');
 
   // Developer Fields
   const [devPhone, setDevPhone] = useState('0502063584');
@@ -187,6 +176,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
             password: merchantPassword,
             storeName: merchantStoreName,
             village: merchantVillage,
+            category: merchantCategory,
             photo: merchantPhoto,
             idVerificationPhoto: merchantIdPhoto,
           });
@@ -282,7 +272,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
     }
 
     setLoading(true);
-    const chosenVillage = customerVillage.trim() || FIXED_VILLAGES[0];
+    const chosenVillage = customerVillage.trim() || 'الموقع المحدد';
     const cleanName = customerName.trim();
     const cleanPhone = customerPhone.trim();
     const cleanNationalId = customerNationalId.trim();
@@ -585,7 +575,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                       )}
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">اسم المتجر / البقالة</label>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">اسم المتجر / النشاط التجاري</label>
                         <div className="relative">
                           <Store className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
                           <input
@@ -593,7 +583,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                             required
                             value={merchantStoreName}
                             onChange={(e) => setMerchantStoreName(e.target.value)}
-                            placeholder="مثال: تموينات الريف المركزية"
+                            placeholder="مثال: تموينات الريف المركزية / مطعم البركة / صيدلية الشفاء"
                             className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
                               isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
                             } py-2 text-xs text-white focus:outline-none focus:border-emerald-500`}
@@ -602,20 +592,40 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">القرية التابعة للمتجر</label>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">نوع ونشاط الشريك / المتجر *</label>
+                        <div className="relative">
+                          <Tag className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                          <select
+                            value={merchantCategory}
+                            onChange={(e) => setMerchantCategory(e.target.value)}
+                            className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
+                              isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                            } py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold`}
+                          >
+                            <option value="مغذي وبقالة">🛒 بقالة ومواد غذائية / سوبرماركت</option>
+                            <option value="مطاعم">🍔 مطعم ومأكولات سريعة / وجبات</option>
+                            <option value="صيدليات">💊 صيدلية ومستلزمات طبية</option>
+                            <option value="مخبوزات">🥐 مخبز وحلويات ومعجنات</option>
+                            <option value="مقاهي">☕ مقهى ومشروبات وبن</option>
+                            <option value="خضار">🍎 خضار وفواكه ولحوم طازجة</option>
+                            <option value="خدمات">⚡ خدمات سريعة ومغاسل وصيانة</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">الموقع / الحي / المدينة التابع لها المتجر</label>
                         <div className="relative">
                           <MapPin className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
-                          <select
+                          <input
+                            type="text"
                             value={merchantVillage}
                             onChange={(e) => setMerchantVillage(e.target.value)}
+                            placeholder="اكتب اسم الحي أو القرية أو المدينة"
                             className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
                               isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
                             } py-2 text-xs text-white focus:outline-none focus:border-emerald-500`}
-                          >
-                            {FIXED_VILLAGES.map((v) => (
-                              <option key={v} value={v}>{v}</option>
-                            ))}
-                          </select>
+                          />
                         </div>
                       </div>
 
@@ -644,9 +654,18 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                     </>
                   )}
 
+                  {mode === 'LOGIN' && (
+                    <div className="p-2.5 bg-emerald-950/30 border border-emerald-500/30 rounded-xl text-[11px] text-emerald-300 flex items-start gap-2 mb-2">
+                      <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">تسجيل الدخول بدون بريد إلكتروني:</span> يتم الدخول حصرياً عبر <strong>رقم الهوية الوطنية</strong> (أو رقم الجوال) و<strong>كلمة السر</strong> الخاصة بك.
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
-                      {mode === 'LOGIN' ? 'رقم الجوال أو رقم بطاقة الأحوال' : 'رقم الجوال للتاجر'}
+                      {mode === 'LOGIN' ? 'رقم الهوية الوطنية أو رقم الجوال' : 'رقم الجوال للتاجر'}
                     </label>
                     <div className="relative">
                       <Phone className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
@@ -655,7 +674,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                         required
                         value={merchantPhone}
                         onChange={(e) => setMerchantPhone(e.target.value)}
-                        placeholder="05xxxxxxxx"
+                        placeholder="رقم الهوية أو 05xxxxxxxx"
                         className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
                           isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
                         } py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono`}
@@ -665,14 +684,14 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-slate-300">كلمة المرور</label>
+                      <label className="block text-xs font-bold text-slate-300">كلمة السر</label>
                       {mode === 'LOGIN' && (
                         <button
                           type="button"
                           onClick={() => handleOpenOTP('MERCHANT', merchantPhone)}
                           className="text-[11px] text-amber-400 hover:text-amber-300 hover:underline cursor-pointer"
                         >
-                          نسيت كلمة المرور؟ (رمز OTP)
+                          نسيت كلمة السر؟ (رمز OTP)
                         </button>
                       )}
                     </div>
@@ -867,7 +886,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                   )}
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">رقم جوال السائق</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">رقم الهوية الوطنية أو جوال السائق</label>
                     <div className="relative">
                       <Phone className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
                       <input
@@ -875,7 +894,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                         required
                         value={driverPhone}
                         onChange={(e) => setDriverPhone(e.target.value)}
-                        placeholder="05xxxxxxxx"
+                        placeholder="رقم الهوية أو 05xxxxxxxx"
                         className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
                           isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
                         } py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono`}
@@ -885,14 +904,14 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-slate-300">كلمة المرور</label>
+                      <label className="block text-xs font-bold text-slate-300">كلمة السر</label>
                       {mode === 'LOGIN' && (
                         <button
                           type="button"
                           onClick={() => handleOpenOTP('DRIVER', driverPhone)}
                           className="text-[11px] text-amber-400 hover:text-amber-300 hover:underline cursor-pointer"
                         >
-                          نسيت كلمة المرور؟ (رمز OTP)
+                          نسيت كلمة السر؟ (رمز OTP)
                         </button>
                       )}
                     </div>
@@ -994,20 +1013,18 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">اختر القرية (من القائمة المعتمدة)</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">الموقع / الحي / المدينة</label>
                     <div className="relative">
                       <MapPin className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
-                      <select
+                      <input
+                        type="text"
                         value={customerVillage}
                         onChange={(e) => setCustomerVillage(e.target.value)}
+                        placeholder="اكتب اسم موقعك أو الحي أو المدينة"
                         className={`w-full bg-slate-950 border border-slate-800 rounded-xl ${
                           isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'
                         } py-2 text-xs text-white focus:outline-none focus:border-cyan-500`}
-                      >
-                        {FIXED_VILLAGES.map((v) => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
+                      />
                     </div>
                   </div>
 

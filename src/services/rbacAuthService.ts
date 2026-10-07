@@ -520,6 +520,7 @@ export async function registerMerchant(params: {
   password: string;
   storeName: string;
   village: string;
+  category?: string;
   photo?: string;
   idVerificationPhoto?: string;
 }): Promise<{ success: boolean; message: string; merchant?: MerchantAccountRecord }> {
@@ -555,6 +556,7 @@ export async function registerMerchant(params: {
   }
 
   const merchantId = `merchant_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const storeCategory = params.category || 'مغذي وبقالة';
 
   let newMerchant: MerchantAccountRecord = {
     id: merchantId,
@@ -564,12 +566,13 @@ export async function registerMerchant(params: {
     passwordHash: params.password,
     storeName: params.storeName.trim() || `متجر ${cleanName}`,
     village: params.village.trim() || 'الموقع المحدد',
+    category: storeCategory,
     photo: params.photo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
     idVerificationPhoto: params.idVerificationPhoto,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     isApproved: phonesMatch(finalCleanPhone, PLAYSTORE_REVIEWER_PHONE),
-  };
+  } as any;
 
   // Direct database record sync for merchant (bypassing synthetic email rate limit)
   try {
@@ -618,6 +621,8 @@ export async function registerMerchant(params: {
   };
   (newStoreRecord as any).isApproved = false;
   (newStoreRecord as any).kycStatus = 'PENDING_REVIEW';
+  (newStoreRecord as any).category = storeCategory;
+  (newStoreRecord as any).classification = storeCategory;
   
   stores.unshift(newStoreRecord);
   saveStoresDirectory(stores);

@@ -35,6 +35,7 @@ import {
   CreditCard,
   X
 } from 'lucide-react';
+import { CoffeeTreeLogo } from './CoffeeTreeLogo';
 import { StoreSettings } from '../types';
 import {
   verifyDeveloperPin,
@@ -66,6 +67,7 @@ import { OTPPasswordResetModal } from './OTPPasswordResetModal';
 import { AdBannerWidget } from './AdBannerWidget';
 import { GlobalSettingsModal } from './GlobalSettingsModal';
 import { VillageMapPickerModal } from './VillageMapPickerModal';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { getGlobalPreferences, SUPPORTED_COUNTRIES } from '../services/globalizationService';
 
 interface PortalLandingScreenProps {
@@ -103,6 +105,7 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
   const [showBulletinModal, setShowBulletinModal] = useState(false);
   const [showAdminPinModal, setShowAdminPinModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [isGlobalModalOpen, setIsGlobalModalOpen] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [globalPrefs, setGlobalPrefs] = useState(() => getGlobalPreferences());
@@ -556,14 +559,10 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
         <div className="flex items-center gap-2.5">
           <div
             onClick={handleLogoClick}
-            title="تطبيق قريتي - بوابة المطورين (اضغط 10 مرات)"
-            className="w-10 h-10 rounded-2xl overflow-hidden border border-emerald-500/40 shadow-lg shadow-emerald-950/35 cursor-pointer active:scale-95 transition-all shrink-0 bg-slate-900 select-none flex items-center justify-center hover:border-emerald-400"
+            title="تطبيق قريتي - شجرة البن الخولاني (بوابة المطورين: اضغط 10 مرات)"
+            className="cursor-pointer active:scale-95 transition-all shrink-0 select-none flex items-center justify-center"
           >
-            <img
-              src="/icon.png"
-              alt="قريتي"
-              className="w-full h-full object-cover pointer-events-none"
-            />
+            <CoffeeTreeLogo size={42} />
           </div>
           <div>
             <h1 className={`font-extrabold text-base sm:text-lg ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
@@ -607,91 +606,19 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
       </header>
 
       {/* Center Welcome & Portal Selection Cards */}
-      <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 max-w-5xl mx-auto w-full my-auto z-10">
+      <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 max-w-lg mx-auto w-full my-auto z-10 space-y-6">
         
-        {/* Developer Configured Hero Banner & Announcements */}
-        <div className="w-full max-w-4xl mb-6 space-y-3">
-          {devSettings.developerAnnouncement && (
-            <div className="bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/80 border border-amber-500/40 rounded-2xl p-3 px-4 flex items-center gap-3 text-xs text-amber-200 shadow-md">
-              <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
-              <div className="flex-1 font-bold">
-                <span className="text-amber-400 ms-1 font-black">إعلان المطور:</span> {devSettings.developerAnnouncement}
-              </div>
-            </div>
-          )}
-
-          {heroImg && (
-            <div className="relative w-full h-40 sm:h-52 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl group">
-              <img
-                src={heroImg}
-                alt="Hero Cover"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
-              <div className="absolute bottom-3 right-3 left-3 flex items-center justify-between">
-                <div className="px-3 py-1 rounded-xl bg-slate-900/80 backdrop-blur-md border border-slate-700 text-white text-xs font-bold flex items-center gap-1.5">
-                  <Store className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{devSettings.platformName || 'منصة قريتي الموحدة'}</span>
-                </div>
-                <div className="text-[10px] text-slate-300 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-700">
-                  إدارة المطور: {devSettings.developerOwnerName || 'المطور'}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Adhan & Prayer Times Village Bar */}
-          <AdhanTopBarWidget isDarkMode={isDarkMode} isRTL={isRTL} compact={false} className="w-full py-2.5 px-4" />
-
-          {/* Festive Grand Openings & Promoted Ads Banner */}
-          <div className="w-full mt-2">
-            <AdBannerWidget currentVillage="ALL" isDarkMode={isDarkMode} isRTL={isRTL} />
-          </div>
-        </div>
-
-        {/* Intro with Developer Managed Ad Banners */}
-        <div className="text-center max-w-2xl mb-6 w-full px-4">
-          {/* Dynamic Developer-Managed Promoted Banners for Rain Villages */}
-          {(() => {
-            const activeAds = getPlatformAds().filter((a) => a.isActive);
-            if (activeAds.length === 0) return null;
-            return (
-              <div className="mb-4 overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-blue-500/10 p-4 shadow-lg text-right relative">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950">
-                    <Sparkles className="w-3 h-3" />
-                    <span>إعلان ترويجي مدفوع (قرى المطر)</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">برعاية إدارية</span>
-                </div>
-                {activeAds.map((ad, idx) => (
-                  <div key={ad.id || idx} className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-[9px] font-black">{ad.badge}</span>
-                      <h3 className={`text-sm font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{ad.title}</h3>
-                    </div>
-                    <p className={`text-xs ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{ad.subtitle}</p>
-                    {ad.discountCode && (
-                      <div className="inline-block bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] font-mono mt-1">
-                        رمز الخصم: {ad.discountCode}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-
-          <h2 className={`text-2xl sm:text-4xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} tracking-tight leading-tight`}>
-            مرحباً بكم في تطبيق قريتي
+        <div className="text-center w-full">
+          <h2 className={`text-2xl sm:text-3xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} tracking-tight`}>
+            تسجيل الدخول أو إنشاء حساب
           </h2>
-          <p className={`text-xs sm:text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'} mt-2 max-w-md mx-auto`}>
-            بوابة رقمية آمنة تخدم أهالي ومتاجر القرية. سجل حسابك الآن في ثوانٍ وتوجه مباشرة لواجهتك المخصصة.
+          <p className={`text-xs sm:text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'} mt-1.5`}>
+            أدخل بياناتك للمتابعة إلى حسابك أو تفعيل حساب جديد في المنصة
           </p>
         </div>
 
         {/* --- UNIFIED LOGIN & REGISTRATION CARD --- */}
-        <div className={`w-full max-w-lg rounded-3xl border shadow-2xl overflow-hidden transition-all duration-300 ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className={`w-full rounded-3xl border shadow-2xl overflow-hidden transition-all duration-300 ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200'}`}>
           
           {/* Tabs header */}
           <div className="flex border-b border-slate-800 bg-slate-950/40">
@@ -1424,6 +1351,27 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
             setRegVillage(prefs.customVillageName);
           }
         }}
+        isDarkMode={isDarkMode}
+      />
+
+      {/* Footer with Privacy Policy */}
+      <footer className="py-6 px-4 border-t border-slate-800/80 bg-slate-950/80 text-center text-xs text-slate-400 mt-auto">
+        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p>منصة قريتي الرقمية الموحدة © {new Date().getFullYear()}</p>
+          <button
+            type="button"
+            onClick={() => setShowPrivacyModal(true)}
+            className="text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer flex items-center gap-1.5"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>سياسة الخصوصية وشروط الاستخدام (مطلوبة لـ Google Play)</span>
+          </button>
+        </div>
+      </footer>
+
+      <PrivacyPolicyModal
+        isOpen={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
         isDarkMode={isDarkMode}
       />
     </div>

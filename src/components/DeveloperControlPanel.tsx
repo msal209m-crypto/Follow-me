@@ -89,7 +89,6 @@ import {
   blockUserPhoneOrId,
 } from '../services/rbacAuthService';
 import { 
-  FIXED_VILLAGES_LIST, 
   getApprovedMerchantsByVillage, 
   fetchAllCustomers, 
   getCustomersLocalCache, 
@@ -177,7 +176,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   const [adFormTitle, setAdFormTitle] = useState('');
   const [adFormDesc, setAdFormDesc] = useState('');
   const [adFormStoreName, setAdFormStoreName] = useState('');
-  const [adFormVillage, setAdFormVillage] = useState((FIXED_VILLAGES_LIST && FIXED_VILLAGES_LIST.length > 0) ? FIXED_VILLAGES_LIST[0].name : '');
+  const [adFormVillage, setAdFormVillage] = useState('');
   const [adFormTheme, setAdFormTheme] = useState<'CELEBRATION' | 'HOT_DEAL' | 'OFFICIAL'>('CELEBRATION');
   const [adFormBadge, setAdFormBadge] = useState('افتتاح رسمي مبارك 🎉');
   const [adFormAction, setAdFormAction] = useState('تسوق الآن 🛒');
@@ -195,7 +194,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   const [showAllDriversList, setShowAllDriversList] = useState(false);
 
   // Live Query Simulator State
-  const [testVillage, setTestVillage] = useState((FIXED_VILLAGES_LIST && FIXED_VILLAGES_LIST.length > 0) ? FIXED_VILLAGES_LIST[0].name : '');
+  const [testVillage, setTestVillage] = useState('');
   const [testQueryResult, setTestQueryResult] = useState<any[]>([]);
   const [isQuerying, setIsQuerying] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
@@ -208,7 +207,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     storeName: '',
     name: '',
     phone: '',
-    village: (FIXED_VILLAGES_LIST && FIXED_VILLAGES_LIST.length > 0) ? FIXED_VILLAGES_LIST[0].name : '',
+    village: '',
     nationalId: '',
     isApproved: true,
   });
@@ -219,7 +218,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     name: '',
     phone: '',
     vehicleType: 'MOTORCYCLE',
-    zone: (FIXED_VILLAGES_LIST && FIXED_VILLAGES_LIST.length > 0) ? FIXED_VILLAGES_LIST[0].name : '',
+    zone: '',
     nationalId: '',
     isApproved: true,
   });
@@ -642,7 +641,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
       storeName: merchant.storeName || '',
       name: merchant.name || '',
       phone: merchant.phone || '',
-      village: merchant.village || FIXED_VILLAGES_LIST[0].name,
+      village: merchant.village || '',
       nationalId: merchant.nationalId || '',
       isApproved: merchant.isApproved !== false,
     });
@@ -709,7 +708,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
       name: driver.name || '',
       phone: driver.phone || '',
       vehicleType: driver.vehicleType || 'MOTORCYCLE',
-      zone: driver.zone || FIXED_VILLAGES_LIST[0].name,
+      zone: driver.zone || '',
       nationalId: driver.nationalId || '',
       isApproved: driver.isApproved !== false,
     });
@@ -2025,7 +2024,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
               )}
             </div>
 
-            {/* Live Village Query Simulator */}
+            {/* Live Location Query Simulator */}
             <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
@@ -2034,24 +2033,22 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-white">
-                      محاكي استعلامات الفلترة المكانية (Village-First Query Inspector)
+                      محاكي استعلامات الفلترة المكانية (Location Query Inspector)
                     </h3>
                     <p className="text-[11px] text-slate-400">
-                      اختبر واستعرض فورياً ما يراه ساكن كل قرية دون الحاجة لتسجيل الخروج.
+                      اختبر واستعرض فورياً ما يراه ساكن كل موقع دون الحاجة لتسجيل الخروج.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <select
+                  <input
+                    type="text"
                     value={testVillage}
                     onChange={(e) => setTestVillage(e.target.value)}
-                    className="bg-slate-950 border border-slate-700 text-white text-xs font-bold rounded-xl px-3 py-2 cursor-pointer focus:outline-none focus:border-cyan-500"
-                  >
-                    {FIXED_VILLAGES_LIST.map((v) => (
-                      <option key={v.id} value={v.name}>{v.name}</option>
-                    ))}
-                  </select>
+                    placeholder="اكتب اسم الموقع..."
+                    className="bg-slate-950 border border-slate-700 text-white text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500 w-44"
+                  />
 
                   <button
                     type="button"
@@ -2341,20 +2338,15 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                   )}
                 </div>
 
-                {/* Village Filter */}
+                {/* Village / Location Filter */}
                 <div className="relative min-w-[170px]">
-                  <select
-                    value={selectedVillageFilter}
-                    onChange={(e) => setSelectedVillageFilter(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 appearance-none pr-8 cursor-pointer font-bold"
-                  >
-                    <option value="ALL">جميع القرى ({customers.length})</option>
-                    {FIXED_VILLAGES_LIST.map((v) => (
-                      <option key={v.name} value={v.name}>
-                        {v.name}
-                      </option>
-                    ))}
-                  </select>
+                  <input
+                    type="text"
+                    value={selectedVillageFilter === 'ALL' ? '' : selectedVillageFilter}
+                    onChange={(e) => setSelectedVillageFilter(e.target.value || 'ALL')}
+                    placeholder="تصفية حسب الموقع..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 pr-8 font-bold"
+                  />
                   <MapPin className="w-3.5 h-3.5 text-slate-500 absolute top-3.5 right-2.5 pointer-events-none" />
                 </div>
 
@@ -3345,7 +3337,7 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
               )}
             </div>
 
-            {/* Live Village Query Simulator */}
+            {/* Live Location Query Simulator */}
             <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
@@ -3354,24 +3346,22 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-white">
-                      محاكي استعلامات الفلترة المكانية (Village-First Query Inspector)
+                      محاكي استعلامات الفلترة المكانية (Location Query Inspector)
                     </h3>
                     <p className="text-[11px] text-slate-400">
-                      اختبر واستعرض فورياً ما يراه ساكن كل قرية دون الحاجة لتسجيل الخروج.
+                      اختبر واستعرض فورياً ما يراه ساكن كل موقع دون الحاجة لتسجيل الخروج.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <select
+                  <input
+                    type="text"
                     value={testVillage}
                     onChange={(e) => setTestVillage(e.target.value)}
-                    className="bg-slate-950 border border-slate-700 text-white text-xs font-bold rounded-xl px-3 py-2 cursor-pointer focus:outline-none focus:border-cyan-500"
-                  >
-                    {FIXED_VILLAGES_LIST.map((v) => (
-                      <option key={v.id} value={v.name}>{v.name}</option>
-                    ))}
-                  </select>
+                    placeholder="اكتب اسم الموقع..."
+                    className="bg-slate-950 border border-slate-700 text-white text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500 w-44"
+                  />
 
                   <button
                     type="button"
@@ -3703,16 +3693,14 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
               {/* Village & Store name */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">القرية المستهدفة:</label>
-                  <select
+                  <label className="block text-xs font-bold text-slate-400 mb-1">الموقع / القرية المستهدفة:</label>
+                  <input
+                    type="text"
                     value={adFormVillage}
                     onChange={(e) => setAdFormVillage(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer font-bold"
-                  >
-                    {FIXED_VILLAGES_LIST.map((v) => (
-                      <option key={v.name} value={v.name}>{v.name}</option>
-                    ))}
-                  </select>
+                    placeholder="اسم القرية أو الموقع المستهدف..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400 font-bold"
+                  />
                 </div>
 
                 <div>
@@ -3863,16 +3851,14 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">القرية التابع لها</label>
-                  <select
+                  <label className="block text-xs font-bold text-slate-300 mb-1">الموقع / الحي / القرية التابع لها</label>
+                  <input
+                    type="text"
                     value={editMerchantForm.village}
                     onChange={(e) => setEditMerchantForm({ ...editMerchantForm, village: e.target.value })}
+                    placeholder="الموقع / الحي / القرية..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
-                  >
-                    {FIXED_VILLAGES_LIST.map((v) => (
-                      <option key={v.id} value={v.name}>{v.name}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
 
@@ -3987,16 +3973,14 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">نطاق قرية التوصيل</label>
-                  <select
+                  <label className="block text-xs font-bold text-slate-300 mb-1">نطاق الموقع / التوصيل</label>
+                  <input
+                    type="text"
                     value={editDriverForm.zone}
                     onChange={(e) => setEditDriverForm({ ...editDriverForm, zone: e.target.value })}
+                    placeholder="نطاق التوصيل / الموقع الجغرافي..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
-                  >
-                    {FIXED_VILLAGES_LIST.map((v) => (
-                      <option key={v.id} value={v.name}>{v.name}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
 

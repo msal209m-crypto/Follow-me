@@ -463,6 +463,22 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none"
               />
+              <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto">
+                {Array.from(new Set(['مواد غذائية', 'مشروبات وعصائر', 'ألبان وأجبان', 'خضار وفواكه', 'حلويات وتسالي', 'منظفات وعناية', 'مجمدات ومثلجات', 'مخبوزات وطازج', ...items.map(it => it.category).filter(Boolean)])).slice(0, 10).map((catName) => (
+                  <button
+                    key={catName}
+                    type="button"
+                    onClick={() => setCategory(catName)}
+                    className={`text-[10px] px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                      category === catName
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 font-bold'
+                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:border-slate-600'
+                    }`}
+                  >
+                    {catName}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <label className="text-slate-300 font-bold block mb-1 flex items-center gap-1.5">

@@ -28,8 +28,55 @@ import {
   MessageCircle,
   Bell,
   Key,
-  Battery
+  Battery,
+  Truck,
+  Image as ImageIcon,
+  Camera,
+  Smile,
+  Palette
 } from 'lucide-react';
+
+const PRESET_STORE_ICONS = [
+  { emoji: '🏪', label: 'بقالة وتموينات' },
+  { emoji: '🛒', label: 'سوبرماركت' },
+  { emoji: '🍏', label: 'خضار وفواكه' },
+  { emoji: '🥩', label: 'ملحمة ولحوم' },
+  { emoji: '☕', label: 'كافيه ومقهى' },
+  { emoji: '🍞', label: 'مخبز ومعجنات' },
+  { emoji: '🥛', label: 'ألبان وأجبان' },
+  { emoji: '🍨', label: 'حلويات ومثلجات' },
+  { emoji: '🌾', label: 'أعلاف ومزارع' },
+  { emoji: '💊', label: 'صيدلية وعناية' },
+  { emoji: '⚡', label: 'إلكترونيات وأجهزة' },
+  { emoji: '🛍️', label: 'بوتيك وهدايا' },
+];
+
+const PRESET_STORE_COVERS = [
+  {
+    name: 'بقالة وتموينات راقية',
+    url: 'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=800&auto=format&fit=crop&q=80',
+  },
+  {
+    name: 'سوبرماركت حديث',
+    url: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=800&auto=format&fit=crop&q=80',
+  },
+  {
+    name: 'مطعم ومأكولات ريفية',
+    url: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80',
+  },
+  {
+    name: 'مقهى وكافيه هادئ',
+    url: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=800&auto=format&fit=crop&q=80',
+  },
+  {
+    name: 'خضار وفواكه طازجة',
+    url: 'https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=800&auto=format&fit=crop&q=80',
+  },
+  {
+    name: 'مخبز وحلويات',
+    url: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800&auto=format&fit=crop&q=80',
+  },
+];
 import { useApp } from '../context/AppContext';
 import { usePWA } from '../context/PWAContext';
 import { useSubscription } from '../context/SubscriptionContext';
@@ -133,11 +180,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
   const [address, setAddress] = useState(settings.address);
   const [currency, setCurrency] = useState(settings.currency);
   const [footerNote, setFooterNote] = useState(settings.footerNote);
+  const [storeLogo, setStoreLogo] = useState<string>(settings.storeLogo || '');
+  const [storeCover, setStoreCover] = useState<string>(settings.storeCover || '');
+  const [storeIcon, setStoreIcon] = useState<string>(settings.storeIcon || '🏪');
+  const [tagline, setTagline] = useState<string>(settings.tagline || '');
   const [powerSavingMode, setPowerSavingMode] = useState(settings.powerSavingMode || false);
+  const [freeDelivery, setFreeDelivery] = useState(settings.freeDelivery || false);
+  const [freeDeliveryMinOrder, setFreeDeliveryMinOrder] = useState<number | undefined>(settings.freeDeliveryMinOrder);
+  const [deliveryFee, setDeliveryFee] = useState<number | undefined>(settings.deliveryFee);
+  const [isOpen24Hours, setIsOpen24Hours] = useState(settings.workingHours?.isOpen24Hours ?? false);
+  const [openTime, setOpenTime] = useState(settings.workingHours?.openTime || '06:30');
+  const [closeTime, setCloseTime] = useState(settings.workingHours?.closeTime || '23:30');
+  const [isSplitShift, setIsSplitShift] = useState(settings.workingHours?.isSplitShift ?? false);
+  const [secondOpenTime, setSecondOpenTime] = useState(settings.workingHours?.secondOpenTime || '16:00');
+  const [secondCloseTime, setSecondCloseTime] = useState(settings.workingHours?.secondCloseTime || '00:00');
+  const [autoCloseForPrayer, setAutoCloseForPrayer] = useState(settings.workingHours?.autoCloseForPrayer ?? true);
   const [activeHelp, setActiveHelp] = useState<string | null>(null);
 
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Logo file upload handler
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        setStoreLogo(result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Cover image file upload handler
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        setStoreCover(result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,7 +237,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
       address,
       currency: currency.trim() || 'ر.س',
       footerNote,
+      storeLogo: storeLogo.trim() || undefined,
+      storeCover: storeCover.trim() || undefined,
+      storeIcon: storeIcon.trim() || undefined,
+      tagline: tagline.trim() || undefined,
       powerSavingMode,
+      freeDelivery,
+      freeDeliveryMinOrder: freeDeliveryMinOrder && freeDeliveryMinOrder > 0 ? freeDeliveryMinOrder : undefined,
+      deliveryFee: deliveryFee !== undefined ? deliveryFee : undefined,
+      workingHours: {
+        isOpen24Hours,
+        openTime,
+        closeTime,
+        isSplitShift,
+        secondOpenTime,
+        secondCloseTime,
+        autoCloseForPrayer,
+        workingDays: settings.workingHours?.workingDays || [0, 1, 2, 3, 4, 5, 6],
+      },
     });
     onClose();
   };
@@ -579,6 +685,217 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
               </div>
             </div>
 
+            {/* ================================================================= */}
+            {/* BRANDING, LOGO & STORE ICON CUSTOMIZATION (هوية وشعار وأيقونة المتجر) */}
+            {/* ================================================================= */}
+            <div className="p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-emerald-500/40 rounded-2xl space-y-4 shadow-xl">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <Palette className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-white flex items-center gap-1.5">
+                      <span>هوية وبراند المتجر (الاسم، الشعار، الأيقونة والغلاف)</span>
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">مباشر</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      تخصيص شكل متجرك في واجهة قريتي وبطاقات المتاجر وشاشات العملاء
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview Banner */}
+              <div className="rounded-2xl border border-slate-800 overflow-hidden bg-slate-950 relative shadow-inner">
+                {/* Cover Banner Preview */}
+                <div className="h-28 sm:h-32 w-full relative bg-slate-900 flex items-center justify-center overflow-hidden">
+                  {storeCover ? (
+                    <img
+                      src={storeCover}
+                      alt="Store Cover Preview"
+                      className="w-full h-full object-cover brightness-[0.75]"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-r from-slate-950 via-emerald-950/60 to-slate-950 flex items-center justify-center text-slate-600 text-xs font-bold">
+                      <ImageIcon className="w-5 h-5 ml-1 opacity-50" />
+                      <span>غلاف المتجر الافتراضي</span>
+                    </div>
+                  )}
+
+                  {/* Central Logo / Icon Tile */}
+                  <div className="absolute inset-0 m-auto w-14 h-14 rounded-2xl bg-white shadow-2xl p-1.5 flex items-center justify-center text-slate-900 font-black border-2 border-white/80 z-10">
+                    {storeLogo ? (
+                      <img
+                        src={storeLogo}
+                        alt="Store Logo Preview"
+                        className="w-full h-full object-contain rounded-xl"
+                      />
+                    ) : (
+                      <span className="text-3xl select-none" role="img" aria-label="store icon">
+                        {storeIcon || '🏪'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Info Preview Footer */}
+                <div className="p-3 bg-slate-900/90 flex flex-col items-center text-center">
+                  <div className="text-sm font-black text-white">
+                    {storeName || 'اسم متجرك'}
+                  </div>
+                  <div className="text-[11px] text-emerald-400 font-medium mt-0.5">
+                    {tagline || 'شعار المتجر أو وصف ترويجي مختصر'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Store Icon Preset Selector */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <Smile className="w-3.5 h-3.5 text-amber-400" />
+                  <span>اختر أيقونة/إيموجي النشاط السريعة:</span>
+                </label>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {PRESET_STORE_ICONS.map((pi) => (
+                    <button
+                      key={pi.emoji}
+                      type="button"
+                      onClick={() => {
+                        setStoreIcon(pi.emoji);
+                        if (!storeLogo) {
+                          // Keep emoji as primary
+                        }
+                      }}
+                      className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                        storeIcon === pi.emoji && !storeLogo
+                          ? 'bg-emerald-500/20 border-emerald-500 text-white shadow-md scale-105'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-white'
+                      }`}
+                      title={pi.label}
+                    >
+                      <span className="text-xl">{pi.emoji}</span>
+                      <span className="text-[9px] truncate w-full text-center leading-none">{pi.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Store Logo Image (Upload or URL) */}
+              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>شعار المتجر المخصص (صورة الشعار / اللوجو):</span>
+                  </div>
+                  {storeLogo && (
+                    <button
+                      type="button"
+                      onClick={() => setStoreLogo('')}
+                      className="text-[10px] text-rose-400 hover:text-rose-300 underline cursor-pointer"
+                    >
+                      حذف الشعار واستخدام الإيموجي
+                    </button>
+                  )}
+                </label>
+
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  <label className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-2 cursor-pointer transition-all shadow-xs shrink-0 active:scale-95">
+                    <Upload className="w-4 h-4 text-emerald-400" />
+                    <span>رفع صورة الشعار</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="أو الصق رابط صورة الشعار مباشرة (URL)"
+                    value={storeLogo}
+                    onChange={(e) => setStoreLogo(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Store Cover Image (Presets, Upload or URL) */}
+              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-teal-400" />
+                    <span>غلاف وبانر المتجر العلوي (Cover Banner):</span>
+                  </div>
+                  {storeCover && (
+                    <button
+                      type="button"
+                      onClick={() => setStoreCover('')}
+                      className="text-[10px] text-rose-400 hover:text-rose-300 underline cursor-pointer"
+                    >
+                      إعادة تعيين الغلاف
+                    </button>
+                  )}
+                </label>
+
+                {/* Preset Covers Carousel */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {PRESET_STORE_COVERS.map((cov, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setStoreCover(cov.url)}
+                      className={`h-12 rounded-xl border relative overflow-hidden group transition-all cursor-pointer ${
+                        storeCover === cov.url
+                          ? 'border-emerald-500 ring-2 ring-emerald-500/50 scale-105'
+                          : 'border-slate-800 hover:border-slate-600 opacity-70 hover:opacity-100'
+                      }`}
+                      title={cov.name}
+                    >
+                      <img src={cov.url} alt={cov.name} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-1 text-center">
+                        <span className="text-[8px] font-bold text-white line-clamp-1">{cov.name}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap mt-1">
+                  <label className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-2 cursor-pointer transition-all shadow-xs shrink-0 active:scale-95">
+                    <Upload className="w-4 h-4 text-teal-400" />
+                    <span>رفع غلاف من جهازك</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCoverUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="أو رابط صورة الغلاف (URL)"
+                    value={storeCover}
+                    onChange={(e) => setStoreCover(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Tagline / Slogan input */}
+              <div className="pt-2 border-t border-slate-800/80">
+                <label className="text-xs font-bold text-slate-300 block mb-1">
+                  الوصف الترويجي أو الشعار اللفظي (Slogan):
+                </label>
+                <input
+                  type="text"
+                  placeholder="مثال: تموينات طازجة وخدمة سريعة لكافة أهالي القرية!"
+                  value={tagline}
+                  onChange={(e) => setTagline(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
             {/* Store Name & Phone */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -798,6 +1115,74 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
                   ? '💡 عند تفعيل هذا الوضع، سيتم تقليل معدل تحديثات الكاش وقاعدة البيانات التلقائية، وإلغاء الرسوم المتحركة العالية بالواجهة، وتخفيض فريمات الباركود وإيقاف أي تنبيهات ثانوية غير ضرورية لحماية معالج وهاتف التاجر.'
                   : '💡 When enabled, background updates are throttled, barcode frame rate is optimized, and secondary non-essential alerts are disabled to reduce CPU & battery usage in hot/busy markets.'}
               </p>
+            </div>
+
+            {/* Merchant Delivery & Free Delivery Settings Card */}
+            <div className="p-4 bg-slate-950/85 border border-emerald-500/30 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                    <Truck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-extrabold text-xs text-white block">
+                      {language === 'ar' ? 'خدمة التوصيل المجاني للأهالي 🛵' : 'Free Delivery Service'}
+                    </span>
+                    <span className="text-[10px] text-emerald-400/90 block leading-none mt-0.5">
+                      {language === 'ar' ? 'إبراز شارة "توصيل مجاني" في واجهة متجر قريتي وجذب العملاء' : 'Highlight Free Delivery badge in store view'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFreeDelivery(!freeDelivery)}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-all cursor-pointer flex items-center ${
+                    freeDelivery ? 'bg-emerald-500 justify-end' : 'bg-slate-800 justify-start'
+                  }`}
+                >
+                  <span className="w-5 h-5 rounded-full bg-slate-950 shadow-md transition-transform" />
+                </button>
+              </div>
+
+              {freeDelivery && (
+                <div className="p-2.5 bg-emerald-950/30 border border-emerald-500/20 rounded-xl space-y-2 text-xs">
+                  <div>
+                    <label className="text-[11px] text-slate-300 font-bold block mb-1">
+                      {language === 'ar' ? 'الحد الأدنى للطلب للاستفادة من التوصيل المجاني (اختياري):' : 'Min Order for Free Delivery (optional):'}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="مثال: 50 (اتركه فارغاً ليكون مجانياً لجميع الطلبات)"
+                        value={freeDeliveryMinOrder ?? ''}
+                        onChange={(e) => setFreeDeliveryMinOrder(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                      />
+                      <span className="text-xs text-slate-400 font-mono shrink-0">{currency}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!freeDelivery && (
+                <div>
+                  <label className="text-[11px] text-slate-300 font-bold block mb-1">
+                    {language === 'ar' ? 'رسوم التوصيل المعتادة للطلب:' : 'Standard Delivery Fee:'}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="10"
+                      value={deliveryFee ?? ''}
+                      onChange={(e) => setDeliveryFee(e.target.value ? parseFloat(e.target.value) : undefined)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                    <span className="text-xs text-slate-400 font-mono shrink-0">{currency}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Pro Subscription & License Management Card */}
