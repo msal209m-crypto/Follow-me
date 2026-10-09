@@ -120,7 +120,38 @@ export function deleteApprovedVillage(name: string): string[] {
 }
 
 // Initial default promotional ads for the village store
-const DEFAULT_ADS: PlatformAd[] = [];
+const DEFAULT_ADS: PlatformAd[] = [
+  {
+    id: 'default-ad-1',
+    title: 'توصيل مجاني لطلبك الأول من بقالتك المحلية! 🛵',
+    subtitle: 'اطلب احتياجاتك اليومية والتموينية من أقرب متجر في قريتك أو حيك بدون رسوم توصيل.',
+    badge: 'عرض الترحيب الحصري',
+    discountCode: 'FREE1',
+    bgGradient: 'from-emerald-950 via-teal-900 to-slate-900',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'default-ad-2',
+    title: 'تخفيضات الكبار لمنتجات الألبان والخضار الفريش 🔥',
+    subtitle: 'تسوق الآن واستفد من خصومات تصل إلى 30% على كافة السلع والمنتجات الطازجة.',
+    badge: 'خصومات موسمية',
+    discountCode: 'SAVE30',
+    bgGradient: 'from-rose-950 via-purple-950 to-slate-900',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'default-ad-3',
+    title: 'توصيل سريع خلال دقائق لجميع أحياء وقرى المنطقة ⚡',
+    subtitle: 'مناديب توصيل محليون جاهزون لخدمتكم على مدار الساعة مع ضمان جودة الطلبات.',
+    badge: 'خدمة سريعة وموثوقة',
+    discountCode: 'SPEED24',
+    bgGradient: 'from-amber-950 via-orange-950 to-slate-900',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+];
 
 const DEFAULT_BARCODE_CONFIG: BarcodePlatformConfig = {
   defaultCamera: 'environment',
@@ -319,36 +350,19 @@ export function verifyDeveloperCredentials(
   phone: string,
   secretKey: string
 ): { success: boolean; errorField?: 'phone' | 'key' | 'both'; message: string } {
-  const isPhoneOk = isAuthorizedDeveloperPhone(phone);
   const isKeyOk = verifyDeveloperPin(secretKey);
-
-  if (!isPhoneOk && !isKeyOk) {
-    return {
-      success: false,
-      errorField: 'both',
-      message: 'رقم الجوال ومفتاح المطور غير صحيحين! يرجى إدخال البيانات المعتمدة لمطور المنصة.',
-    };
-  }
-
-  if (!isPhoneOk) {
-    return {
-      success: false,
-      errorField: 'phone',
-      message: 'رقم الجوال غير مصرح به للدخول لحساب المطور (الرقم المعتمد: 0502063584).',
-    };
-  }
 
   if (!isKeyOk) {
     return {
       success: false,
       errorField: 'key',
-      message: 'كلمة المرور أو مفتاح المطور السري غير صحيح! (المفتاح الافتراضي: admin أو 1234).',
+      message: 'رمز الحماية (PIN) الخاص بالمطور والمالك غير صحيح! (المفتاح المعتمد: admin أو 1234).',
     };
   }
 
   return {
     success: true,
-    message: 'تم التحقق من هوية وصلاحيات المطور بنجاح.',
+    message: 'تم التحقق من هوية وصلاحيات المطور والمالك بنجاح ✓',
   };
 }
 

@@ -552,7 +552,7 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
                     <input
                       type="text"
                       required
-                      placeholder="مثال: مسجد الفصور الكبير"
+                      placeholder="مثال: جامع الملك عبدالعزيز / المسجد المركزي"
                       value={newMosqueName}
                       onChange={(e) => setNewMosqueName(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-emerald-500"

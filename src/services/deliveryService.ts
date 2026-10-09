@@ -12,284 +12,9 @@ import {
 const ORDERS_STORAGE_KEY = 'qaryati_delivery_orders';
 const DRIVER_PROFILE_KEY = 'qaryati_driver_profile';
 const STORES_DIRECTORY_KEY = 'qaryati_stores_directory';
-const DB_RESET_FLAG_KEY = 'qaryati_db_reset_clean_slate_v6';
-
-// Clean initial stores matching the village ecosystem
-const INITIAL_STORES: StoreDirectoryRecord[] = [
-  {
-    id: 'store-alrezq',
-    name: 'بقالة الرزق',
-    merchantId: 'merchant-alrezq',
-    phone: '+966500001001',
-    cityOrVillage: 'قرية الفلاح',
-    address: 'الشارع العام - بجوار المسجد الكبير',
-    status: 'ACTIVE',
-    isApproved: true,
-    isPro: true,
-    planName: 'باقة المتاجر المعتمدة',
-    category: 'بقالة وتموينات',
-    rating: 4.8,
-    ratingCount: 42,
-    itemsCount: 8,
-    joinedAt: '2026-01-10',
-    coverPhoto: 'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=600&auto=format&fit=crop&q=80',
-    logo: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=200&auto=format&fit=crop&q=80',
-    promoTag: 'توصيل مجاني 🛵',
-    freeDelivery: true,
-    workingHours: {
-      isOpen24Hours: false,
-      openTime: '06:00',
-      closeTime: '23:30',
-      autoCloseForPrayer: true,
-      workingDays: [0, 1, 2, 3, 4, 5, 6],
-    },
-  },
-  {
-    id: 'store-alfalah-restaurant',
-    name: 'مطعم الفلّاح',
-    merchantId: 'merchant-alfalah',
-    phone: '+966500001002',
-    cityOrVillage: 'قرية الفلاح',
-    address: 'طريق المزارع - تقاطع السوق',
-    status: 'ACTIVE',
-    isApproved: true,
-    isPro: true,
-    planName: 'باقة المتاجر المعتمدة',
-    category: 'مطاعم ومأكولات',
-    rating: 4.9,
-    ratingCount: 88,
-    itemsCount: 6,
-    joinedAt: '2026-01-12',
-    coverPhoto: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80',
-    logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
-    promoTag: 'خصم 15%',
-    workingHours: {
-      isOpen24Hours: false,
-      openTime: '11:00',
-      closeTime: '01:00',
-      autoCloseForPrayer: true,
-      workingDays: [0, 1, 2, 3, 4, 5, 6],
-    },
-  },
-  {
-    id: 'store-maqha-albon',
-    name: 'مقهى البن',
-    merchantId: 'merchant-maqha',
-    phone: '+966500001003',
-    cityOrVillage: 'قرية الروضة',
-    address: 'شارع النخيل - ساحة الاحتفالات',
-    status: 'ACTIVE',
-    isApproved: true,
-    isPro: false,
-    planName: 'الباقة المجانية',
-    category: 'مقاهي ومشروبات',
-    rating: 4.7,
-    ratingCount: 35,
-    itemsCount: 6,
-    joinedAt: '2026-02-01',
-    coverPhoto: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=600&auto=format&fit=crop&q=80',
-    logo: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=200&auto=format&fit=crop&q=80',
-    promoTag: 'توصيل سريع',
-    workingHours: {
-      isOpen24Hours: false,
-      openTime: '06:30',
-      closeTime: '00:00',
-      autoCloseForPrayer: true,
-      workingDays: [0, 1, 2, 3, 4, 5, 6],
-    },
-  },
-  {
-    id: 'store-aswaq-alqarya',
-    name: 'أسواق القرية',
-    merchantId: 'merchant-aswaq',
-    phone: '+966500001004',
-    cityOrVillage: 'قرية السلام',
-    address: 'المدخل الشرقي - مقابل المركز الصحي',
-    status: 'ACTIVE',
-    isApproved: true,
-    isPro: true,
-    planName: 'باقة المتاجر المعتمدة',
-    category: 'سوبرماركت وخضار',
-    rating: 4.8,
-    ratingCount: 64,
-    itemsCount: 8,
-    joinedAt: '2026-01-20',
-    coverPhoto: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=600&auto=format&fit=crop&q=80',
-    logo: 'https://images.unsplash.com/photo-1583258292688-d0213dc5a3a8?w=200&auto=format&fit=crop&q=80',
-    promoTag: 'عروض يومية',
-    workingHours: {
-      isOpen24Hours: true,
-      openTime: '00:00',
-      closeTime: '23:59',
-      autoCloseForPrayer: true,
-      workingDays: [0, 1, 2, 3, 4, 5, 6],
-    },
-  },
-  {
-    id: 'store-shifa-pharmacy',
-    name: 'صيدلية الشفاء',
-    merchantId: 'merchant-shifa',
-    phone: '+966500001005',
-    cityOrVillage: 'قرية الفلاح',
-    address: 'ميدان البلدية - بجانب المستوصف',
-    status: 'ACTIVE',
-    isApproved: true,
-    isPro: true,
-    planName: 'باقة المتاجر المعتمدة',
-    category: 'صيدليات وأدوية',
-    rating: 5.0,
-    ratingCount: 29,
-    itemsCount: 5,
-    joinedAt: '2026-02-10',
-    coverPhoto: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=600&auto=format&fit=crop&q=80',
-    logo: 'https://images.unsplash.com/photo-1631549916768-4119b2e5f926?w=200&auto=format&fit=crop&q=80',
-    promoTag: 'خدمة 24/7',
-    workingHours: {
-      isOpen24Hours: true,
-      openTime: '00:00',
-      closeTime: '23:59',
-      autoCloseForPrayer: false,
-      workingDays: [0, 1, 2, 3, 4, 5, 6],
-    },
-  },
-  {
-    id: 'store-baraka-bakery',
-    name: 'مخبز البركة',
-    merchantId: 'merchant-baraka',
-    phone: '+966500001006',
-    cityOrVillage: 'قرية النور',
-    address: 'شارع السوق القديم',
-    status: 'ACTIVE',
-    isApproved: true,
-    isPro: false,
-    planName: 'الباقة المجانية',
-    category: 'مخابز وحلويات',
-    rating: 4.9,
-    ratingCount: 52,
-    itemsCount: 6,
-    joinedAt: '2026-02-15',
-    coverPhoto: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600&auto=format&fit=crop&q=80',
-    logo: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=200&auto=format&fit=crop&q=80',
-    promoTag: 'طازج يومياً',
-    workingHours: {
-      isOpen24Hours: false,
-      openTime: '05:30',
-      closeTime: '23:00',
-      autoCloseForPrayer: true,
-      workingDays: [0, 1, 2, 3, 4, 5, 6],
-    },
-  },
-  {
-    id: 'store-haqali-grocery',
-    name: 'تموينات الحقالي',
-    merchantId: 'merchant-haqali',
-    phone: '+966500001007',
-    cityOrVillage: 'قرية الحقالي',
-    address: 'الشارع العام - مفرق الوادي',
-    status: 'ACTIVE',
-    isApproved: true,
-    isPro: true,
-    planName: 'باقة المتاجر المعتمدة',
-    category: 'بقالة وتموينات',
-    rating: 4.8,
-    ratingCount: 38,
-    itemsCount: 7,
-    joinedAt: '2026-02-18',
-    coverPhoto: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=600&auto=format&fit=crop&q=80',
-    logo: 'https://images.unsplash.com/photo-1583258292688-d0213dc5a3a8?w=200&auto=format&fit=crop&q=80',
-    promoTag: 'توصيل سريع',
-    workingHours: {
-      isOpen24Hours: false,
-      openTime: '06:00',
-      closeTime: '23:30',
-      autoCloseForPrayer: true,
-      workingDays: [0, 1, 2, 3, 4, 5, 6],
-    },
-  },
-  {
-    id: 'store-masilah-kitchen',
-    name: 'مطعم ومطبخ السد',
-    merchantId: 'merchant-masilah',
-    phone: '+966500001008',
-    cityOrVillage: 'قرية المسيلة',
-    address: 'طريق السد المائي',
-    status: 'ACTIVE',
-    isApproved: true,
-    isPro: true,
-    planName: 'باقة المتاجر المعتمدة',
-    category: 'مطاعم ومأكولات',
-    rating: 4.9,
-    ratingCount: 46,
-    itemsCount: 5,
-    joinedAt: '2026-02-20',
-    coverPhoto: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
-    logo: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=200&auto=format&fit=crop&q=80',
-    promoTag: 'وجبات طازجة',
-    workingHours: {
-      isOpen24Hours: false,
-      openTime: '11:30',
-      closeTime: '00:00',
-      autoCloseForPrayer: true,
-      workingDays: [0, 1, 2, 3, 4, 5, 6],
-    },
-  },
-  {
-    id: 'store-rawdah-pharma',
-    name: 'صيدلية الروضة المركزية',
-    merchantId: 'merchant-rawdah-pharma',
-    phone: '+966500001009',
-    cityOrVillage: 'قرية الروضة',
-    address: 'الشارع العام - بجوار المركز الصحي',
-    status: 'ACTIVE',
-    isApproved: true,
-    isPro: true,
-    planName: 'باقة المتاجر المعتمدة',
-    category: 'صيدليات وأدوية',
-    rating: 5.0,
-    ratingCount: 31,
-    itemsCount: 5,
-    joinedAt: '2026-02-22',
-    coverPhoto: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=600&auto=format&fit=crop&q=80',
-    logo: 'https://images.unsplash.com/photo-1631549916768-4119b2e5f926?w=200&auto=format&fit=crop&q=80',
-    promoTag: 'خدمة 24/7 • توصيل مجاني',
-    freeDelivery: true,
-    workingHours: {
-      isOpen24Hours: true,
-      openTime: '00:00',
-      closeTime: '23:59',
-      autoCloseForPrayer: false,
-      workingDays: [0, 1, 2, 3, 4, 5, 6],
-    },
-  },
-  {
-    id: 'store-barka-supermarket',
-    name: 'سوبرماركت الباركة',
-    merchantId: 'merchant-barka-super',
-    phone: '+966500001010',
-    cityOrVillage: 'قرية الباركة',
-    address: 'تقاطع مزارع الباركة',
-    status: 'ACTIVE',
-    isApproved: true,
-    isPro: false,
-    planName: 'الباقة المجانية',
-    category: 'بقالة وتموينات',
-    rating: 4.7,
-    ratingCount: 28,
-    itemsCount: 6,
-    joinedAt: '2026-02-25',
-    coverPhoto: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=600&auto=format&fit=crop&q=80',
-    logo: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=200&auto=format&fit=crop&q=80',
-    promoTag: 'عروض أسبوعية',
-    workingHours: {
-      isOpen24Hours: false,
-      openTime: '06:00',
-      closeTime: '23:00',
-      autoCloseForPrayer: true,
-      workingDays: [0, 1, 2, 3, 4, 5, 6],
-    },
-  },
-];
-
+const DB_RESET_FLAG_KEY = 'qaryati_clean_slate_reset_v10';
+// Clean initial stores - empty by default (no demo stores preloaded)
+const INITIAL_STORES: StoreDirectoryRecord[] = [];
 // Clean initial delivery orders - empty by default
 const INITIAL_ORDERS: DeliveryOrder[] = [];
 
@@ -301,48 +26,12 @@ export function purgeDemoDatabaseIfNeeded() {
     const isPurged = localStorage.getItem(DB_RESET_FLAG_KEY);
     if (!isPurged) {
       // Clean legacy mock stores from storage
-      const rawStores = localStorage.getItem(STORES_DIRECTORY_KEY);
-      if (rawStores) {
-        try {
-          const stores: StoreDirectoryRecord[] = JSON.parse(rawStores);
-          const filteredStores = stores.filter(
-            (s) =>
-              !s.name.includes('عنوان القهوة') &&
-              !s.name.includes('تموينات الأمل') &&
-              !s.name.includes('متجر تجريبي') &&
-              s.id !== 'store-1' &&
-              s.id !== 'store-2' &&
-              s.id !== 'store-3' &&
-              s.id !== 'store-4' &&
-              s.id !== 'store-5' &&
-              s.id !== 'merchant-default-1'
-          );
-          localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify(filteredStores));
-        } catch {
-          localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify([]));
-        }
-      }
-
-      // Clean legacy mock merchants
-      const rawMerchants = localStorage.getItem('flowapp_rbac_merchants_v1');
-      if (rawMerchants) {
-        try {
-          const merchants = JSON.parse(rawMerchants);
-          const filtered = Array.isArray(merchants)
-            ? merchants.filter(
-                (m: any) =>
-                  m.id !== 'merchant-default-1' &&
-                  !m.storeName?.includes('تموينات الأمل') &&
-                  !m.storeName?.includes('عنوان القهوة') &&
-                  !m.storeName?.includes('متجر تجريبي')
-              )
-            : [];
-          localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify(filtered));
-        } catch {
-          localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify([]));
-        }
-      }
-
+      localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify([]));
+      localStorage.setItem('village_stores_directory', JSON.stringify([]));
+      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify([]));
+      localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify([]));
+      localStorage.setItem('flowapp_rbac_drivers_v1', JSON.stringify([]));
+      localStorage.setItem('flowapp_rbac_customers_v1', JSON.stringify([]));
       localStorage.setItem(DB_RESET_FLAG_KEY, 'true');
     }
   } catch (e) {
@@ -765,6 +454,67 @@ export function toggleStoreProStatus(storeId: string): StoreDirectoryRecord | nu
   saveStoresDirectory(stores);
   syncSaveStore(updated).catch(console.warn);
   return updated;
+}
+
+export function updateStoreDirectoryRecord(
+  storeId: string,
+  updates: Partial<StoreDirectoryRecord>
+): StoreDirectoryRecord | null {
+  const stores = getStoresDirectory();
+  const idx = stores.findIndex((s) => s.id === storeId);
+  if (idx === -1) return null;
+  const target = stores[idx];
+  const updated: StoreDirectoryRecord = {
+    ...target,
+    ...updates,
+    id: target.id,
+  };
+  stores[idx] = updated;
+  saveStoresDirectory(stores);
+  syncSaveStore(updated).catch(console.warn);
+  return updated;
+}
+
+export function toggleStoreApproval(storeId: string, approve?: boolean): StoreDirectoryRecord | null {
+  const stores = getStoresDirectory();
+  const idx = stores.findIndex((s) => s.id === storeId);
+  if (idx === -1) return null;
+  const target = stores[idx];
+  const nextApprove = approve !== undefined ? approve : !(target as any).isApproved;
+  const updated: StoreDirectoryRecord = {
+    ...target,
+    isApproved: nextApprove,
+    status: nextApprove ? 'ACTIVE' : 'PENDING',
+  };
+  stores[idx] = updated;
+  saveStoresDirectory(stores);
+  syncSaveStore(updated).catch(console.warn);
+  return updated;
+}
+
+export function toggleStoreSuspension(storeId: string, suspend?: boolean, reason?: string): StoreDirectoryRecord | null {
+  const stores = getStoresDirectory();
+  const idx = stores.findIndex((s) => s.id === storeId);
+  if (idx === -1) return null;
+  const target = stores[idx];
+  const nextSuspend = suspend !== undefined ? suspend : target.status !== 'SUSPENDED';
+  const updated: StoreDirectoryRecord = {
+    ...target,
+    status: nextSuspend ? 'SUSPENDED' : 'ACTIVE',
+    suspendReason: nextSuspend ? (reason || 'تم إيقاف المتجر بقرار من المطور/المالك') : undefined,
+  };
+  stores[idx] = updated;
+  saveStoresDirectory(stores);
+  syncSaveStore(updated).catch(console.warn);
+  return updated;
+}
+
+export function clearAllStoresDirectory(): void {
+  try {
+    localStorage.setItem(STORES_DIRECTORY_KEY, JSON.stringify([]));
+    localStorage.setItem('village_stores_directory', JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: [] }));
+  } catch {}
 }
 
 /**

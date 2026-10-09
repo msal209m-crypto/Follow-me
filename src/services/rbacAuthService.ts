@@ -1691,6 +1691,69 @@ export function toggleDriverStatus(id: string, isApproved: boolean): void {
   }
 }
 
+export function updateMerchantAccountRecord(id: string, updates: Partial<MerchantAccountRecord>): MerchantAccountRecord | null {
+  try {
+    const list = getMerchants();
+    const idx = list.findIndex((m) => m.id === id);
+    if (idx === -1) return null;
+    const updated = { ...list[idx], ...updates, updatedAt: new Date().toISOString() };
+    list[idx] = updated;
+    localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify(list));
+    localStorage.setItem('village_merchants_accounts', JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
+    syncSaveMerchant(updated).catch(console.warn);
+    return updated;
+  } catch (e) {
+    console.warn('Failed to update merchant record:', e);
+    return null;
+  }
+}
+
+export function updateDriverAccountRecord(id: string, updates: Partial<DriverProfile>): DriverProfile | null {
+  try {
+    const list = getDrivers();
+    const idx = list.findIndex((d) => d.id === id);
+    if (idx === -1) return null;
+    const updated = { ...list[idx], ...updates };
+    list[idx] = updated;
+    localStorage.setItem('qaryati_drivers', JSON.stringify(list));
+    localStorage.setItem('village_drivers_accounts', JSON.stringify(list));
+    localStorage.setItem('flowapp_rbac_drivers_v1', JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('qaryati:drivers-updated'));
+    syncSaveDriver(updated).catch(console.warn);
+    return updated;
+  } catch (e) {
+    console.warn('Failed to update driver record:', e);
+    return null;
+  }
+}
+
+export function clearAllMerchantsLocal(): void {
+  try {
+    localStorage.setItem('flowapp_rbac_merchants_v1', JSON.stringify([]));
+    localStorage.setItem('village_merchants_accounts', JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent('qaryati:merchants-updated'));
+  } catch {}
+}
+
+export function clearAllDriversLocal(): void {
+  try {
+    localStorage.setItem('qaryati_drivers', JSON.stringify([]));
+    localStorage.setItem('village_drivers_accounts', JSON.stringify([]));
+    localStorage.setItem('flowapp_rbac_drivers_v1', JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent('qaryati:drivers-updated'));
+  } catch {}
+}
+
+export function clearAllCustomersLocal(): void {
+  try {
+    localStorage.setItem('flowapp_rbac_customers_v1', JSON.stringify([]));
+    localStorage.setItem('flowapp_v4_local_users', JSON.stringify([]));
+    localStorage.setItem('qaryati_customers', JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent('qaryati:customers-updated'));
+  } catch {}
+}
+
 // ----------------------------------------------------
 // KYC Validation & Anti-Spam Blocking System
 // ----------------------------------------------------

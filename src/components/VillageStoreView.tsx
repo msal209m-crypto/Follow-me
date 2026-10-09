@@ -89,10 +89,11 @@ import { subscribeToVillageStores, fetchAllStores } from '../services/crossDevic
 import { AdhanTopBarWidget } from './AdhanTopBarWidget';
 import { StorePrayerClosedBanner } from './StorePrayerClosedBanner';
 import { AdBannerWidget } from './AdBannerWidget';
+import { StoreAdsBanner } from './StoreAdsBanner';
 import { getStoreLiveStatus } from '../utils/storeWorkingHours';
 import { OrderDeliveryMiniMap } from './OrderDeliveryMiniMap';
 import { VillageMapPickerModal } from './VillageMapPickerModal';
-import { googleReverseGeocode } from '../services/googleMapsService';
+import { googleReverseGeocode, calculateDistanceKm, formatDistanceDisplay } from '../services/googleMapsService';
 
 interface VillageStoreViewProps {
   items: Item[];
@@ -239,8 +240,11 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   const [allStores, setAllStores] = useState<StoreDirectoryRecord[]>(() =>
     getStoresDirectory().filter((s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false)
   );
-  // Default to ALL so all stores show by default, or user-selected village/location
-  const [selectedVillage, setSelectedVillage] = useState<string>('ALL');
+  // Location mode: 'NEARBY' (المتاجر القريبة حسب موقع المستخدم) or 'ALL' (جميع المتاجر)
+  const [locationFilterMode, setLocationFilterMode] = useState<'NEARBY' | 'ALL'>('NEARBY');
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [maxDistanceKm, setMaxDistanceKm] = useState<number>(0); // 0 = جميع المسافات (مرتبة بالأقرب)
+  const [selectedVillage, setSelectedVillage] = useState<string>('موقعك الحالي');
   const [selectedStoreId, setSelectedStoreId] = useState<string>('default');
   const [visitedAdNotice, setVisitedAdNotice] = useState<{ storeName: string; village: string } | null>(null);
 
@@ -435,7 +439,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     return list;
   }, [allStores]);
 
-  // GPS Auto-detect handler
+  // GPS Auto-detect handler (الموقع هو الذي يحدد المتاجر القريبة)
   const handleDetectGPSLocation = () => {
     if (!navigator.geolocation) {
       setLocationToast('خاصية تحديد الموقع الجغرافي غير مدعومة في متصفحك.');
@@ -448,34 +452,21 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
+        setUserCoords({ lat: latitude, lng: longitude });
+        setLocationFilterMode('NEARBY');
+
         try {
           const detectedPlace = await googleReverseGeocode(latitude, longitude);
-          if (detectedPlace && detectedPlace.trim()) {
-            const clean = detectedPlace.trim();
-            // Check if matches or contains any known store village
-            const matched = villageList.find(
-              (v) =>
-                v.toLowerCase().includes(clean.toLowerCase()) ||
-                clean.toLowerCase().includes(v.toLowerCase())
-            );
-            const finalLocation = matched || clean;
-            setSelectedVillage(finalLocation);
-            setSelectedStoreId('default');
-            setIsLocationSelectorModalOpen(false);
-            setLocationToast(`📍 تم تحديد موقعك: "${finalLocation}" • تظهر البقالات والمتاجر القريبة منك فقط`);
-          } else {
-            const fallback = villageList[0] || 'الموقع الحالي';
-            setSelectedVillage(fallback);
-            setSelectedStoreId('default');
-            setIsLocationSelectorModalOpen(false);
-            setLocationToast(`📍 تم تحديد موقعك بالقرب من: "${fallback}" • تظهر المتاجر القريبة`);
-          }
-        } catch (e) {
-          const fallback = villageList[0] || 'الموقع الحالي';
-          setSelectedVillage(fallback);
+          const finalLocation = (detectedPlace && detectedPlace.trim()) ? detectedPlace.trim() : 'موقعك الحالي (GPS)';
+          setSelectedVillage(finalLocation);
           setSelectedStoreId('default');
           setIsLocationSelectorModalOpen(false);
-          setLocationToast(`📍 تم تحديد موقعك بالقرب من: "${fallback}"`);
+          setLocationToast(`📍 تم تحديد موقعك: "${finalLocation}" • تظهر المتاجر الأقرب لموقعك`);
+        } catch {
+          setSelectedVillage('موقعك الحالي (GPS)');
+          setSelectedStoreId('default');
+          setIsLocationSelectorModalOpen(false);
+          setLocationToast('📍 تم تحديد موقعك • تظهر المتاجر الأقرب لموقعك');
         } finally {
           setIsLocatingGPS(false);
           setTimeout(() => setLocationToast(null), 5000);
@@ -483,7 +474,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
       },
       (err) => {
         setIsLocatingGPS(false);
-        setLocationToast('تعذر الوصول للـ GPS (يرجى تفعيل إذن الموقع أو اختيار منطقتك يدوياً).');
+        setLocationToast('تعذر قراءة الـ GPS (يرجى السماح بالوصول للموقع، أو اختيار "جميع المتاجر").');
         setTimeout(() => setLocationToast(null), 5000);
       },
       { timeout: 10000, enableHighAccuracy: true }
@@ -495,35 +486,70 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
     setSelectedStoreId('default');
     setIsLocationSelectorModalOpen(false);
     if (villageName === 'ALL') {
-      setLocationToast('🌐 تم تفعيل عرض جميع المتاجر من كافة القرى والمناطق');
+      setLocationFilterMode('ALL');
+      setLocationToast('🌐 تم تفعيل عرض جميع المتاجر من كافة المناطق');
     } else {
-      setLocationToast(`📍 تم تفعيل تصفية المتاجر القريبة في: "${villageName}"`);
+      setLocationFilterMode('NEARBY');
+      setLocationToast(`📍 تم تفعيل تصفية المتاجر في: "${villageName}"`);
     }
     setTimeout(() => setLocationToast(null), 4000);
   };
 
   const handleShowAllStores = () => {
+    setLocationFilterMode('ALL');
     setSelectedVillage('ALL');
     setSelectedStoreId('default');
     setIsLocationSelectorModalOpen(false);
-    setLocationToast('🌐 تم عرض جميع المتاجر من كافة القرى والمناطق');
+    setLocationToast('🌐 تم عرض جميع المتاجر من كافة المناطق');
     setTimeout(() => setLocationToast(null), 4000);
   };
 
-  // Stores available in the selected village and filtered by top search and circular categories
+  // Stores available filtered by GPS location / nearby or all stores, plus search & categories
   const availableStores = useMemo(() => {
     const approvedStores = allStores.filter(
       (s) => s.status !== 'SUSPENDED' && (s as any).isApproved !== false
     );
-    let result = approvedStores;
-    if (selectedVillage !== 'ALL') {
-      result = result.filter((s) => {
-        const vill = (s.cityOrVillage || (s as any).village || '').trim();
-        const target = selectedVillage.trim();
-        return vill === target || vill.includes(target) || target.includes(vill);
-      });
+
+    // Calculate distance for each store if user coordinates are known
+    let result = approvedStores.map((st) => {
+      let distanceKm: number | undefined = undefined;
+      if (userCoords && st.lat !== undefined && st.lng !== undefined) {
+        distanceKm = calculateDistanceKm(userCoords.lat, userCoords.lng, st.lat, st.lng);
+      }
+      return {
+        ...st,
+        distanceKm,
+      };
+    });
+
+    // 1. Location Filtering & Proximity Sorting
+    if (locationFilterMode === 'NEARBY') {
+      if (userCoords) {
+        // If max distance radius is active (> 0)
+        if (maxDistanceKm > 0) {
+          result = result.filter(
+            (s) => s.distanceKm === undefined || s.distanceKm <= maxDistanceKm
+          );
+        }
+        // Sort closest first
+        result.sort((a, b) => {
+          if (a.distanceKm !== undefined && b.distanceKm !== undefined) {
+            return a.distanceKm - b.distanceKm;
+          }
+          if (a.distanceKm !== undefined) return -1;
+          if (b.distanceKm !== undefined) return 1;
+          return 0;
+        });
+      } else if (selectedVillage !== 'ALL' && selectedVillage !== 'موقعك الحالي') {
+        const target = selectedVillage.trim().toLowerCase();
+        result = result.filter((s) => {
+          const vill = (s.cityOrVillage || (s as any).village || s.address || '').toLowerCase();
+          return vill.includes(target) || target.includes(vill);
+        });
+      }
     }
-    // Filter by circular category if selected
+
+    // 2. Filter by circular category if selected
     if (selectedCategory && selectedCategory !== 'ALL') {
       const cat = selectedCategory.toLowerCase();
       result = result.filter((s) => {
@@ -553,7 +579,8 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
         return storeCat.includes(cat);
       });
     }
-    // Filter by top search query
+
+    // 3. Filter by top search query
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter(
@@ -564,8 +591,9 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
           ((s as any).category && (s as any).category.toLowerCase().includes(q))
       );
     }
+
     return result;
-  }, [allStores, selectedVillage, searchQuery, selectedCategory]);
+  }, [allStores, locationFilterMode, userCoords, maxDistanceKm, selectedVillage, searchQuery, selectedCategory]);
 
   // Currently active selected store target with merchant settings
   const activeSelectedStore = useMemo(() => {
@@ -1355,53 +1383,85 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
       {/* Main Container */}
       <main className="flex-1 max-w-6xl mx-auto w-full px-3 sm:px-6 py-4 pb-28 flex flex-col gap-5">
+        {/* Promotional Ads & Offers Banner */}
+        <StoreAdsBanner currentVillage={selectedVillage} isRTL={isRTL} />
+
         {/* Prayer Time Closed Banner (if active) */}
         <StorePrayerClosedBanner isRTL={isRTL} />
 
         {/* ================================================================= */}
-        {/* VILLAGES & STORES DIRECTORY (عرض المتاجر والقرى - تظهر عند عدم اختيار متجر) */}
+        {/* VILLAGES & STORES DIRECTORY (الموقع هو الذي يحدد المتاجر القريبة أو جميع المتاجر) */}
         {/* ================================================================= */}
         {selectedStoreId === 'default' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 pb-3 flex-wrap">
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scrollbar-none py-1">
+                {/* Mode 1: المتاجر القريبة حسب موقع المستخدم */}
                 <button
                   type="button"
-                  onClick={handleShowAllStores}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer border ${
-                    selectedVillage === 'ALL'
-                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow-sm'
+                  onClick={() => {
+                    setLocationFilterMode('NEARBY');
+                    if (!userCoords) {
+                      handleDetectGPSLocation();
+                    } else {
+                      setLocationToast('📍 تظهر المتاجر القريبة من موقعك مرتبة بالأقرب');
+                    }
+                  }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black transition-all shrink-0 cursor-pointer border shadow-sm ${
+                    locationFilterMode === 'NEARBY'
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-emerald-500/20'
                       : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
                   }`}
                 >
+                  <LocateFixed className={`w-3.5 h-3.5 ${isLocatingGPS ? 'animate-spin' : ''}`} />
+                  <span>المتاجر القريبة مني (حسب موقعك)</span>
+                  {userCoords && (
+                    <span className="w-2 h-2 rounded-full bg-slate-950 shrink-0" />
+                  )}
+                </button>
+
+                {/* Mode 2: جميع المتاجر */}
+                <button
+                  type="button"
+                  onClick={handleShowAllStores}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-black transition-all shrink-0 cursor-pointer border shadow-sm ${
+                    locationFilterMode === 'ALL'
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-emerald-500/20'
+                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
                   <span>جميع المتاجر (الكل)</span>
                   <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">
                     {allStores.length}
                   </span>
                 </button>
 
-                {villageList.map((vil) => {
-                  const isSelected = selectedVillage === vil;
-                  const storeCount = allStores.filter((s) => s.cityOrVillage === vil || s.cityOrVillage?.includes(vil)).length;
-                  return (
-                    <button
-                      key={vil}
-                      type="button"
-                      onClick={() => handleSelectVillage(vil)}
-                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer border ${
-                        isSelected
-                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-black shadow-sm'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
-                      }`}
-                    >
-                      <div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-slate-950' : 'bg-emerald-400'}`} />
-                      <span>{vil}</span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
-                        {storeCount}
-                      </span>
-                    </button>
-                  );
-                })}
+                {/* Distance Radius Filter (Only in NEARBY mode when GPS detected) */}
+                {locationFilterMode === 'NEARBY' && userCoords && (
+                  <div className="flex items-center gap-1 mr-2">
+                    <span className="text-[11px] text-slate-400 font-bold shrink-0">النطاق:</span>
+                    {[
+                      { label: 'الأقرب', val: 0 },
+                      { label: '5 كم', val: 5 },
+                      { label: '10 كم', val: 10 },
+                      { label: '25 كم', val: 25 },
+                    ].map((radius) => (
+                      <button
+                        key={radius.val}
+                        type="button"
+                        onClick={() => setMaxDistanceKm(radius.val)}
+                        className={`px-2.5 py-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer border ${
+                          maxDistanceKm === radius.val
+                            ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {radius.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="text-xs text-slate-400 hidden sm:flex items-center gap-1.5 shrink-0 font-medium">
@@ -1416,16 +1476,20 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                 <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                   <Store className="w-5 h-5 text-emerald-400" />
                   <span>
-                    {selectedVillage !== 'ALL' ? `المتاجر القريبة في ${selectedVillage}` : 'جميع المتاجر والخدمات المتاحة'}
+                    {locationFilterMode === 'NEARBY'
+                      ? (userCoords
+                          ? `المتاجر القريبة من موقعك (${selectedVillage !== 'ALL' ? selectedVillage : 'الموقع الحالي'})`
+                          : 'المتاجر القريبة حسب الموقع')
+                      : 'جميع المتاجر والخدمات المتاحة'}
                   </span>
                 </h3>
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   {availableStores.length} متجر
                 </span>
-                {selectedVillage !== 'ALL' && (
+                {locationFilterMode === 'NEARBY' && (
                   <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
                     <MapPin className="w-3 h-3" />
-                    <span>نطاق موقعك المحدد</span>
+                    <span>{userCoords ? 'فرز حسب الأقرب لموقعك أولاً' : 'تحديد الموقع بالـ GPS'}</span>
                   </span>
                 )}
                 {selectedCategory !== 'ALL' && (
@@ -1436,7 +1500,17 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                {selectedVillage !== 'ALL' ? (
+                {locationFilterMode === 'NEARBY' && !userCoords ? (
+                  <button
+                    type="button"
+                    onClick={handleDetectGPSLocation}
+                    disabled={isLocatingGPS}
+                    className="text-xs font-bold text-amber-400 hover:text-amber-300 hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    <LocateFixed className="w-3.5 h-3.5" />
+                    <span>تحديد موقعي الآن 📍</span>
+                  </button>
+                ) : locationFilterMode === 'NEARBY' ? (
                   <button
                     type="button"
                     onClick={handleShowAllStores}
@@ -1444,51 +1518,27 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                   >
                     <span>عرض كافة المتاجر ({allStores.length}) ←</span>
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleDetectGPSLocation}
-                    className="text-xs font-bold text-amber-400 hover:text-amber-300 hover:underline cursor-pointer flex items-center gap-1"
-                  >
-                    <LocateFixed className="w-3.5 h-3.5" />
-                    <span>تحديد موقعي لعرض الأقرب</span>
-                  </button>
-                )}
+                ) : null}
               </div>
             </div>
 
-            {/* Stores Grid or Empty State */}
+            {/* Stores Grid or Clean Empty State */}
             {availableStores.length === 0 ? (
-              <div className="p-8 text-center bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl space-y-3">
-                <Store className="w-12 h-12 text-slate-600 mx-auto" />
-                <div>
-                  <p className="text-base font-black text-white">
-                    {selectedCategory !== 'ALL'
-                      ? `لا توجد متاجر أو شركاء مسجلين في قسم (${selectedCategory}) ${selectedVillage !== 'ALL' ? `في ${selectedVillage}` : ''}`
-                      : selectedVillage === 'ALL'
-                      ? 'لا توجد متاجر مطابقة لبحثك حالياً'
-                      : `لا توجد متاجر مسجلة في ${selectedVillage} حتى الآن`}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    يمكنك استعراض كافة المتاجر من جميع القرى والمناطق، أو تسجيل متجر كشريك معتمد
+              <div className="p-8 sm:p-12 text-center bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto text-emerald-400">
+                  <Store className="w-8 h-8" />
+                </div>
+                <div className="max-w-lg mx-auto">
+                  <h4 className="text-base sm:text-lg font-black text-white">
+                    {locationFilterMode === 'NEARBY'
+                      ? 'لا توجد متاجر مسجلة قريبة من موقعك حالياً'
+                      : 'لا توجد متاجر مسجلة في المنصة حالياً'}
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                    تمت تهيئة وفرمتة التطبيق بنجاح. التطبيق جديد كلياً ونظيف من أي بيانات تجريبية أو وهمية. بإمكان التجار وأصحاب المحلات والأنشطة تسجيل محلاتهم ومواقعهم الآن لتظهر تلقائياً للعملاء القريبين حسب الموقع الجغرافي.
                   </p>
                 </div>
-                <div className="flex items-center justify-center gap-2 pt-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={handleShowAllStores}
-                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-md active:scale-95"
-                  >
-                    <span>عرض جميع المتاجر المتاحة ({allStores.length}) 🌐</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsLocationSelectorModalOpen(true)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 border border-slate-700 shadow-md active:scale-95"
-                  >
-                    <MapPin className="w-4 h-4 text-amber-400" />
-                    <span>تغيير الموقع / اختيار قرية أخرى</span>
-                  </button>
+                <div className="flex items-center justify-center gap-2.5 pt-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
@@ -1498,10 +1548,28 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                         onOpenMerchantPortal();
                       }
                     }}
-                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 border border-slate-700 shadow-xs active:scale-95"
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black transition-all cursor-pointer inline-flex items-center gap-2 shadow-lg shadow-emerald-950/40 active:scale-95"
                   >
-                    <Plus className="w-4 h-4 text-emerald-400" />
-                    <span>تسجيل متجر جديد</span>
+                    <Plus className="w-4 h-4" />
+                    <span>تسجيل متجر جديد الآن 🏪</span>
+                  </button>
+                  {locationFilterMode === 'NEARBY' && (
+                    <button
+                      type="button"
+                      onClick={handleShowAllStores}
+                      className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 border border-slate-700 shadow-sm active:scale-95"
+                    >
+                      <Layers className="w-4 h-4" />
+                      <span>عرض جميع المتاجر ({allStores.length}) 🌐</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleDetectGPSLocation}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 border border-amber-500/30 shadow-sm active:scale-95"
+                  >
+                    <LocateFixed className="w-4 h-4" />
+                    <span>تحديث موقعي (GPS) 📍</span>
                   </button>
                 </div>
               </div>
@@ -1622,6 +1690,17 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                           <div className="text-xs font-bold text-amber-400 flex items-center justify-center gap-1 mt-1 font-mono">
                             <span>⭐ {ratingVal.toFixed(1)}</span>
                             <span className="text-[10px] text-slate-500 font-normal">({ratingCount})</span>
+                          </div>
+
+                          {/* Location & Distance Badge (المسافة والموقع الجغرافي) */}
+                          <div className="mt-1.5 flex items-center justify-center gap-1 text-[10px] text-slate-400 font-medium w-full px-1">
+                            <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span className="truncate max-w-[100px]">{st.cityOrVillage || st.address || 'موقع مسجل'}</span>
+                            {st.distanceKm !== undefined && (
+                              <span className="font-bold text-amber-300 font-mono text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 shrink-0 mr-auto">
+                                {formatDistanceDisplay(st.distanceKm)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2791,19 +2870,26 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">القرية التابع لها (من القرى الثابتة) *</label>
-                <select
-                  value={custModalVillage || selectedVillage}
-                  onChange={(e) => setCustModalVillage(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-emerald-500"
-                >
-                  <option value="">اختر قريتك...</option>
-                  {villageList.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">الموقع / الحي / العنوان *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={custModalVillage || (selectedVillage !== 'ALL' && selectedVillage !== 'موقعك الحالي' ? selectedVillage : '')}
+                    onChange={(e) => setCustModalVillage(e.target.value)}
+                    placeholder="اكتب اسم الحي أو المدينة أو موقعك"
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-hidden focus:border-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDetectGPSLocation}
+                    className="px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                    title="تحديد الموقع الجغرافي عبر GPS"
+                  >
+                    <LocateFixed className="w-3.5 h-3.5" />
+                    <span>GPS</span>
+                  </button>
+                </div>
               </div>
 
               <div className="pt-3 border-t border-slate-800 grid grid-cols-2 gap-2">
@@ -2955,7 +3041,16 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
           <p>
             {settings.storeName || 'متجر قريتي'} © {new Date().getFullYear()} - منصة تصفح وطلب المنتجات
           </p>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={() => onOpenAuthModal ? onOpenAuthModal('DEVELOPER') : onOpenLanding()}
+              className="px-3 py-1.5 rounded-xl bg-purple-950/60 hover:bg-purple-900 border border-purple-700/50 text-purple-300 transition-all text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+              title="لوحة تحكم المطور الشاملة (تحكم كامل: المتاجر، التجار، السائقين، العملاء، الطلبات)"
+            >
+              <Code2 className="w-3.5 h-3.5 text-purple-400" />
+              <span>لوحة المطور الشاملة 🛡️</span>
+            </button>
             <button
               type="button"
               onClick={onOpenLanding}
@@ -2963,7 +3058,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               title="دخول التجار ومندوبي التوصيل وإدارة المتاجر"
             >
               <Store className="w-3.5 h-3.5 text-slate-500" />
-              <span>بوابة التجار ومناديب التوصيل 🔑</span>
+              <span>بوابة التجار والمناديب 🔑</span>
             </button>
           </div>
         </div>

@@ -980,7 +980,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
                 </label>
                 {activeHelp === 'address' && (
                   <div className="mb-1.5 p-2 rounded-lg bg-slate-950 border border-cyan-500/30 text-cyan-300 text-[10px] leading-relaxed">
-                    💡 <strong>العنوان / الموقع:</strong> الحي أو القرية التي يتواجد فيها محلّك ليعرف الزبائن نطاق توصيل وتوفر طلباتهم (مثال: حي الفصور بالقرية).
+                    💡 <strong>العنوان / الموقع:</strong> الحي أو المدينة أو الشارع الذي يتواجد فيه متجرك ليعرف الزبائن نطاق التوصيل الجغرافي (مثال: حي الروابي / شارع الملك فهد).
                   </div>
                 )}
                 <input

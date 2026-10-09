@@ -26,18 +26,7 @@ export interface QaryatiVillage {
   isActive: boolean;
 }
 
-export const FIXED_VILLAGES_LIST: QaryatiVillage[] = [
-  { id: 'vil-fasour', name: 'قرية الفصور', region: 'منطقة ميسان / بني مالك', isActive: true },
-  { id: 'vil-haqali', name: 'قرية الحقالي', region: 'منطقة ميسان / بني مالك', isActive: true },
-  { id: 'vil-barka', name: 'قرية الباركة', region: 'منطقة ميسان / بني مالك', isActive: true },
-  { id: 'vil-anhoom', name: 'قرية الانهوم', region: 'منطقة ميسان / بني مالك', isActive: true },
-  { id: 'vil-mushayjiba', name: 'قرية مشيجبه', region: 'منطقة ميسان / بني مالك', isActive: true },
-  { id: 'vil-jabari', name: 'سوق حول جباري', region: 'منطقة ميسان / بني مالك', isActive: true },
-  { id: 'vil-midad', name: 'قرية المداد', region: 'منطقة ميسان / بني مالك', isActive: true },
-  { id: 'vil-jami', name: 'قرية الجامع', region: 'منطقة ميسان / بني مالك', isActive: true },
-  { id: 'vil-masilah', name: 'قرية المسيلة', region: 'منطقة ميسان / بني مالك', isActive: true },
-  { id: 'vil-makil', name: 'قرية المكيل', region: 'منطقة ميسان / بني مالك', isActive: true },
-];
+export const FIXED_VILLAGES_LIST: QaryatiVillage[] = [];
 
 export interface SupabaseMerchantRecord {
   id: string;
@@ -916,4 +905,93 @@ export async function deleteCustomerRecord(customerId: string): Promise<boolean>
 
   window.dispatchEvent(new CustomEvent('qaryati:customer-deleted', { detail: { customerId } }));
   return true;
+}
+
+/**
+ * Developer action: updates full details for a customer record across local cache, Firestore, and Supabase.
+ */
+export async function updateCustomerRecord(
+  customerId: string,
+  updates: Partial<SupabaseCustomerRecord>
+): Promise<boolean> {
+  const localList = getCustomersLocalCache();
+  const idx = localList.findIndex((c) => c.id === customerId || c.phone === customerId);
+  if (idx !== -1) {
+    const updated = { ...localList[idx], ...updates };
+    localList[idx] = updated;
+    saveCustomersLocalCache(localList);
+  }
+
+  try {
+    const firestoreUpdates = {
+      ...(updates.name ? { name: updates.name } : {}),
+      ...(updates.phone ? { phone: updates.phone } : {}),
+      ...(updates.village_name ? { village: updates.village_name } : {}),
+      ...(updates.national_id ? { nationalId: updates.national_id } : {}),
+      ...(updates.status ? { status: updates.status, isApproved: updates.status === 'VERIFIED' } : {}),
+      updatedAt: new Date().toISOString(),
+    };
+    await setDoc(doc(db, 'customers', customerId), firestoreUpdates, { merge: true });
+  } catch (e) {
+    console.warn('Firestore update customer warning:', e);
+  }
+
+  try {
+    if (supabase) {
+      await (supabase as any)
+        .from('customers')
+        .update({
+          ...(updates.name ? { name: updates.name } : {}),
+          ...(updates.phone ? { phone: updates.phone } : {}),
+          ...(updates.village_name ? { village_name: updates.village_name } : {}),
+          ...(updates.national_id ? { national_id: updates.national_id } : {}),
+          ...(updates.status ? { status: updates.status, is_verified: updates.status === 'VERIFIED' } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', customerId);
+    }
+  } catch (err) {
+    console.warn('Supabase update customer warning:', err);
+  }
+
+  window.dispatchEvent(
+    new CustomEvent('qaryati:customer-status-updated', {
+      detail: { customerId, updates },
+    })
+  );
+  return true;
+}
+
+/**
+ * Developer action: purges all customer accounts from local cache, Firestore, and Supabase.
+ */
+export async function clearAllCustomersRemoteAndLocal(): Promise<boolean> {
+  try {
+    saveCustomersLocalCache([]);
+    localStorage.removeItem('flowapp_rbac_customers_v1');
+    localStorage.removeItem('qaryati_customers');
+    localStorage.removeItem('flowapp_v4_local_users');
+
+    try {
+      const snap = await getDocs(collection(db, 'customers'));
+      for (const d of snap.docs) {
+        await deleteDoc(doc(db, 'customers', d.id));
+      }
+    } catch (e) {
+      console.warn('Firestore clear customers warning:', e);
+    }
+
+    try {
+      if (supabase) {
+        await (supabase as any).from('customers').delete().neq('id', '___non_existent___');
+      }
+    } catch (err) {
+      console.warn('Supabase clear customers warning:', err);
+    }
+
+    window.dispatchEvent(new CustomEvent('qaryati:customers-updated', { detail: [] }));
+    return true;
+  } catch {
+    return false;
+  }
 }

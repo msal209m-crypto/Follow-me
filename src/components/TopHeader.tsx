@@ -1053,7 +1053,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             {settings.address && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-[11px] font-bold text-emerald-300">
                 <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
-                <span>القرية: {settings.address}</span>
+                <span>الموقع: {settings.address}</span>
               </span>
             )}
           </div>

@@ -12,31 +12,31 @@ interface DriverInteractiveMapProps {
 
 // 10 Villages with beautifully balanced coordinates on an 800x450 canvas
 const VILLAGE_COORDS: Record<string, { x: number; y: number; label: string; desc: string }> = {
-  'قرية الفصور': { x: 400, y: 220, label: 'قرية الفصور', desc: 'المركز الرئيسي والجامع الكبير' },
-  'قرية الحقالي': { x: 240, y: 130, label: 'قرية الحقالي', desc: 'شمال غرب الوادي العام' },
-  'قرية الباركة': { x: 570, y: 120, label: 'قرية الباركة', desc: 'منطقة المزارع الشرقية' },
-  'قرية الانهوم': { x: 190, y: 260, label: 'قرية الانهوم', desc: 'هضبة الانهوم الغربية' },
-  'قرية مشيجبه': { x: 620, y: 270, label: 'قرية مشيجبه', desc: 'مرتفعات مشيجبه المطلة' },
-  'سوق حول جباري': { x: 400, y: 70, label: 'سوق حول جباري', desc: 'منطقة المجمعات التجارية شمالاً' },
-  'قرية المداد': { x: 260, y: 360, label: 'قرية المداد', desc: 'جنوب غرب وادي المداد' },
-  'قرية الجامع': { x: 540, y: 350, label: 'قرية الجامع', desc: 'منطقة الجامع والمنازل الحديثة' },
-  'قرية المسيلة': { x: 400, y: 380, label: 'قرية المسيلة', desc: 'جنوباً بمحاذاة السد المائي' },
-  'قرية المكيل': { x: 120, y: 120, label: 'قرية المكيل', desc: 'المنطقة الشمالية الأبعد' },
+  'المنطقة المركزية': { x: 400, y: 220, label: 'المنطقة المركزية', desc: 'المركز الرئيسي ونقطة التوزيع' },
+  'المنطقة الشمالية': { x: 240, y: 130, label: 'المنطقة الشمالية', desc: 'القطاع الشمالي العام' },
+  'المنطقة الشرقية': { x: 570, y: 120, label: 'المنطقة الشرقية', desc: 'القطاع الشرقي' },
+  'المنطقة الغربية': { x: 190, y: 260, label: 'المنطقة الغربية', desc: 'القطاع الغربي' },
+  'مرتفعات المنطقة': { x: 620, y: 270, label: 'مرتفعات المنطقة', desc: 'المرتفعات المطلة' },
+  'سوق المنطقة التجاري': { x: 400, y: 70, label: 'سوق المنطقة التجاري', desc: 'منطقة المجمعات والأسواق' },
+  'القطاع الجنوبي الغربي': { x: 260, y: 360, label: 'القطاع الجنوبي الغربي', desc: 'جنوب غرب المنطقة' },
+  'المخطط السكني الحديث': { x: 540, y: 350, label: 'المخطط السكني الحديث', desc: 'المنازل والأحياء السكنية' },
+  'المنطقة الجنوبية': { x: 400, y: 380, label: 'المنطقة الجنوبية', desc: 'القطاع الجنوبي' },
+  'الضاحية الشمالية': { x: 120, y: 120, label: 'الضاحية الشمالية', desc: 'النطاق الخارجي' },
 };
 
-// Village road network
+// Road network
 const ROADS = [
-  { from: 'قرية الفصور', to: 'قرية الحقالي' },
-  { from: 'قرية الفصور', to: 'قرية الباركة' },
-  { from: 'قرية الفصور', to: 'قرية الانهوم' },
-  { from: 'قرية الفصور', to: 'قرية مشيجبه' },
-  { from: 'قرية الفصور', to: 'سوق حول جباري' },
-  { from: 'قرية الفصور', to: 'قرية المسيلة' },
-  { from: 'قرية الحقالي', to: 'قرية المكيل' },
-  { from: 'قرية الانهوم', to: 'قرية المداد' },
-  { from: 'قرية مشيجبه', to: 'قرية الجامع' },
-  { from: 'قرية المسيلة', to: 'قرية الجامع' },
-  { from: 'قرية المسيلة', to: 'قرية المداد' },
+  { from: 'المنطقة المركزية', to: 'المنطقة الشمالية' },
+  { from: 'المنطقة المركزية', to: 'المنطقة الشرقية' },
+  { from: 'المنطقة المركزية', to: 'المنطقة الغربية' },
+  { from: 'المنطقة المركزية', to: 'مرتفعات المنطقة' },
+  { from: 'المنطقة المركزية', to: 'سوق المنطقة التجاري' },
+  { from: 'المنطقة المركزية', to: 'المنطقة الجنوبية' },
+  { from: 'المنطقة الشمالية', to: 'الضاحية الشمالية' },
+  { from: 'المنطقة الغربية', to: 'القطاع الجنوبي الغربي' },
+  { from: 'مرتفعات المنطقة', to: 'المخطط السكني الحديث' },
+  { from: 'المنطقة الجنوبية', to: 'المخطط السكني الحديث' },
+  { from: 'المنطقة الجنوبية', to: 'القطاع الجنوبي الغربي' },
 ];
 
 export const DriverInteractiveMap: React.FC<DriverInteractiveMapProps> = ({
@@ -47,7 +47,7 @@ export const DriverInteractiveMap: React.FC<DriverInteractiveMapProps> = ({
   isRTL,
 }) => {
   // Driver simulated location state (starts at main village الفصور)
-  const [driverPos, setDriverPos] = useState({ x: 400, y: 220, village: 'قرية الفصور' });
+  const [driverPos, setDriverPos] = useState({ x: 400, y: 220, village: 'المنطقة المركزية' });
   const [selectedVillage, setSelectedVillage] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<DeliveryOrder | null>(null);
   const [mapAlert, setMapAlert] = useState<string | null>(null);
@@ -121,7 +121,7 @@ export const DriverInteractiveMap: React.FC<DriverInteractiveMapProps> = ({
     const viewY = clickY * scaleY;
 
     // Find closest village
-    let closestVillage = 'قرية الفصور';
+    let closestVillage = 'المنطقة المركزية';
     let minDist = Infinity;
     Object.entries(VILLAGE_COORDS).forEach(([vName, coord]) => {
       const d = Math.sqrt((coord.x - viewX) ** 2 + (coord.y - viewY) ** 2);
@@ -154,8 +154,8 @@ export const DriverInteractiveMap: React.FC<DriverInteractiveMapProps> = ({
     const destCoord = VILLAGE_COORDS[destVillage];
     if (!destCoord) return null;
 
-    // Store is always at Central Village (قرية الفصور)
-    const storeCoord = VILLAGE_COORDS['قرية الفصور'];
+    // Store is always at Central Village (المنطقة المركزية)
+    const storeCoord = VILLAGE_COORDS['المنطقة المركزية'];
 
     // Driver to Store
     const distToStore = calculateDistance(driverPos.x, driverPos.y, storeCoord.x, storeCoord.y);
@@ -214,7 +214,7 @@ export const DriverInteractiveMap: React.FC<DriverInteractiveMapProps> = ({
             <div className="font-bold border-b border-slate-800 pb-1 mb-1 text-white">مفتاح الخريطة:</div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-cyan-400 block" />
-              <span>قرية الفصور (مركز استلام البضائع)</span>
+              <span>المنطقة المركزية (مركز استلام البضائع)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse block" />
@@ -338,7 +338,7 @@ export const DriverInteractiveMap: React.FC<DriverInteractiveMapProps> = ({
               const activeCount = (activeByVillage[vName] || []).length;
               
               const isSelected = selectedVillage === vName;
-              const isCenter = vName === 'قرية الفصور';
+              const isCenter = vName === 'المنطقة المركزية';
 
               let nodeColor = 'fill-slate-800 stroke-slate-700';
               if (isCenter) {

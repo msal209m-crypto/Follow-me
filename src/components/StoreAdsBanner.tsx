@@ -15,44 +15,28 @@ export const StoreAdsBanner: React.FC<StoreAdsBannerProps> = ({
   isRTL = true,
   onStoreSelect,
 }) => {
+  const [ads, setAds] = useState<PlatformAd[]>(() => getPlatformAds().filter((a) => a.isActive));
   const [activeSlide, setActiveSlide] = useState(0);
-  const ads = getPlatformAds().filter((a) => a.isActive);
 
-  // Built-in modern delivery app offers (HungerStation / Keeta style)
-  const defaultOffers = [
-    {
-      id: 'offer-1',
-      badge: 'عرض الترحيب 🛵',
-      title: 'توصيل مجاني لطلبك الأول!',
-      subtitle: 'اطلب احتياجاتك اليومية من أقرب بقالة في قريتك أو حيك بدون رسوم توصيل.',
-      code: 'FREE1',
-      bgGradient: 'from-emerald-950 via-teal-900 to-slate-900',
-      borderColor: 'border-emerald-500/40',
-      accentColor: 'bg-emerald-500 text-slate-950',
-    },
-    {
-      id: 'offer-2',
-      badge: 'تخفيضات الكبار 🔥',
-      title: 'خصم يصل إلى 30% على المواد الغذائية',
-      subtitle: 'تسوق من المتاجر والبقالات المعتمدة واستفد من عروض الأسعار المخفضة.',
-      code: 'SAVE30',
-      bgGradient: 'from-rose-950 via-purple-950 to-slate-900',
-      borderColor: 'border-rose-500/40',
-      accentColor: 'bg-rose-500 text-white',
-    },
-    {
-      id: 'offer-3',
-      badge: 'سريع ومضمون ⚡',
-      title: 'توصيل خلال دقائق لجميع القرى والأحياء',
-      subtitle: 'مناديب توصيل محليون جاهزون لخدمتكم على مدار الساعة بنظام موثق.',
-      code: 'QARYATI',
-      bgGradient: 'from-amber-950 via-orange-950 to-slate-900',
-      borderColor: 'border-amber-500/40',
-      accentColor: 'bg-amber-400 text-slate-950',
-    },
-  ];
+  useEffect(() => {
+    const handleAdsUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && Array.isArray(customEvent.detail)) {
+        setAds(customEvent.detail.filter((a: PlatformAd) => a.isActive));
+      } else {
+        setAds(getPlatformAds().filter((a) => a.isActive));
+      }
+    };
 
-  const slides = ads.length > 0 ? ads : defaultOffers;
+    window.addEventListener('qaryati:ads-updated', handleAdsUpdate as EventListener);
+    window.addEventListener('storage', handleAdsUpdate as EventListener);
+    return () => {
+      window.removeEventListener('qaryati:ads-updated', handleAdsUpdate as EventListener);
+      window.removeEventListener('storage', handleAdsUpdate as EventListener);
+    };
+  }, []);
+
+  const slides = ads.length > 0 ? ads : [];
 
   useEffect(() => {
     if (slides.length <= 1) return;
@@ -62,7 +46,8 @@ export const StoreAdsBanner: React.FC<StoreAdsBannerProps> = ({
     return () => clearInterval(timer);
   }, [slides.length]);
 
-  const current = slides[activeSlide] || defaultOffers[0];
+  const current = slides[activeSlide] || slides[0];
+  if (!current) return null;
 
   return (
     <div className="max-w-6xl mx-auto px-4 mt-3 mb-3">

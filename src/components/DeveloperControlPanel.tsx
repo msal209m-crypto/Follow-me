@@ -87,13 +87,32 @@ import {
   markAllDeveloperNotificationsRead,
   clearAllDeveloperNotifications,
   blockUserPhoneOrId,
+  clearAllMerchantsLocal,
+  clearAllDriversLocal,
+  clearAllCustomersLocal,
+  updateMerchantAccountRecord,
+  updateDriverAccountRecord,
 } from '../services/rbacAuthService';
+import {
+  getStoresDirectory,
+  saveStoresDirectory,
+  addStoreToDirectory,
+  deleteStoreDirectoryRecord,
+  updateStoreDirectoryRecord,
+  toggleStoreApproval,
+  toggleStoreSuspension,
+  clearAllStoresDirectory,
+  toggleStoreProStatus,
+} from '../services/deliveryService';
+import { StoreDirectoryRecord } from '../types';
 import { 
   getApprovedMerchantsByVillage, 
   fetchAllCustomers, 
   getCustomersLocalCache, 
   updateCustomerStatus, 
   deleteCustomerRecord, 
+  updateCustomerRecord,
+  clearAllCustomersRemoteAndLocal,
   SupabaseCustomerRecord 
 } from '../services/supabaseQaryatiService';
 import { 
@@ -139,9 +158,10 @@ interface DeveloperControlPanelProps {
 }
 
 type DeveloperSubTab = 
+  | 'STORES'
   | 'GATEKEEPING' 
-  | 'ORDERS' 
   | 'CUSTOMERS' 
+  | 'ORDERS' 
   | 'ADS' 
   | 'TRASH_BIN' 
   | 'MESSAGES' 
@@ -156,7 +176,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
   isDarkMode = true 
 }) => {
   // Navigation State
-  const [activeSubTab, setActiveSubTab] = useState<DeveloperSubTab>('GATEKEEPING');
+  const [activeSubTab, setActiveSubTab] = useState<DeveloperSubTab>('STORES');
 
   // Core Data States
   const [logs, setLogs] = useState<AccessLogEntry[]>([]);
@@ -223,6 +243,45 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     isApproved: true,
   });
 
+  // Stores Directory Master Management State
+  const [stores, setStores] = useState<StoreDirectoryRecord[]>(() => getStoresDirectory());
+  const [storeSearchQuery, setStoreSearchQuery] = useState('');
+  const [storeCategoryFilter, setStoreCategoryFilter] = useState('ALL');
+  const [storeStatusFilter, setStoreStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'PRO'>('ALL');
+  const [editingStore, setEditingStore] = useState<StoreDirectoryRecord | null>(null);
+  const [editStoreForm, setEditStoreForm] = useState({
+    name: '',
+    ownerName: '',
+    category: 'مغذي وبقالة',
+    phone: '',
+    village: '',
+    cityOrVillage: '',
+    commissionRate: 5,
+    status: 'ACTIVE' as 'ACTIVE' | 'SUSPENDED' | 'PENDING',
+    isPro: false,
+    isApproved: true,
+  });
+  const [showAddStoreModal, setShowAddStoreModal] = useState(false);
+  const [newStoreForm, setNewStoreForm] = useState({
+    name: '',
+    ownerName: '',
+    category: 'مغذي وبقالة',
+    phone: '',
+    village: '',
+    commissionRate: 5,
+    isApproved: true,
+  });
+
+  // Edit Customer Modal State
+  const [editingCustomer, setEditingCustomer] = useState<SupabaseCustomerRecord | null>(null);
+  const [editCustomerForm, setEditCustomerForm] = useState({
+    name: '',
+    phone: '',
+    village_name: '',
+    national_id: '',
+    status: 'VERIFIED' as 'NEW' | 'VERIFIED' | 'BLOCKED',
+  });
+
   // License Keys & System Reset State
   const [licenseKeysList, setLicenseKeysList] = useState<LicenseKeyRecord[]>([]);
   const [isLoadingLicenses, setIsLoadingLicenses] = useState(false);
@@ -268,6 +327,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     setMerchants(getMerchants());
     setDrivers(getDrivers());
     setDeletedMerchants(getDeletedMerchants());
+    setStores(getStoresDirectory());
   };
 
   const loadNotifications = () => {
@@ -404,11 +464,20 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
       setDeletedMerchants(getDeletedMerchants());
     };
 
+    const handleStoresUpd = (e: any) => {
+      if (e?.detail && Array.isArray(e.detail)) {
+        setStores(e.detail);
+      } else {
+        setStores(getStoresDirectory());
+      }
+    };
+
     window.addEventListener('qaryati:new-customer-registered', handleNewCust);
     window.addEventListener('qaryati:customer-status-updated', handleStatusUpd);
     window.addEventListener('qaryati:customer-deleted', handleStatusUpd);
     window.addEventListener('qaryati:ads-updated', handleAdsUpd);
     window.addEventListener('qaryati:deleted-merchants-updated', handleDeletedUpd);
+    window.addEventListener('qaryati:stores-updated', handleStoresUpd);
     window.addEventListener('focus', loadNotifications);
 
     return () => {
@@ -420,6 +489,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
       window.removeEventListener('qaryati:customer-deleted', handleStatusUpd);
       window.removeEventListener('qaryati:ads-updated', handleAdsUpd);
       window.removeEventListener('qaryati:deleted-merchants-updated', handleDeletedUpd);
+      window.removeEventListener('qaryati:stores-updated', handleStoresUpd);
       window.removeEventListener('focus', loadNotifications);
     };
   }, [activeSubTab]);
@@ -583,6 +653,185 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     await copyToClipboard(text);
     setCopiedCustomerField(fieldKey);
     setTimeout(() => setCopiedCustomerField(null), 2000);
+  };
+
+  // =========================================================
+  // 0. STORES MASTER CONTROL HANDLERS (إدارة وحذف المتاجر)
+  // =========================================================
+  const handleDeleteStore = async (id: string, name: string) => {
+    if (window.confirm(`⚠️ تحذير المطور:\nهل أنت متأكد من حذف المتجر (${name}) نهائياً من قاعدة البيانات والسحابة وجميع الأجهزة؟\nسيتم حذف منتجاته وسجلاته بالكامل.`)) {
+      await deleteStoreDirectoryRecord(id);
+      setStores(getStoresDirectory());
+      setActionSuccessMsg(`تم حذف المتجر (${name}) نهائياً من المنظومة 🗑️`);
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
+  };
+
+  const handleClearAllStores = async () => {
+    if (window.confirm('⚠️ تحذير أمني شديد الخطورة للمطور:\nهل أنت متأكد من رغبتك في حذف وتصفير جميع المتاجر المسجلة بالكامل دفعة واحدة؟\nهذا الإجراء سيفرغ دليل المتاجر من كافة البقالات والمتاجر في السحابة.')) {
+      await clearAllStoresDirectory();
+      setStores([]);
+      setActionSuccessMsg('تم حذف وتصفير كافة المتاجر بالكامل من السحابة والمنظومة بنجاح! ⚠️🧹');
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+    }
+  };
+
+  const handleToggleStoreApprove = (id: string, name: string, current: boolean) => {
+    toggleStoreApproval(id, !current);
+    setStores(getStoresDirectory());
+    setActionSuccessMsg(!current ? `تم اعتماد وتفعيل المتجر (${name}) بنجاح! أصبح مرئياً للمتسوقين ✅` : `تم تعليق وإيقاف المتجر (${name}) مؤقتاً ⏸️`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleToggleStoreSuspend = (id: string, name: string, isSuspended: boolean) => {
+    toggleStoreSuspension(id, !isSuspended);
+    setStores(getStoresDirectory());
+    setActionSuccessMsg(!isSuspended ? `تم تجميد وحظر المتجر (${name}) بقرار المطور 🚫` : `تم رفع الحظر وتنشيط المتجر (${name}) بنجاح 🔓`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleToggleStorePro = (id: string, name: string) => {
+    toggleStoreProStatus(id);
+    setStores(getStoresDirectory());
+    setActionSuccessMsg(`تم تحديث باقة وترقية المتجر (${name}) ⭐`);
+    setTimeout(() => setActionSuccessMsg(null), 3000);
+  };
+
+  const openEditStoreModal = (store: StoreDirectoryRecord) => {
+    setEditingStore(store);
+    setEditStoreForm({
+      name: store.name || '',
+      ownerName: store.ownerName || '',
+      category: store.category || 'مغذي وبقالة',
+      phone: store.phone || '',
+      village: store.village || store.cityOrVillage || '',
+      cityOrVillage: store.cityOrVillage || store.village || '',
+      commissionRate: store.commissionRate || 5,
+      status: store.status || 'ACTIVE',
+      isPro: !!store.isPro,
+      isApproved: (store as any).isApproved !== false,
+    });
+  };
+
+  const handleSaveStoreEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStore) return;
+    updateStoreDirectoryRecord(editingStore.id, {
+      name: editStoreForm.name.trim() || editingStore.name,
+      ownerName: editStoreForm.ownerName.trim() || editingStore.ownerName,
+      category: editStoreForm.category || editingStore.category,
+      phone: editStoreForm.phone.trim() || editingStore.phone,
+      village: editStoreForm.village.trim() || editingStore.village,
+      cityOrVillage: editStoreForm.village.trim() || editingStore.cityOrVillage,
+      commissionRate: Number(editStoreForm.commissionRate) || 5,
+      status: editStoreForm.status,
+      isPro: editStoreForm.isPro,
+      isApproved: editStoreForm.isApproved,
+    });
+    setStores(getStoresDirectory());
+    setEditingStore(null);
+    setActionSuccessMsg(`تم حفظ وتحديث بيانات المتجر (${editStoreForm.name}) بنجاح! ✏️✅`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleAddNewStore = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newStoreForm.name.trim()) return;
+    const created = addStoreToDirectory({
+      name: newStoreForm.name.trim(),
+      ownerName: newStoreForm.ownerName.trim() || 'صاحب المتجر',
+      category: newStoreForm.category || 'مغذي وبقالة',
+      phone: newStoreForm.phone.trim() || '0500000000',
+      village: newStoreForm.village.trim() || 'عام',
+      cityOrVillage: newStoreForm.village.trim() || 'عام',
+      commissionRate: Number(newStoreForm.commissionRate) || 5,
+      status: 'ACTIVE',
+      isApproved: newStoreForm.isApproved,
+      rating: 5.0,
+      reviewCount: 1,
+      deliveryTime: '15-25 دقيقة',
+      deliveryFee: 0,
+      minOrder: 15,
+      isPro: false,
+    });
+    setStores(getStoresDirectory());
+    setShowAddStoreModal(false);
+    setNewStoreForm({
+      name: '',
+      ownerName: '',
+      category: 'مغذي وبقالة',
+      phone: '',
+      village: '',
+      commissionRate: 5,
+      isApproved: true,
+    });
+    setActionSuccessMsg(`تمت إضافة المتجر (${created.name}) بنجاح إلى المنظومة! 🏪✨`);
+    setTimeout(() => setActionSuccessMsg(null), 4000);
+  };
+
+  // Bulk deletion for Merchants, Drivers, Customers
+  const handleDeleteAllMerchants = async () => {
+    if (window.confirm('⚠️ تحذير المطور:\nهل أنت متأكد من رغبتك في حذف وتصفير جميع حسابات التجار المسجلين نهائياً من السحابة وقاعدة البيانات؟')) {
+      clearAllMerchantsLocal();
+      try {
+        for (const m of merchants) {
+          await syncDeleteMerchant(m.id);
+        }
+      } catch {}
+      refreshAccounts();
+      setActionSuccessMsg('تم حذف وتصفير جميع حسابات التجار بالكامل من المنظومة ⚠️🗑️');
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
+  };
+
+  const handleDeleteAllDrivers = async () => {
+    if (window.confirm('⚠️ تحذير المطور:\nهل أنت متأكد من رغبتك في حذف وتصفير جميع حسابات السائقين والمناديب نهائياً من السحابة؟')) {
+      clearAllDriversLocal();
+      try {
+        for (const d of drivers) {
+          await syncDeleteDriver(d.id);
+        }
+      } catch {}
+      refreshAccounts();
+      setActionSuccessMsg('تم حذف وتصفير جميع حسابات السائقين بالكامل من المنظومة ⚠️🗑️');
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
+  };
+
+  const handleDeleteAllCustomers = async () => {
+    if (window.confirm('⚠️ تحذير المطور:\nهل أنت متأكد من رغبتك في حذف وتصفير قاعدة العملاء بالكامل من السحابة وقواعد البيانات؟')) {
+      await clearAllCustomersRemoteAndLocal();
+      setCustomers([]);
+      setActionSuccessMsg('تم حذف وتصفير جميع حسابات العملاء بالكامل بنجاح ⚠️🗑️');
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }
+  };
+
+  const openEditCustomerModal = (customer: SupabaseCustomerRecord) => {
+    setEditingCustomer(customer);
+    setEditCustomerForm({
+      name: customer.name || '',
+      phone: customer.phone || '',
+      village_name: customer.village_name || '',
+      national_id: customer.national_id || '',
+      status: (customer.status as any) || (customer.is_verified ? 'VERIFIED' : 'NEW'),
+    });
+  };
+
+  const handleSaveCustomerEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomer) return;
+    await updateCustomerRecord(editingCustomer.id, {
+      name: editCustomerForm.name.trim(),
+      phone: editCustomerForm.phone.trim(),
+      village_name: editCustomerForm.village_name.trim(),
+      national_id: editCustomerForm.national_id.trim(),
+      status: editCustomerForm.status,
+    });
+    await loadCustomers();
+    setEditingCustomer(null);
+    setActionSuccessMsg(`تم تعديل وحفظ بيانات العميل (${editCustomerForm.name}) بنجاح! ✏️✅`);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
   // Merchants & Drivers Gatekeeping Actions
@@ -956,6 +1205,41 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     return logs.filter((l) => l.status === logFilterStatus);
   }, [logs, logFilterStatus]);
 
+  // Filtered Stores
+  const filteredStores = useMemo(() => {
+    return stores.filter((s) => {
+      const q = storeSearchQuery.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        s.name.toLowerCase().includes(q) ||
+        (s.ownerName && s.ownerName.toLowerCase().includes(q)) ||
+        (s.phone && s.phone.includes(q)) ||
+        (s.village && s.village.toLowerCase().includes(q)) ||
+        (s.cityOrVillage && s.cityOrVillage.toLowerCase().includes(q)) ||
+        (s.category && s.category.toLowerCase().includes(q));
+
+      const matchesCategory =
+        storeCategoryFilter === 'ALL' || s.category === storeCategoryFilter;
+
+      const isApprv = (s as any).isApproved !== false;
+      const isSusp = s.status === 'SUSPENDED';
+
+      const matchesStatus =
+        storeStatusFilter === 'ALL' ||
+        (storeStatusFilter === 'ACTIVE' && isApprv && !isSusp) ||
+        (storeStatusFilter === 'PENDING' && (!isApprv || s.status === 'PENDING')) ||
+        (storeStatusFilter === 'SUSPENDED' && isSusp) ||
+        (storeStatusFilter === 'PRO' && s.isPro);
+
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+  }, [stores, storeSearchQuery, storeCategoryFilter, storeStatusFilter]);
+
+  const approvedStoresCount = useMemo(() => stores.filter((s) => (s as any).isApproved !== false && s.status !== 'SUSPENDED').length, [stores]);
+  const pendingStoresCount = useMemo(() => stores.filter((s) => (s as any).isApproved === false || s.status === 'PENDING').length, [stores]);
+  const suspendedStoresCount = useMemo(() => stores.filter((s) => s.status === 'SUSPENDED').length, [stores]);
+  const proStoresCount = useMemo(() => stores.filter((s) => s.isPro).length, [stores]);
+
   return (
     <div className="w-full max-w-6xl mx-auto p-3 sm:p-6 text-right font-sans" dir="rtl">
       {/* Luxury Container */}
@@ -1034,7 +1318,32 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
         {/* ========================================================= */}
         {/* 2. EXECUTIVE KPI SUMMARY STRIP (شريط مؤشرات الأداء اللحظي) */}
         {/* ========================================================= */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* Stores Master KPI */}
+          <div 
+            onClick={() => setActiveSubTab('STORES')}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+              activeSubTab === 'STORES'
+                ? 'bg-emerald-950/40 border-emerald-500/60 shadow-lg shadow-emerald-950/40 scale-[1.02]'
+                : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-300">دليل المتاجر الشامل</span>
+              <Store className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="flex items-baseline gap-2 mt-2">
+              <strong className="text-xl font-black text-white font-mono">{stores.length}</strong>
+              {pendingStoresCount > 0 ? (
+                <span className="text-[10px] font-black text-amber-300 bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 rounded-full animate-pulse">
+                  {pendingStoresCount} معلق ⏳
+                </span>
+              ) : (
+                <span className="text-[10px] text-emerald-400 font-bold">{approvedStoresCount} معتمد ✓</span>
+              )}
+            </div>
+          </div>
+
           {/* Merchants & Fleet KPI */}
           <div 
             onClick={() => setActiveSubTab('GATEKEEPING')}
@@ -1046,7 +1355,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
           >
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-slate-300">المتاجر والأسطول</span>
-              <Store className="w-4 h-4 text-amber-400" />
+              <ShieldCheck className="w-4 h-4 text-amber-400" />
             </div>
             <div className="flex items-baseline gap-2 mt-2">
               <strong className="text-xl font-black text-white font-mono">{approvedMerchants.length}</strong>
@@ -1132,7 +1441,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
           {/* Portals & Security KPI */}
           <div 
             onClick={() => setActiveSubTab('PORTALS')}
-            className={`p-3.5 rounded-2xl border transition-all cursor-pointer col-span-2 sm:col-span-1 ${
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
               activeSubTab === 'PORTALS'
                 ? 'bg-indigo-950/40 border-indigo-500/60 shadow-lg shadow-indigo-950/40 scale-[1.02]'
                 : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
@@ -1150,9 +1459,26 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
         </div>
 
         {/* ========================================================= */}
-        {/* 3. SEGMENTED TAB NAVIGATION (10 أقسام متخصصة ومنظمة بدون أي تكرار) */}
+        {/* 3. SEGMENTED TAB NAVIGATION (11 قسماً متخصصاً تحت تصرف المطور) */}
         {/* ========================================================= */}
         <div className="flex items-center gap-1.5 p-2 bg-slate-900/90 rounded-2xl border border-slate-800 shadow-xl overflow-x-auto scrollbar-thin">
+          {/* 0. STORES */}
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('STORES')}
+            className={`py-2.5 px-3.5 rounded-xl text-xs font-black flex items-center gap-2 shrink-0 transition-all cursor-pointer ${
+              activeSubTab === 'STORES'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 shadow-lg shadow-emerald-500/25 scale-[1.02]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Store className="w-4 h-4" />
+            <span>إدارة وحذف المتاجر 🏪</span>
+            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-mono">
+              {stores.length}
+            </span>
+          </button>
+
           {/* 1. GATEKEEPING */}
           <button
             type="button"
@@ -1319,6 +1645,378 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
         </div>
 
         {/* ========================================================= */}
+        {/* TAB 0: STORES (إدارة وحذف المتاجر الرقمية الشاملة) */}
+        {/* ========================================================= */}
+        {activeSubTab === 'STORES' && (
+          <div className="space-y-6">
+            {/* Top Bar with KPI & Actions */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white flex items-center gap-2">
+                      <span>إدارة وحذف المتاجر الرقمية</span>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        {stores.length} متجر
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      تحكم شامل في كافة المتاجر بالقرى: تعديل، اعتماد، رفض، تجميد، حظر، أو حذف نهائي قطعي.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddStoreModal(true)}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-950/40 active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة متجر جديد ➕</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleClearAllStores}
+                    className="px-3.5 py-2 rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-700/60 text-rose-200 text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shadow-md active:scale-95"
+                    title="حذف وتصفير كافة المتاجر دفعة واحدة من المنظومة"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-400" />
+                    <span>حذف كافة المتاجر دفعة واحدة ⚠️</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStores(getStoresDirectory())}
+                    className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer border border-slate-700"
+                    title="تحديث قائمة المتاجر"
+                  >
+                    <RefreshCw className="w-4 h-4 text-cyan-400" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub KPI Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-slate-800/80">
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80">
+                  <span className="text-[10px] text-slate-400 block font-bold">المتاجر المعتمدة</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <strong className="text-sm font-black text-emerald-400 font-mono">{approvedStoresCount}</strong>
+                    <span className="text-[10px] text-emerald-400 font-bold">نشط ومعتمد ✓</span>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80">
+                  <span className="text-[10px] text-slate-400 block font-bold">المتاجر المعلقة</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <strong className="text-sm font-black text-amber-400 font-mono">{pendingStoresCount}</strong>
+                    <span className="text-[10px] text-amber-400 font-bold">بانتظار الاعتماد ⏳</span>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80">
+                  <span className="text-[10px] text-slate-400 block font-bold">المتاجر المحظورة / المجمدة</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <strong className="text-sm font-black text-rose-400 font-mono">{suspendedStoresCount}</strong>
+                    <span className="text-[10px] text-rose-400 font-bold">موقوف بقرار المطور 🚫</span>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80">
+                  <span className="text-[10px] text-slate-400 block font-bold">باقة PRO الذهبية</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <strong className="text-sm font-black text-amber-300 font-mono">{proStoresCount}</strong>
+                    <span className="text-[10px] text-amber-300 font-bold">متاجر مميزة ⭐</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Search & Filters */}
+              <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                {/* Search */}
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-500 absolute top-3 right-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={storeSearchQuery}
+                    onChange={(e) => setStoreSearchQuery(e.target.value)}
+                    placeholder="ابحث باسم المتجر، المالك، الجوال، القرية أو النشاط..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                  {storeSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setStoreSearchQuery('')}
+                      className="absolute top-2 left-2.5 text-slate-400 hover:text-white text-xs cursor-pointer p-1"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Filter */}
+                <select
+                  value={storeCategoryFilter}
+                  onChange={(e) => setStoreCategoryFilter(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer font-bold"
+                >
+                  <option value="ALL">كل الأنشطة</option>
+                  <option value="مغذي وبقالة">مغذي وبقالة 🛒</option>
+                  <option value="مطاعم">مطاعم 🍔</option>
+                  <option value="مخبوزات">مخبوزات 🥐</option>
+                  <option value="صيدليات">صيدليات 💊</option>
+                  <option value="مقاهي">مقاهي وبن ☕</option>
+                  <option value="خضار">خضار وفواكه 🍎</option>
+                  <option value="خدمات">خدمات سريعة ⚡</option>
+                </select>
+
+                {/* Status Filter */}
+                <select
+                  value={storeStatusFilter}
+                  onChange={(e) => setStoreStatusFilter(e.target.value as any)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer font-bold"
+                >
+                  <option value="ALL">كل الحالات ({stores.length})</option>
+                  <option value="ACTIVE">معتمد ونشط ✓ ({approvedStoresCount})</option>
+                  <option value="PENDING">معلق ⏳ ({pendingStoresCount})</option>
+                  <option value="SUSPENDED">محظور ومجمد 🚫 ({suspendedStoresCount})</option>
+                  <option value="PRO">باقة PRO ⭐ ({proStoresCount})</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Stores List */}
+            {filteredStores.length === 0 ? (
+              <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-10 text-center space-y-3">
+                <Store className="w-12 h-12 text-slate-600 mx-auto" />
+                <h4 className="text-sm font-bold text-slate-300">
+                  {stores.length === 0 ? 'لا توجد متاجر مسجلة حالياً - التطبيق نظيف تماماً' : 'لا توجد متاجر تطابق معايير البحث'}
+                </h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  {stores.length === 0
+                    ? 'تم تنظيف قاعدة البيانات بالكامل. يمكنك الآن إضافة المتاجر الرسمية المعتمدة للمنصة بنفسك بضغطة زر.'
+                    : 'جرّب تغيير كلمات البحث أو إعادة ضبط الفلاتر لعرض المتاجر.'}
+                </p>
+                {stores.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddStoreModal(true)}
+                    className="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-md shadow-emerald-950/40"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة أول متجر رسمي للمنظومة</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {filteredStores.map((s) => {
+                  const isApproved = (s as any).isApproved !== false;
+                  const isSuspended = s.status === 'SUSPENDED';
+                  const cleanPhone = s.phone ? s.phone.replace(/\D/g, '') : '';
+                  const intlPhone = cleanPhone.startsWith('0') ? `966${cleanPhone.slice(1)}` : cleanPhone;
+
+                  return (
+                    <div
+                      key={s.id}
+                      className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 transition-all ${
+                        isSuspended
+                          ? 'bg-rose-950/20 border-rose-500/40 hover:border-rose-500/60 shadow-lg shadow-rose-950/20'
+                          : !isApproved
+                          ? 'bg-amber-950/20 border-amber-500/40 hover:border-amber-500/60 shadow-lg shadow-amber-950/20'
+                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Top Bar: Store Logo, Name & Badges */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 rounded-2xl bg-slate-800 border border-slate-700 overflow-hidden flex items-center justify-center font-black text-xl shrink-0 text-amber-400">
+                            {s.logo ? (
+                              <img src={s.logo} alt={s.name} className="w-full h-full object-cover" />
+                            ) : (
+                              '🏪'
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-black text-white truncate flex items-center gap-1.5">
+                              <span>{s.name}</span>
+                              {s.isPro && (
+                                <span className="text-[10px] text-amber-300 bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.2 rounded font-black shrink-0">
+                                  PRO ⭐
+                                </span>
+                              )}
+                            </h4>
+                            <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5 flex-wrap">
+                              <span className="text-amber-400 font-bold">{s.category || 'مغذي وبقالة'}</span>
+                              <span>•</span>
+                              <span className="flex items-center gap-0.5 text-slate-300">
+                                <MapPin className="w-3 h-3 text-cyan-400 shrink-0" />
+                                <span className="truncate">{s.village || s.cityOrVillage || 'غير محدد'}</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="shrink-0">
+                          {isSuspended ? (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-bold flex items-center gap-1">
+                              <Ban className="w-3 h-3" />
+                              <span>محظور 🚫</span>
+                            </span>
+                          ) : !isApproved ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1 animate-pulse">
+                              <Clock className="w-3 h-3" />
+                              <span>معلق ⏳</span>
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>معتمد ✓</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Store Details Box */}
+                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-2.5 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between text-slate-300">
+                          <span className="text-[11px] text-slate-400">المالك:</span>
+                          <strong className="text-white text-xs">{s.ownerName || 'صاحب المتجر'}</strong>
+                        </div>
+
+                        <div className="flex items-center justify-between text-slate-300">
+                          <span className="text-[11px] text-slate-400">نسبة العمولة:</span>
+                          <span className="text-emerald-400 font-mono font-bold">{s.commissionRate || 5}%</span>
+                        </div>
+
+                        {/* Phone with WhatsApp and Call Actions */}
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
+                          <span className="text-[11px] text-slate-400">الجوال:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-white" dir="ltr">{s.phone}</span>
+                            {s.phone && (
+                              <div className="flex items-center gap-1">
+                                <a
+                                  href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(
+                                    `السلام عليكم، معكم مطور منصة قريتي الرقمية بخصوص متجركم (${s.name}).`
+                                  )}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1 rounded bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 transition-colors"
+                                  title="مراسلة واتساب"
+                                >
+                                  <MessageCircle className="w-3 h-3" />
+                                </a>
+                                <a
+                                  href={`tel:${cleanPhone}`}
+                                  className="p-1 rounded bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 transition-colors"
+                                  title="اتصال هاتفي"
+                                >
+                                  <Phone className="w-3 h-3" />
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Controls Toolbar: Approve / Reject / Suspend / Edit / Delete */}
+                      <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-800/80 flex-wrap">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {/* Approve / Reject */}
+                          {!isApproved ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStoreApprove(s.id, s.name, false)}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              title="اعتماد وتفعيل المتجر للمتسوقين"
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>اعتماد ✅</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStoreApprove(s.id, s.name, true)}
+                              className="px-2 py-1 bg-amber-950/60 hover:bg-amber-900 border border-amber-800/50 text-amber-300 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                              title="إيقاف أو تعليق اعتماد المتجر"
+                            >
+                              <span>تعليق ⏸️</span>
+                            </button>
+                          )}
+
+                          {/* Suspend / Unsuspend */}
+                          {isSuspended ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStoreSuspend(s.id, s.name, true)}
+                              className="px-2 py-1 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800/50 text-emerald-300 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                              title="رفع الحظر وتنشيط المتجر"
+                            >
+                              <span>فك الحظر 🔓</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStoreSuspend(s.id, s.name, false)}
+                              className="px-2 py-1 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-400 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                              title="حظر وتجميد المتجر بقرار المطور"
+                            >
+                              <span>حظر 🚫</span>
+                            </button>
+                          )}
+
+                          {/* Toggle Pro */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStorePro(s.id, s.name)}
+                            className={`p-1 rounded-lg text-[10px] font-bold transition-colors cursor-pointer border ${
+                              s.isPro
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-amber-300'
+                            }`}
+                            title="ترقية / إلغاء باقة PRO الذهبية"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          {/* Edit Store */}
+                          <button
+                            type="button"
+                            onClick={() => openEditStoreModal(s)}
+                            className="p-1.5 bg-slate-800 hover:bg-sky-950/60 text-slate-300 hover:text-sky-300 rounded-lg transition-colors cursor-pointer"
+                            title="تعديل كافة بيانات المتجر ✏️"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete Store */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteStore(s.id, s.name)}
+                            className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-500 hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                            title="حذف المتجر نهائياً من قاعدة البيانات والسحابة 🗑️"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================= */}
         {/* TAB 1: GATEKEEPING (اعتماد التجار والأسطول) */}
         {/* ========================================================= */}
         {activeSubTab === 'GATEKEEPING' && (
@@ -1327,8 +2025,8 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] text-slate-400 block font-bold">القرى الثابتة المعتمدة</span>
-                  <strong className="text-base font-black text-amber-400">10 قرى نموذجية</strong>
+                  <span className="text-[10px] text-slate-400 block font-bold">النطاق الجغرافي الذكي</span>
+                  <strong className="text-base font-black text-amber-400">تحديد تلقائي حسب الموقع</strong>
                 </div>
                 <MapPin className="w-5 h-5 text-amber-500/50" />
               </div>
@@ -1366,7 +2064,16 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllMerchants}
+                    className="px-3 py-1.5 rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-700/60 text-rose-200 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                    title="حذف جميع حسابات التجار نهائياً"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>حذف كافة التجار ⚠️</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleCleanSlateWipe}
@@ -4020,6 +4727,429 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                 <button
                   type="submit"
                   className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs cursor-pointer shadow-lg shadow-sky-950/50 flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>حفظ التعديلات بالسحابة ✅</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: EDIT STORE DETAILS (تعديل بيانات المتجر الشاملة) */}
+      {/* ========================================================= */}
+      {editingStore && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">تعديل بيانات المتجر</h3>
+                  <p className="text-[11px] text-slate-400">تحكم حصري للمطور في كامل تفاصيل المتجر وسجلاته</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingStore(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStoreEdit} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">اسم المتجر</label>
+                  <input
+                    type="text"
+                    required
+                    value={editStoreForm.name}
+                    onChange={(e) => setEditStoreForm({ ...editStoreForm, name: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">اسم المالك</label>
+                  <input
+                    type="text"
+                    value={editStoreForm.ownerName}
+                    onChange={(e) => setEditStoreForm({ ...editStoreForm, ownerName: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">النشاط التجاري</label>
+                  <select
+                    value={editStoreForm.category}
+                    onChange={(e) => setEditStoreForm({ ...editStoreForm, category: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                  >
+                    <option value="مغذي وبقالة">مغذي وبقالة 🛒</option>
+                    <option value="مطاعم">مطاعم 🍔</option>
+                    <option value="مخبوزات">مخبوزات 🥐</option>
+                    <option value="صيدليات">صيدليات 💊</option>
+                    <option value="مقاهي">مقاهي وبن ☕</option>
+                    <option value="خضار">خضار وفواكه 🍎</option>
+                    <option value="خدمات">خدمات سريعة ⚡</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">رقم الجوال والواتساب</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editStoreForm.phone}
+                    onChange={(e) => setEditStoreForm({ ...editStoreForm, phone: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400 text-left font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">القرية أو الموقع الجغرافي</label>
+                  <input
+                    type="text"
+                    value={editStoreForm.village}
+                    onChange={(e) => setEditStoreForm({ ...editStoreForm, village: e.target.value, cityOrVillage: e.target.value })}
+                    placeholder="اسم القرية أو الموقع..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">نسبة عمولة المنصة (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={editStoreForm.commissionRate}
+                    onChange={(e) => setEditStoreForm({ ...editStoreForm, commissionRate: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Status & Options */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
+                  <span className="text-[11px] text-slate-400 font-bold mb-1">حالة الاعتماد</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditStoreForm({ ...editStoreForm, isApproved: !editStoreForm.isApproved })}
+                    className={`py-1.5 px-2 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                      editStoreForm.isApproved
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    }`}
+                  >
+                    {editStoreForm.isApproved ? 'معتمد ✓' : 'معلق ⏳'}
+                  </button>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
+                  <span className="text-[11px] text-slate-400 font-bold mb-1">حالة النشاط</span>
+                  <select
+                    value={editStoreForm.status}
+                    onChange={(e) => setEditStoreForm({ ...editStoreForm, status: e.target.value as any })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg py-1 px-1.5 text-xs text-white focus:outline-none"
+                  >
+                    <option value="ACTIVE">نشط ACTIVE</option>
+                    <option value="SUSPENDED">مجمد / محظور 🚫</option>
+                    <option value="PENDING">معلق PENDING</option>
+                  </select>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
+                  <span className="text-[11px] text-slate-400 font-bold mb-1">باقة PRO الذهبية</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditStoreForm({ ...editStoreForm, isPro: !editStoreForm.isPro })}
+                    className={`py-1.5 px-2 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                      editStoreForm.isPro
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}
+                  >
+                    {editStoreForm.isPro ? 'مفعلة PRO ⭐' : 'باقة عادية'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingStore(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-xs cursor-pointer shadow-lg shadow-emerald-950/50 flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>حفظ التعديلات بالدليل والسحابة ✅</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: ADD NEW STORE (إضافة متجر جديد مباشرة من المطور) */}
+      {/* ========================================================= */}
+      {showAddStoreModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">إضافة متجر جديد للمنظومة</h3>
+                  <p className="text-[11px] text-slate-400">إدراج متجر مباشر في دليل القرى والسحابة</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddStoreModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddNewStore} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">اسم المتجر *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="مثال: بقالة البركة"
+                    value={newStoreForm.name}
+                    onChange={(e) => setNewStoreForm({ ...newStoreForm, name: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">اسم المالك</label>
+                  <input
+                    type="text"
+                    placeholder="اسم صاحب المتجر"
+                    value={newStoreForm.ownerName}
+                    onChange={(e) => setNewStoreForm({ ...newStoreForm, ownerName: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">النشاط التجاري</label>
+                  <select
+                    value={newStoreForm.category}
+                    onChange={(e) => setNewStoreForm({ ...newStoreForm, category: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                  >
+                    <option value="مغذي وبقالة">مغذي وبقالة 🛒</option>
+                    <option value="مطاعم">مطاعم 🍔</option>
+                    <option value="مخبوزات">مخبوزات 🥐</option>
+                    <option value="صيدليات">صيدليات 💊</option>
+                    <option value="مقاهي">مقاهي وبن ☕</option>
+                    <option value="خضار">خضار وفواكه 🍎</option>
+                    <option value="خدمات">خدمات سريعة ⚡</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">رقم الجوال والواتساب</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="05xxxxxxxx"
+                    value={newStoreForm.phone}
+                    onChange={(e) => setNewStoreForm({ ...newStoreForm, phone: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400 text-left font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">القرية أو الموقع</label>
+                  <input
+                    type="text"
+                    placeholder="مثال: عام أو اسم القرية"
+                    value={newStoreForm.village}
+                    onChange={(e) => setNewStoreForm({ ...newStoreForm, village: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">نسبة العمولة (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={newStoreForm.commissionRate}
+                    onChange={(e) => setNewStoreForm({ ...newStoreForm, commissionRate: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-white block">اعتماد المتجر فوراً</span>
+                  <span className="text-[10px] text-slate-400">جعله يظهر للمتسوقين فور إنشائه دون انتظار</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setNewStoreForm({ ...newStoreForm, isApproved: !newStoreForm.isApproved })}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                    newStoreForm.isApproved
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}
+                >
+                  {newStoreForm.isApproved ? 'معتمد ونشط ✓' : 'معلق ⏳'}
+                </button>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowAddStoreModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-xs cursor-pointer shadow-lg shadow-emerald-950/50 flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>إضافة المتجر الآن 🏪</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: EDIT CUSTOMER DETAILS (تعديل بيانات العميل) */}
+      {/* ========================================================= */}
+      {editingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">تعديل بيانات العميل</h3>
+                  <p className="text-[11px] text-slate-400">تحكم حصري للمطور في سجلات حساب العميل</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCustomer(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCustomerEdit} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">اسم العميل</label>
+                  <input
+                    type="text"
+                    required
+                    value={editCustomerForm.name}
+                    onChange={(e) => setEditCustomerForm({ ...editCustomerForm, name: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">رقم الجوال</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editCustomerForm.phone}
+                    onChange={(e) => setEditCustomerForm({ ...editCustomerForm, phone: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 text-left font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">القرية أو الموقع</label>
+                  <input
+                    type="text"
+                    value={editCustomerForm.village_name}
+                    onChange={(e) => setEditCustomerForm({ ...editCustomerForm, village_name: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">رقم الهوية الوطنية</label>
+                  <input
+                    type="text"
+                    value={editCustomerForm.national_id}
+                    onChange={(e) => setEditCustomerForm({ ...editCustomerForm, national_id: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">حالة الحساب</label>
+                <select
+                  value={editCustomerForm.status}
+                  onChange={(e) => setEditCustomerForm({ ...editCustomerForm, status: e.target.value as any })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 font-bold"
+                >
+                  <option value="VERIFIED">موثق ومعتمد ✅</option>
+                  <option value="NEW">مستخدم جديد 🟢</option>
+                  <option value="BLOCKED">محظور 🚫</option>
+                </select>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingCustomer(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs cursor-pointer shadow-lg shadow-cyan-950/50 flex items-center gap-1.5"
                 >
                   <Save className="w-4 h-4" />
                   <span>حفظ التعديلات بالسحابة ✅</span>

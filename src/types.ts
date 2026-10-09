@@ -434,6 +434,9 @@ export interface StoreDirectoryRecord {
   rating?: number;       // متوسط التقييم بالنجوم
   ratingCount?: number;  // عدد المقيمين
   category?: string;     // تصنيف المتجر
+  lat?: number;          // خط العرض للمتجر
+  lng?: number;          // خط الطول للمتجر
+  distanceKm?: number;   // المسافة المحسوبة من موقع المستخدم (كم)
   freeDelivery?: boolean; // توصيل مجاني بناءً على إعدادات التاجر
   freeDeliveryMinOrder?: number;
   deliveryFee?: number;

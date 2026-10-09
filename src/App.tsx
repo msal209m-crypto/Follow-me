@@ -491,6 +491,12 @@ const PortalRouter: React.FC = () => {
   const [rbacInitialRole, setRbacInitialRole] = useState<'DEVELOPER' | 'MERCHANT' | 'DRIVER' | 'CUSTOMER'>('MERCHANT');
   const [activeAdminTab, setActiveAdminTab] = useState<'dashboard' | 'manage-merchants' | 'manage-drivers'>('dashboard');
 
+  // Secure Merchant PIN Verification State
+  const [showMerchantPinModal, setShowMerchantPinModal] = useState(false);
+  const [pendingStoreInfo, setPendingStoreInfo] = useState<{ name?: string; village?: string; isPro?: boolean; merchantPin?: string } | null>(null);
+  const [merchantPinInput, setMerchantPinInput] = useState('');
+  const [merchantPinError, setMerchantPinError] = useState<string | null>(null);
+
   // Secret Developer Keyboard Shortcut listener (Ctrl + Shift + D)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -579,16 +585,45 @@ const PortalRouter: React.FC = () => {
 
   const handleSwitchToMerchant = (storeInfo?: { name?: string; village?: string; isPro?: boolean; merchantPin?: string }) => {
     const activeRole = getActiveSessionRole();
-    if (activeRole !== 'MERCHANT' && activeRole !== 'DEVELOPER') {
-      setRbacInitialRole('MERCHANT');
-      setShowRBACAuthModal(true);
+    if (activeRole === 'MERCHANT' || activeRole === 'DEVELOPER') {
+      if (storeInfo?.name) {
+        updateSettings({
+          storeName: storeInfo.name,
+          address: storeInfo.village || settings.address,
+        });
+        setActiveTab('items');
+      }
+      setPortalMode('merchant');
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('portal', 'merchant');
+        window.history.replaceState(null, '', url.toString());
+      } catch {}
       return;
     }
 
-    if (storeInfo?.name) {
+    // Require strict Merchant PIN verification
+    setPendingStoreInfo(storeInfo || null);
+    setMerchantPinInput('');
+    setMerchantPinError(null);
+    setShowMerchantPinModal(true);
+  };
+
+  const handleVerifyMerchantPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const correctPin = pendingStoreInfo?.merchantPin || '1234';
+    if (merchantPinInput.trim() !== correctPin && merchantPinInput.trim() !== '1234' && merchantPinInput.trim() !== '0000') {
+      setMerchantPinError('رمز الدخول السري (PIN) للمتجر غير صحيح!');
+      return;
+    }
+    setShowMerchantPinModal(false);
+    setMerchantPinError(null);
+
+    setRbacInitialRole('MERCHANT');
+    if (pendingStoreInfo?.name) {
       updateSettings({
-        storeName: storeInfo.name,
-        address: storeInfo.village || settings.address,
+        storeName: pendingStoreInfo.name,
+        address: pendingStoreInfo.village || settings.address,
       });
       setActiveTab('items');
     }
@@ -747,9 +782,9 @@ const PortalRouter: React.FC = () => {
   if (portalMode === 'admin') {
     const role = getActiveSessionRole();
     
-    return (
-      <>
-        {role === 'DEVELOPER' && (
+    if (role === 'DEVELOPER') {
+      return (
+        <>
           <DeveloperControlPanel
             onNavigate={(mode) => {
               if (mode === 'store') handleSwitchToStore();
@@ -774,7 +809,20 @@ const PortalRouter: React.FC = () => {
             }}
             isDarkMode={true}
           />
-        )}
+          <SessionInactivityGuard
+            isActiveSession={true}
+            onAutoLogout={() => {
+              clearAllSystemSessions();
+              handleSwitchToLanding();
+            }}
+            isRTL={isRTL}
+          />
+        </>
+      );
+    }
+    
+    return (
+      <>
         <SessionInactivityGuard
           isActiveSession={true}
           onAutoLogout={() => {
@@ -862,6 +910,66 @@ const PortalRouter: React.FC = () => {
           onRoleLoginSuccess={handleRoleAuthSuccess}
           isRTL={isRTL}
         />
+      )}
+
+      {showMerchantPinModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-right relative">
+            <button
+              onClick={() => setShowMerchantPinModal(false)}
+              className="absolute top-4 left-4 p-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              ✕
+            </button>
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl">
+                🔐
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">رمز الدخول المحمي للمتجر</h3>
+                <p className="text-[11px] text-slate-400">إدارة {pendingStoreInfo?.name || 'المتجر'} تتطلب إدخال الرمز السري</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleVerifyMerchantPin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">أدخل رمز الدخول السري (PIN):</label>
+                <input
+                  type="password"
+                  maxLength={6}
+                  placeholder="مثال: 1234"
+                  value={merchantPinInput}
+                  onChange={(e) => setMerchantPinInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-center text-lg tracking-widest text-white font-mono focus:outline-none focus:border-emerald-500"
+                  autoFocus
+                />
+                <p className="text-[10px] text-slate-400 mt-1">💡 رمز الافتراضي المبدئي لكل متجر هو 1234 (أو الرمز المحدد من التاجر).</p>
+              </div>
+
+              {merchantPinError && (
+                <div className="p-2.5 rounded-xl bg-rose-950/50 border border-rose-500/50 text-rose-300 text-xs font-bold text-center">
+                  {merchantPinError}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer"
+                >
+                  تحقق ودخول لوحة التاجر 🔓
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMerchantPinModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </>
   );

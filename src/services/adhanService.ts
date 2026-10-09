@@ -126,10 +126,11 @@ export const AVAILABLE_ADHAN_SOUNDS: AdhanSoundOption[] = [
 ];
 
 export const PRESET_VILLAGE_LOCATIONS: VillageLocation[] = [
-  { id: 'al_fasoor', name: 'قرية الفصور (إب - اليمن) 🇾🇪', region: 'إب - اليمن', latitude: 13.9667, longitude: 44.1833 },
-  { id: 'faifa', name: 'قرى جبال فيفاء (جازان)', region: 'جازان', latitude: 17.257, longitude: 43.125 },
   { id: 'makkah', name: 'مكة المكرمة - الحرم المكي', region: 'مكة المكرمة', latitude: 21.389, longitude: 39.857 },
   { id: 'madinah', name: 'المدينة المنورة - الحرم النبوي', region: 'المدينة المنورة', latitude: 24.524, longitude: 39.569 },
+  { id: 'riyadh', name: 'مدينة الرياض', region: 'الرياض', latitude: 24.713, longitude: 46.675 },
+  { id: 'jeddah', name: 'محافظة جدة', region: 'مكة المكرمة', latitude: 21.543, longitude: 39.172 },
+  { id: 'faifa', name: 'قرى جبال فيفاء (جازان)', region: 'جازان', latitude: 17.257, longitude: 43.125 },
   { id: 'bani_malik', name: 'قرى بني مالك / الداير', region: 'جازان', latitude: 17.324, longitude: 43.148 },
   { id: 'al_aridah', name: 'قرى العارضة وجبال سلا', region: 'جازان', latitude: 17.068, longitude: 43.048 },
   { id: 'sabya', name: 'صبيا وقرى الساحل', region: 'جازان', latitude: 17.149, longitude: 42.625 },
@@ -138,15 +139,13 @@ export const PRESET_VILLAGE_LOCATIONS: VillageLocation[] = [
   { id: 'abha', name: 'أبها وقرى عسير وتهامة', region: 'عسير', latitude: 18.216, longitude: 42.505 },
   { id: 'khamis', name: 'خميس مشيط والوادي', region: 'عسير', latitude: 18.300, longitude: 42.733 },
   { id: 'baha', name: 'الباحة وقرى غامد وزهران', region: 'الباحة', latitude: 20.012, longitude: 41.467 },
-  { id: 'riyadh', name: 'مدينة الرياض', region: 'الرياض', latitude: 24.713, longitude: 46.675 },
-  { id: 'jeddah', name: 'محافظة جدة', region: 'مكة المكرمة', latitude: 21.543, longitude: 39.172 },
   { id: 'najran', name: 'نجران وقرى وادي نجران', region: 'نجران', latitude: 17.492, longitude: 44.127 },
 ];
 
 export const DEFAULT_VILLAGE_MOSQUES: VillageMosque[] = [
   {
     id: 'mosque-main',
-    name: 'جامع القرية الكبير',
+    name: 'جامع الحي الكبير',
     imamName: 'الشيخ محمد الفيفي',
     muezzinName: 'أبو عبدالله',
     distanceKm: 0.2,
@@ -154,7 +153,7 @@ export const DEFAULT_VILLAGE_MOSQUES: VillageMosque[] = [
   },
   {
     id: 'mosque-market',
-    name: 'مسجد سوق القرية التجاري',
+    name: 'مسجد السوق التجاري',
     imamName: 'الشيخ أحمد المالكي',
     muezzinName: 'صالح السريعي',
     distanceKm: 0.5,
@@ -162,7 +161,7 @@ export const DEFAULT_VILLAGE_MOSQUES: VillageMosque[] = [
   },
   {
     id: 'mosque-valley',
-    name: 'مسجد حي الفصور والوادي',
+    name: 'مسجد حي الوادي المبارك',
     imamName: 'الشيخ سالم الحكمي',
     distanceKm: 1.1,
     iqamahOffsets: { fajr: 25, sunrise: 0, dhuhr: 20, asr: 20, maghrib: 10, isha: 20 },
