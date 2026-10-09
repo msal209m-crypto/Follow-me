@@ -10,6 +10,7 @@ import {
   ChevronDown,
   CheckCircle2,
   Globe,
+  ArrowRight,
   Cloud,
   CloudOff,
   RefreshCw,
@@ -751,21 +752,19 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             ) : (
               <button
                 type="button"
-                id="top-auth-login-btn"
+                id="top-return-landing-btn"
                 onClick={async () => {
                   clearAllSystemSessions();
                   await logout();
                   if (onOpenLanding) {
                     onOpenLanding();
-                  } else {
-                    onOpenAuthModal();
                   }
                 }}
-                className="h-8 sm:h-9 px-2.5 sm:px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0 active:scale-95 border border-emerald-400/40"
-                title={language === 'ar' ? 'نظام الدخول وصلاحيات الأمان والعودة للبوابات' : 'Security Portal & Exit'}
+                className="h-8 sm:h-9 px-2.5 sm:px-3 bg-slate-800 hover:bg-slate-750 text-slate-200 font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0 active:scale-95 border border-slate-700"
+                title={language === 'ar' ? 'العودة للواجهة الرئيسية الموحدة' : 'Return to Main Portal'}
               >
-                <LogIn className="w-3.5 h-3.5 text-white" />
-                <span className="hidden xs:inline">{language === 'ar' ? 'نظام الدخول والأمان' : 'Security Portal'}</span>
+                <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden xs:inline">{language === 'ar' ? 'الواجهة الرئيسية' : 'Main Portal'}</span>
               </button>
             )}
 
@@ -833,26 +832,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
                 <div className="space-y-1">
                   {!isCloudConnected && (
-                    <div className="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-200 text-[11px] flex flex-col gap-1.5 my-1">
-                      <div className="flex items-center gap-1.5 font-bold text-amber-300">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        <span>{language === 'ar' ? 'وضع المتجر المحلي' : 'Local Offline Store'}</span>
-                      </div>
-                      <p className="text-[10px] text-amber-200/80 leading-relaxed">
-                        {language === 'ar'
-                          ? 'البيانات محفوظة بأمان في هذا الجهاز. لمزامنتها مع السحابة سجّل الدخول عبر Google.'
-                          : 'Store is safely stored locally. Sign in with Google to enable cloud sync.'}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowUserDropdown(false);
-                          onOpenAuthModal();
-                        }}
-                        className="w-full py-1 px-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-lg text-center cursor-pointer transition-colors text-xs"
-                      >
-                        {language === 'ar' ? 'ربط السحابة بـ Google' : 'Connect Google Cloud'}
-                      </button>
+                    <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-slate-400 text-[11px] text-center">
+                      <span>{language === 'ar' ? 'وضع المتجر المحلي (البيانات محفوظة على جهازك)' : 'Local Offline Store Mode'}</span>
                     </div>
                   )}
 

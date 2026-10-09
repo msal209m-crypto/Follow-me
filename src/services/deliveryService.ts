@@ -57,9 +57,9 @@ export function getDeliveryOrders(): DeliveryOrder[] {
 
 export function playNotificationChime(type: 'new_order' | 'ready_pickup' | 'accepted' | 'delivered' = 'new_order') {
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -416,6 +416,15 @@ export function addStoreToDirectory(store: Omit<StoreDirectoryRecord, 'id' | 'jo
     id: `store-${Date.now()}`,
     status: store.status || 'ACTIVE',
     isApproved: (store as any).isApproved !== false,
+    isStoreOpen: (store as any).isStoreOpen !== undefined ? (store as any).isStoreOpen : true,
+    workingHours: store.workingHours || {
+      isStoreOpen: true,
+      isOpen24Hours: true,
+      openTime: '06:30',
+      closeTime: '23:30',
+      autoCloseForPrayer: true,
+      workingDays: [0, 1, 2, 3, 4, 5, 6],
+    },
     joinedAt: new Date().toISOString().split('T')[0],
   };
   const updated = [newStore, ...stores];

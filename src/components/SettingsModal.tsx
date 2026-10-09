@@ -33,8 +33,15 @@ import {
   Image as ImageIcon,
   Camera,
   Smile,
-  Palette
+  Palette,
+  Clock,
+  Lock,
+  Unlock,
+  Calendar,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
+import { WEEK_DAYS_AR } from '../utils/storeWorkingHours';
 
 const PRESET_STORE_ICONS = [
   { emoji: '🏪', label: 'بقالة وتموينات' },
@@ -188,6 +195,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
   const [freeDelivery, setFreeDelivery] = useState(settings.freeDelivery || false);
   const [freeDeliveryMinOrder, setFreeDeliveryMinOrder] = useState<number | undefined>(settings.freeDeliveryMinOrder);
   const [deliveryFee, setDeliveryFee] = useState<number | undefined>(settings.deliveryFee);
+  // Store Open / Closed Status (مفتاح التبديل مفتوح / مغلق)
+  const [isStoreOpen, setIsStoreOpen] = useState<boolean>(() => {
+    if (settings.isStoreOpen !== undefined) return settings.isStoreOpen;
+    if (settings.workingHours?.isStoreOpen !== undefined) return settings.workingHours.isStoreOpen;
+    return true;
+  });
   const [isOpen24Hours, setIsOpen24Hours] = useState(settings.workingHours?.isOpen24Hours ?? false);
   const [openTime, setOpenTime] = useState(settings.workingHours?.openTime || '06:30');
   const [closeTime, setCloseTime] = useState(settings.workingHours?.closeTime || '23:30');
@@ -195,10 +208,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
   const [secondOpenTime, setSecondOpenTime] = useState(settings.workingHours?.secondOpenTime || '16:00');
   const [secondCloseTime, setSecondCloseTime] = useState(settings.workingHours?.secondCloseTime || '00:00');
   const [autoCloseForPrayer, setAutoCloseForPrayer] = useState(settings.workingHours?.autoCloseForPrayer ?? true);
+  const [workingDays, setWorkingDays] = useState<number[]>(settings.workingHours?.workingDays || [0, 1, 2, 3, 4, 5, 6]);
+  const [statusToast, setStatusToast] = useState<string | null>(null);
+  const [showHoursConfig, setShowHoursConfig] = useState(false);
   const [activeHelp, setActiveHelp] = useState<string | null>(null);
 
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Fast Instant Toggle handler: saves state immediately and broadcasts to public store directory
+  const handleToggleStoreOpen = (nextOpen: boolean) => {
+    setIsStoreOpen(nextOpen);
+    updateSettings({
+      isStoreOpen: nextOpen,
+      workingHours: {
+        ...(settings.workingHours || {}),
+        isStoreOpen: nextOpen,
+        isOpen24Hours,
+        openTime,
+        closeTime,
+        isSplitShift,
+        secondOpenTime,
+        secondCloseTime,
+        autoCloseForPrayer,
+        workingDays,
+      },
+    });
+    setStatusToast(
+      nextOpen
+        ? (language === 'ar' ? 'تم فتح المتجر بنجاح ✓ يظهر كـ "مفتوح الآن" ويستقبل طلبات المتسوقين في واجهة قريتي.' : 'Store is now OPEN and accepting orders!')
+        : (language === 'ar' ? 'تم إغلاق المتجر مؤقتاً 🔒 يظهر كـ "مغلق حالياً" وتوقفت الطلبات في واجهة قريتي.' : 'Store is now CLOSED and orders are paused.')
+    );
+    setTimeout(() => {
+      setStatusToast(null);
+    }, 4500);
+  };
 
   // Logo file upload handler
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -245,7 +289,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
       freeDelivery,
       freeDeliveryMinOrder: freeDeliveryMinOrder && freeDeliveryMinOrder > 0 ? freeDeliveryMinOrder : undefined,
       deliveryFee: deliveryFee !== undefined ? deliveryFee : undefined,
+      isStoreOpen,
       workingHours: {
+        isStoreOpen,
         isOpen24Hours,
         openTime,
         closeTime,
@@ -253,7 +299,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
         secondOpenTime,
         secondCloseTime,
         autoCloseForPrayer,
-        workingDays: settings.workingHours?.workingDays || [0, 1, 2, 3, 4, 5, 6],
+        workingDays,
       },
     });
     onClose();
@@ -682,6 +728,319 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
                   <span>🇺🇸 English (LTR)</span>
                   {language === 'en' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
                 </button>
+              </div>
+            </div>
+
+            {/* ================================================================= */}
+            {/* STORE STATUS TOGGLE: OPEN / CLOSED (حالة المتجر: مفتوح / مغلق) */}
+            {/* ================================================================= */}
+            <div
+              className={`p-4 sm:p-5 rounded-2xl border-2 transition-all shadow-xl space-y-4 ${
+                isStoreOpen
+                  ? 'bg-gradient-to-br from-emerald-950/70 via-slate-950 to-teal-950/50 border-emerald-500/70 shadow-emerald-950/40 ring-1 ring-emerald-500/30'
+                  : 'bg-gradient-to-br from-rose-950/70 via-slate-950 to-slate-900 border-rose-500/60 shadow-rose-950/40 ring-1 ring-rose-500/30'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 border transition-all ${
+                      isStoreOpen
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-lg shadow-emerald-500/20'
+                        : 'bg-rose-500/20 text-rose-400 border-rose-500/40 shadow-lg shadow-rose-500/20'
+                    }`}
+                  >
+                    {isStoreOpen ? (
+                      <Store className="w-6 h-6 animate-pulse" />
+                    ) : (
+                      <Lock className="w-6 h-6 text-rose-400" />
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5">
+                        <span>{language === 'ar' ? 'حالة المتجر للعملاء:' : 'Store Live Status:'}</span>
+                      </h4>
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black border transition-all ${
+                          isStoreOpen
+                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                            : 'bg-rose-500/20 border-rose-500/50 text-rose-300'
+                        }`}
+                      >
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full ${
+                            isStoreOpen ? 'bg-emerald-400 animate-ping' : 'bg-rose-500'
+                          }`}
+                        />
+                        <span>
+                          {isStoreOpen
+                            ? language === 'ar'
+                              ? 'مفتوح الآن ويستقبل الطلبات 🟢'
+                              : 'OPEN NOW 🟢'
+                            : language === 'ar'
+                            ? 'مغلق حالياً 🔴'
+                            : 'CLOSED 🔴'}
+                        </span>
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                      {isStoreOpen
+                        ? language === 'ar'
+                          ? 'المتجر متاح ونشط حالياً في قائمة المتاجر ويستقبل طلبات المتسوقين الفورية.'
+                          : 'Store is publicly active and accepting incoming customer orders.'
+                        : language === 'ar'
+                        ? 'المتجر مغلق حالياً، ولن يتمكن الزبائن من تقديم طلبات جديدة حتى تقوم بإعادة فتحه.'
+                        : 'Store is temporarily closed and orders are paused until you re-open.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Big Interactive Toggle Switch */}
+                <div className="flex flex-col items-end gap-1.5 mr-auto sm:mr-0 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`text-xs font-extrabold hidden sm:inline ${
+                        isStoreOpen ? 'text-emerald-400' : 'text-slate-400'
+                      }`}
+                    >
+                      {isStoreOpen
+                        ? language === 'ar'
+                          ? 'مفتوح (نشط)'
+                          : 'Open'
+                        : language === 'ar'
+                        ? 'مغلق (متوقف)'
+                        : 'Closed'}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isStoreOpen}
+                      onClick={() => handleToggleStoreOpen(!isStoreOpen)}
+                      className={`w-16 h-8 rounded-full transition-all duration-300 p-1 flex items-center cursor-pointer relative shadow-inner ${
+                        isStoreOpen
+                          ? 'bg-emerald-600 justify-end ring-2 ring-emerald-400/50 shadow-emerald-700/50'
+                          : 'bg-slate-800 justify-start border border-slate-700 ring-2 ring-slate-700'
+                      }`}
+                    >
+                      <div
+                        className={`w-6 h-6 rounded-full bg-white shadow-md flex items-center justify-center transition-transform ${
+                          isStoreOpen ? 'text-emerald-700' : 'text-slate-700'
+                        }`}
+                      >
+                        {isStoreOpen ? (
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        ) : (
+                          <X className="w-3.5 h-3.5 stroke-[3]" />
+                        )}
+                      </div>
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-bold select-none">
+                    {isStoreOpen
+                      ? language === 'ar'
+                        ? 'اضغط للإغلاق'
+                        : 'Click to Close'
+                      : language === 'ar'
+                      ? 'اضغط للفتح فوراً'
+                      : 'Click to Open'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Real-time Status Toast Notification */}
+              {statusToast && (
+                <div className="p-2.5 rounded-xl bg-slate-900/95 border border-emerald-500/50 text-emerald-300 text-xs font-bold flex items-center gap-2 shadow-lg animate-pulse">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{statusToast}</span>
+                </div>
+              )}
+
+              {/* Working Hours & Auto Schedule Dropdown Accordion */}
+              <div className="pt-2 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setShowHoursConfig(!showHoursConfig)}
+                  className="w-full flex items-center justify-between text-xs font-bold text-slate-300 hover:text-white p-2 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800 transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    <span>
+                      {language === 'ar'
+                        ? 'ساعات وأوقات العمل والجدول التلقائي (اختياري)'
+                        : 'Working Hours & Automated Schedule'}
+                    </span>
+                    {isOpen24Hours && (
+                      <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded-md font-mono">
+                        24/7
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                    <span>{showHoursConfig ? (language === 'ar' ? 'إخفاء' : 'Hide') : (language === 'ar' ? 'تخصيص الساعات' : 'Configure')}</span>
+                    {showHoursConfig ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </div>
+                </button>
+
+                {showHoursConfig && (
+                  <div className="mt-3 p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
+                    {/* 24/7 Always Open Toggle */}
+                    <div className="flex items-center justify-between p-2.5 bg-slate-900/80 rounded-lg border border-slate-800">
+                      <div>
+                        <span className="font-bold text-xs text-white block">
+                          {language === 'ar' ? 'مفتوح على مدار الساعة (24/7)' : 'Always Open 24/7'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          {language === 'ar' ? 'المتجر متاح دائماً ليلاً ونهاراً دون إغلاق' : 'Keep store always open around the clock'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsOpen24Hours(!isOpen24Hours)}
+                        className={`w-11 h-6 rounded-full p-0.5 transition-all cursor-pointer flex items-center ${
+                          isOpen24Hours ? 'bg-emerald-500 justify-end' : 'bg-slate-800 justify-start'
+                        }`}
+                      >
+                        <span className="w-5 h-5 rounded-full bg-slate-950 shadow-md transition-transform" />
+                      </button>
+                    </div>
+
+                    {!isOpen24Hours && (
+                      <>
+                        {/* Daily Open and Close times */}
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="text-[11px] text-slate-300 font-bold block mb-1">
+                              {language === 'ar' ? 'وقت الفتح الصباحي:' : 'Opening Time:'}
+                            </label>
+                            <input
+                              type="time"
+                              value={openTime}
+                              onChange={(e) => setOpenTime(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-slate-300 font-bold block mb-1">
+                              {language === 'ar' ? 'وقت الإغلاق:' : 'Closing Time:'}
+                            </label>
+                            <input
+                              type="time"
+                              value={closeTime}
+                              onChange={(e) => setCloseTime(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Split Shift Toggle */}
+                        <div className="pt-2 border-t border-slate-800/80">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-slate-300">
+                              {language === 'ar' ? 'دوام على فترتين (فترة مسائية ثانية):' : 'Two shifts (split shift):'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setIsSplitShift(!isSplitShift)}
+                              className={`w-9 h-5 rounded-full p-0.5 transition-all cursor-pointer flex items-center ${
+                                isSplitShift ? 'bg-emerald-500 justify-end' : 'bg-slate-800 justify-start'
+                              }`}
+                            >
+                              <span className="w-4 h-4 rounded-full bg-slate-950 shadow-md" />
+                            </button>
+                          </div>
+
+                          {isSplitShift && (
+                            <div className="grid grid-cols-2 gap-2.5 p-2 bg-slate-900/60 rounded-lg border border-slate-800">
+                              <div>
+                                <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                                  {language === 'ar' ? 'بداية الفترة المسائية:' : 'Evening Shift Open:'}
+                                </label>
+                                <input
+                                  type="time"
+                                  value={secondOpenTime}
+                                  onChange={(e) => setSecondOpenTime(e.target.value)}
+                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                                  {language === 'ar' ? 'نهاية الفترة المسائية:' : 'Evening Shift Close:'}
+                                </label>
+                                <input
+                                  type="time"
+                                  value={secondCloseTime}
+                                  onChange={(e) => setSecondCloseTime(e.target.value)}
+                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Working Days of Week */}
+                        <div className="pt-2 border-t border-slate-800/80">
+                          <label className="text-[11px] text-slate-300 font-bold block mb-1.5 flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>{language === 'ar' ? 'أيام العمل الأسبوعية للمتجر:' : 'Working Days:'}</span>
+                          </label>
+                          <div className="grid grid-cols-4 sm:grid-cols-7 gap-1">
+                            {WEEK_DAYS_AR.map((day) => {
+                              const isWorkDay = workingDays.includes(day.id);
+                              return (
+                                <button
+                                  key={day.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isWorkDay) {
+                                      if (workingDays.length > 1) {
+                                        setWorkingDays(workingDays.filter((id) => id !== day.id));
+                                      }
+                                    } else {
+                                      setWorkingDays([...workingDays, day.id]);
+                                    }
+                                  }}
+                                  className={`p-1.5 rounded-lg text-center text-[10px] font-bold border transition-all cursor-pointer ${
+                                    isWorkDay
+                                      ? 'bg-emerald-950/70 border-emerald-500/70 text-emerald-300 shadow-xs'
+                                      : 'bg-slate-900 border-slate-800 text-slate-500 hover:bg-slate-800'
+                                  }`}
+                                >
+                                  {day.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Auto-Close for Prayer */}
+                    <div className="flex items-center justify-between p-2.5 bg-slate-900/80 rounded-lg border border-slate-800 pt-2 border-t border-slate-800/80">
+                      <div>
+                        <span className="font-bold text-xs text-white block">
+                          {language === 'ar' ? 'إيقاف مؤقت وقت الصلاة تلقائياً 🕌' : 'Auto-Pause During Prayers'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          {language === 'ar'
+                            ? 'إظهار استراحة صلاة لمدة 10 دقائق بعد كل أذان بالقرية'
+                            : 'Show 10 min prayer pause during adhan times'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAutoCloseForPrayer(!autoCloseForPrayer)}
+                        className={`w-11 h-6 rounded-full p-0.5 transition-all cursor-pointer flex items-center ${
+                          autoCloseForPrayer ? 'bg-amber-500 justify-end' : 'bg-slate-800 justify-start'
+                        }`}
+                      >
+                        <span className="w-5 h-5 rounded-full bg-slate-950 shadow-md transition-transform" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

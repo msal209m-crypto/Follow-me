@@ -79,12 +79,12 @@ export function getAds(): AdRecord[] {
   try {
     const raw = localStorage.getItem(ADS_STORAGE_KEY);
     if (!raw) {
-      return [];
+      return INITIAL_FESTIVE_ADS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_FESTIVE_ADS;
   } catch {
-    return [];
+    return INITIAL_FESTIVE_ADS;
   }
 }
 

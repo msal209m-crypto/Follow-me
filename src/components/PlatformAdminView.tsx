@@ -517,6 +517,7 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   const [editPhone, setEditPhone] = useState('');
   const [editVillage, setEditVillage] = useState('');
   const [editStatus, setEditStatus] = useState<'ACTIVE' | 'SUSPENDED'>('ACTIVE');
+  const [editIsOpen, setEditIsOpen] = useState<boolean>(true);
   const [editFreeDelivery, setEditFreeDelivery] = useState<boolean>(false);
   const [suspendModalStore, setSuspendModalStore] = useState<StoreDirectoryRecord | null>(null);
   const [suspendReasonInput, setSuspendReasonInput] = useState('');
@@ -595,6 +596,7 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
     setEditPhone(store.phone);
     setEditVillage(store.cityOrVillage);
     setEditStatus(store.status || 'ACTIVE');
+    setEditIsOpen(store.isStoreOpen !== false);
     setEditFreeDelivery(Boolean(store.freeDelivery || store.promoTag?.includes('توصيل مجاني')));
   };
 
@@ -609,6 +611,11 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
           phone: editPhone.trim() || s.phone,
           cityOrVillage: editVillage.trim() || s.cityOrVillage,
           status: editStatus,
+          isStoreOpen: editIsOpen,
+          workingHours: {
+            ...(s.workingHours || {}),
+            isStoreOpen: editIsOpen,
+          },
           freeDelivery: editFreeDelivery,
           promoTag: editFreeDelivery ? 'توصيل مجاني 🛵' : (s.promoTag?.includes('توصيل مجاني') ? 'متوفر الآن' : s.promoTag),
         };
@@ -618,7 +625,7 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
     saveStoresDirectory(updated);
     setStores(updated);
     setEditingStoreId(null);
-    showToast('تم تحديث بيانات المتجر وإعدادات التوصيل بنجاح');
+    showToast('تم تحديث بيانات المتجر وحالة الفتح/الإغلاق بنجاح');
   };
 
   const refreshStoresAndOrders = () => {
@@ -3125,7 +3132,21 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                               <option value="SUSPENDED">موقوف (مجمد)</option>
                             </select>
                           </div>
-                          <div className="flex items-center gap-2 pt-4">
+                          <div className="flex items-center gap-2 pt-4 flex-wrap">
+                            <label className={`flex items-center gap-2 text-xs font-bold cursor-pointer border px-3 py-1.5 rounded-lg transition-colors ${
+                              editIsOpen
+                                ? 'bg-emerald-950/70 text-emerald-300 border-emerald-500/40'
+                                : 'bg-rose-950/70 text-rose-300 border-rose-500/40'
+                            }`}>
+                              <input
+                                type="checkbox"
+                                checked={editIsOpen}
+                                onChange={(e) => setEditIsOpen(e.target.checked)}
+                                className="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 bg-slate-800"
+                              />
+                              <span>{editIsOpen ? 'المتجر مفتوح 🟢' : 'المتجر مغلق 🔴'}</span>
+                            </label>
+
                             <label className="flex items-center gap-2 text-xs font-bold text-emerald-400 cursor-pointer bg-slate-900 border border-emerald-500/30 px-3 py-1.5 rounded-lg">
                               <input
                                 type="checkbox"

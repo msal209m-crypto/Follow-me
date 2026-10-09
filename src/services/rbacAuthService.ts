@@ -614,6 +614,15 @@ export async function registerMerchant(params: {
     isPro: false,
     planName: 'الباقة المجانية',
     status: 'PENDING', // Strict Pending Status
+    isStoreOpen: true,
+    workingHours: {
+      isStoreOpen: true,
+      isOpen24Hours: true,
+      openTime: '06:30',
+      closeTime: '23:30',
+      autoCloseForPrayer: true,
+      workingDays: [0, 1, 2, 3, 4, 5, 6],
+    },
     joinedAt: new Date().toISOString().split('T')[0],
     merchantPin: params.password,
     rating: 5.0,

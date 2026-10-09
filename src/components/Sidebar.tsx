@@ -328,26 +328,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="p-3 bg-gradient-to-br from-emerald-950/80 via-slate-900 to-teal-950/70 border-2 border-emerald-500/70 rounded-2xl space-y-2 shadow-lg shadow-emerald-950/50 animate-pulse">
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                    {language === 'ar' ? 'وضع ضيف (غير مسجل)' : 'Guest (Offline)'}
-                  </span>
-                  <span className="text-[10px] text-slate-300 font-mono">
-                    {items.length} {language === 'ar' ? 'صنف' : 'items'}
-                  </span>
-                </div>
+              <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl space-y-2">
                 <button
                   type="button"
-                  id="sidebar-direct-login-btn"
                   onClick={() => {
                     setMobileOpen(false);
-                    onOpenAuthModal && onOpenAuthModal();
+                    if (onOpenLanding) onOpenLanding();
                   }}
-                  className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer active:scale-95 ring-2 ring-emerald-400/40"
+                  className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-slate-800 hover:bg-slate-750 text-slate-200 font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer active:scale-95 border border-slate-700"
                 >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>{language === 'ar' ? 'تسجيل الدخول المباشر 🔐' : 'Sign In Directly 🔐'}</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{language === 'ar' ? 'الواجهة الرئيسية الموحدة' : 'Main Portal'}</span>
                 </button>
               </div>
             )
@@ -365,11 +356,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ) : (
                 <button
                   type="button"
-                  onClick={() => onOpenAuthModal && onOpenAuthModal()}
-                  className="p-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-sm animate-pulse"
-                  title={language === 'ar' ? 'تسجيل الدخول المباشر' : 'Direct Sign In'}
+                  onClick={() => {
+                    if (onOpenLanding) onOpenLanding();
+                  }}
+                  className="p-2 rounded-xl bg-slate-800 text-slate-200 hover:bg-slate-700 transition-colors border border-slate-700"
+                  title={language === 'ar' ? 'الواجهة الرئيسية الموحدة' : 'Main Portal'}
                 >
-                  <LogIn className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4 text-emerald-400" />
                 </button>
               )}
             </div>

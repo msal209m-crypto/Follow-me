@@ -2,6 +2,7 @@ import { isStoreClosedForPrayer, getAdhanSettings } from '../services/adhanServi
 import { StoreDirectoryRecord, StoreSettings } from '../types';
 
 export interface WorkingHoursConfig {
+  isStoreOpen?: boolean; // حالة الفتح والإغلاق المباشرة (Toggle Switch)
   isOpen24Hours?: boolean;
   openTime?: string; // e.g. "06:00"
   closeTime?: string; // e.g. "23:30"
@@ -24,6 +25,7 @@ export interface StoreLiveStatus {
 }
 
 export const DEFAULT_WORKING_HOURS: WorkingHoursConfig = {
+  isStoreOpen: true,
   isOpen24Hours: false,
   openTime: '06:30',
   closeTime: '23:30',
@@ -95,13 +97,44 @@ export function getStoreLiveStatus(
     };
   }
 
-  // 2. Resolve working hours config
+  // 2. Direct manual toggle check (مفتاح التبديل مفتوح / مغلق)
+  const isDirectMatch =
+    !store ||
+    store.id === 'default' ||
+    Boolean(fallbackSettings && store.name === fallbackSettings.storeName);
+
+  let explicitIsOpen: boolean | undefined = undefined;
+  if (store?.isStoreOpen !== undefined) {
+    explicitIsOpen = store.isStoreOpen;
+  } else if ((store as any)?.workingHours?.isStoreOpen !== undefined) {
+    explicitIsOpen = (store as any).workingHours.isStoreOpen;
+  } else if (isDirectMatch && fallbackSettings?.isStoreOpen !== undefined) {
+    explicitIsOpen = fallbackSettings.isStoreOpen;
+  } else if (isDirectMatch && fallbackSettings?.workingHours?.isStoreOpen !== undefined) {
+    explicitIsOpen = fallbackSettings.workingHours.isStoreOpen;
+  }
+
+  // 3. Resolve working hours config
   const config: WorkingHoursConfig =
     (store as any)?.workingHours ||
     fallbackSettings?.workingHours ||
     DEFAULT_WORKING_HOURS;
 
-  // 3. Prayer time check
+  // 4. If merchant explicitly toggled to CLOSED (مغلق)
+  if (explicitIsOpen === false) {
+    return {
+      isOpen: false,
+      statusType: 'CLOSED',
+      badgeText: 'مغلق حالياً',
+      detailText: 'المتجر مغلق بطلب التاجر',
+      badgeBg: 'bg-rose-950/80',
+      badgeBorder: 'border-rose-500/60',
+      badgeTextClass: 'text-rose-300',
+      dotColor: 'bg-rose-500',
+    };
+  }
+
+  // 5. Prayer time check
   if (config.autoCloseForPrayer !== false) {
     try {
       const prayerClosed = isStoreClosedForPrayer(getAdhanSettings());
@@ -122,7 +155,21 @@ export function getStoreLiveStatus(
     }
   }
 
-  // 4. 24/7 Always Open
+  // 6. If merchant explicitly toggled to OPEN (مفتوح)
+  if (explicitIsOpen === true) {
+    return {
+      isOpen: true,
+      statusType: 'OPEN',
+      badgeText: 'مفتوح الآن',
+      detailText: config.isOpen24Hours ? 'متاح على مدار الساعة' : 'يستقبل الطلبات حالياً',
+      badgeBg: 'bg-emerald-950/80',
+      badgeBorder: 'border-emerald-500/60',
+      badgeTextClass: 'text-emerald-300',
+      dotColor: 'bg-emerald-400 animate-pulse',
+    };
+  }
+
+  // 7. 24/7 Always Open
   if (config.isOpen24Hours) {
     return {
       isOpen: true,

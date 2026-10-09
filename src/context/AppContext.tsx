@@ -534,33 +534,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (savedItems) {
           const parsed = JSON.parse(savedItems);
           const cleaned = Array.isArray(parsed) ? parsed.filter((i: Item) => !DEMO_ITEM_IDS.has(i.id)) : [];
-          setItems(cleaned);
+          setTimeout(() => setItems(cleaned), 0);
         } else {
-          setItems([]);
+          setTimeout(() => setItems([]), 0);
         }
 
         if (savedTrans) {
           const parsed = JSON.parse(savedTrans);
           const cleaned = Array.isArray(parsed) ? parsed.filter((t: Transaction) => !DEMO_TX_IDS.has(t.id)) : [];
-          setTransactions(cleaned);
+          setTimeout(() => setTransactions(cleaned), 0);
         } else {
-          setTransactions([]);
+          setTimeout(() => setTransactions([]), 0);
         }
 
         if (savedDebts) {
           const parsed = JSON.parse(savedDebts);
           const cleaned = Array.isArray(parsed) ? parsed.filter((d: DebtRecord) => !DEMO_DEBT_IDS.has(d.id)) : [];
-          setDebts(cleaned);
+          setTimeout(() => setDebts(cleaned), 0);
         } else {
-          setDebts([]);
+          setTimeout(() => setDebts([]), 0);
         }
 
         if (savedSettings) {
-          setSettings(JSON.parse(savedSettings));
+          const parsedSettings = JSON.parse(savedSettings);
+          setTimeout(() => setSettings(parsedSettings), 0);
         } else {
           const sName = storeTitle || userProfile?.storeName || 'متجري الذكي';
           const sAddr = storeVillage || userProfile?.village || '';
-          setSettings((prev) => ({ ...prev, storeName: sName, address: sAddr }));
+          setTimeout(() => setSettings((prev) => ({ ...prev, storeName: sName, address: sAddr })), 0);
         }
       } catch (e) {
         console.warn('Error reading merchant storage cache:', e);
@@ -784,11 +785,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const targetUid = activeMerchantId !== 'guest' ? activeMerchantId : currentUser?.uid;
     if (!targetUid) {
-      setCloudSyncStatus('offline');
+      setTimeout(() => setCloudSyncStatus('offline'), 0);
       return;
     }
 
-    setCloudSyncStatus('syncing');
+    setTimeout(() => setCloudSyncStatus('syncing'), 0);
 
     // Subscribe to store's/user's items
     const itemsCol = collection(db, 'stores', targetUid, 'items');
@@ -1031,12 +1032,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               freeDelivery: updated.freeDelivery ?? s.freeDelivery,
               freeDeliveryMinOrder: updated.freeDeliveryMinOrder ?? s.freeDeliveryMinOrder,
               deliveryFee: updated.deliveryFee ?? s.deliveryFee,
+              isStoreOpen: updated.isStoreOpen !== undefined ? updated.isStoreOpen : s.isStoreOpen,
+              workingHours: updated.workingHours ? {
+                ...(s.workingHours || {}),
+                ...updated.workingHours,
+                isStoreOpen: updated.isStoreOpen !== undefined ? updated.isStoreOpen : (updated.workingHours?.isStoreOpen ?? s.isStoreOpen),
+              } : (updated.isStoreOpen !== undefined ? { ...(s.workingHours || {}), isStoreOpen: updated.isStoreOpen } : s.workingHours),
             };
           }
           return s;
         });
         if (changed) {
           saveStoresDirectory(updatedStores);
+          window.dispatchEvent(new CustomEvent('qaryati:stores-updated', { detail: updatedStores }));
         }
       } catch (err) {
         console.warn('Error syncing store directory record on settings update:', err);

@@ -260,6 +260,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     status: 'ACTIVE' as 'ACTIVE' | 'SUSPENDED' | 'PENDING',
     isPro: false,
     isApproved: true,
+    isStoreOpen: true,
   });
   const [showAddStoreModal, setShowAddStoreModal] = useState(false);
   const [newStoreForm, setNewStoreForm] = useState({
@@ -710,6 +711,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
       status: store.status || 'ACTIVE',
       isPro: !!store.isPro,
       isApproved: (store as any).isApproved !== false,
+      isStoreOpen: store.isStoreOpen !== false,
     });
   };
 
@@ -727,6 +729,11 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
       status: editStoreForm.status,
       isPro: editStoreForm.isPro,
       isApproved: editStoreForm.isApproved,
+      isStoreOpen: editStoreForm.isStoreOpen,
+      workingHours: {
+        ...(editingStore.workingHours || {}),
+        isStoreOpen: editStoreForm.isStoreOpen,
+      },
     });
     setStores(getStoresDirectory());
     setEditingStore(null);
@@ -748,11 +755,13 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
       status: 'ACTIVE',
       isApproved: newStoreForm.isApproved,
       rating: 5.0,
-      reviewCount: 1,
+      ratingCount: 1,
       deliveryTime: '15-25 دقيقة',
       deliveryFee: 0,
       minOrder: 15,
       isPro: false,
+      itemsCount: 0,
+      planName: 'باقة أساسية',
     });
     setStores(getStoresDirectory());
     setShowAddStoreModal(false);
@@ -1129,7 +1138,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
     },
     { 
       mode: 'merchant', 
-      label: 'لوحة تحكم التاجر والكاشير', 
+      label: 'بوابة التجار وإدارة المتجر 🔑', 
       sublabel: 'نظام إدارة المنتجات، الفواتير، ونقاط البيع', 
       icon: User, 
       color: 'text-emerald-400',
@@ -4842,7 +4851,22 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
               </div>
 
               {/* Status & Options */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-1">
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
+                  <span className="text-[11px] text-slate-400 font-bold mb-1">حالة العمل</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditStoreForm({ ...editStoreForm, isStoreOpen: !editStoreForm.isStoreOpen })}
+                    className={`py-1.5 px-2 rounded-lg text-xs font-bold cursor-pointer transition-colors flex items-center justify-center gap-1 ${
+                      editStoreForm.isStoreOpen
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                    }`}
+                  >
+                    <span>{editStoreForm.isStoreOpen ? 'مفتوح 🟢' : 'مغلق 🔴'}</span>
+                  </button>
+                </div>
+
                 <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
                   <span className="text-[11px] text-slate-400 font-bold mb-1">حالة الاعتماد</span>
                   <button

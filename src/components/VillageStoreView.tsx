@@ -739,14 +739,22 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
   // Cart operations
   const addToCart = (item: Item, qty = 1) => {
     if (!activeCustomer || !activeCustomer.name || !activeCustomer.phone) {
-      alert('⚠️ يرجى تسجيل الدخول أو إنشاء حساب عميل أولاً للتمكن من إضافة المنتجات إلى السلة والتسوق.');
-      setShowCustomerAuthModal(true);
+      alert('⚠️ يرجى تسجيل الدخول أو إنشاء حساب من بوابة الدخول الموحدة أولاً.');
+      onOpenLanding();
       return;
     }
 
     // Strict Gatekeeping: Only approved/verified customers are permitted to buy or add to cart
     if (!isCustomerApproved(activeCustomer)) {
       alert('⏳ حسابك قيد مراجعة وتدقيق الهوية (KYC):\nتم تسجيل بياناتك بنجاح، وبمجرد اعتماد حسابك وتوثيق الهوية من قِبل إدارة القرية/المطور، سيُتاح لك فوراً إضافة المنتجات إلى السلة والشراء وإتمام الطلبات بأمان.');
+      return;
+    }
+
+    // Check if store is open or closed
+    const currentStoreObj = allStores.find((s) => s.id === selectedStoreId) || (activeSelectedStore as any);
+    const storeStatus = getStoreLiveStatus(currentStoreObj, settings);
+    if (!storeStatus.isOpen) {
+      alert(`⚠️ المتجر مغلق حالياً (${storeStatus.badgeText}):\nنعتذر، المتجر مغلق ولا يستقبل طلبات جديدة في الوقت الحالي.`);
       return;
     }
 
@@ -1172,13 +1180,13 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               type="button"
               onClick={() => {
                 if (!activeCustomer) {
-                  setShowCustomerAuthModal(true);
+                  onOpenLanding();
                 } else {
                   setIsCustomerHubOpen(true);
                 }
               }}
               className="p-2 sm:p-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-750 text-slate-200 hover:text-white transition-all flex items-center justify-center border border-slate-700/80 cursor-pointer shadow-xs active:scale-95"
-              title={activeCustomer ? activeCustomer.name : 'تسجيل الدخول / حساب العميل'}
+              title={activeCustomer ? activeCustomer.name : 'الانتقال لبوابة الدخول الموحدة'}
             >
               {activeCustomer ? (
                 <div className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center font-black text-[11px]">
@@ -1543,16 +1551,14 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (onOpenAuthModal) {
-                        onOpenAuthModal('MERCHANT');
-                      } else {
-                        onOpenMerchantPortal();
+                      if (onOpenLanding) {
+                        onOpenLanding();
                       }
                     }}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black transition-all cursor-pointer inline-flex items-center gap-2 shadow-lg shadow-emerald-950/40 active:scale-95"
+                    className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-2 border border-slate-700 shadow-sm active:scale-95"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>تسجيل متجر جديد الآن 🏪</span>
+                    <ArrowRight className="w-4 h-4 text-emerald-400" />
+                    <span>العودة للواجهة الرئيسية الموحدة 🚪</span>
                   </button>
                   {locationFilterMode === 'NEARBY' && (
                     <button
@@ -1812,6 +1818,26 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                 <span>العودة لقائمة المتاجر</span>
               </button>
             </div>
+
+            {/* Store Closed Warning Banner */}
+            {(() => {
+              const currentStoreObj = allStores.find((s) => s.id === selectedStoreId) || (activeSelectedStore as any);
+              const status = getStoreLiveStatus(currentStoreObj, settings);
+              if (!status.isOpen) {
+                return (
+                  <div className={`p-3 rounded-2xl border text-xs flex items-center justify-between gap-3 shadow-md ${status.badgeBg} ${status.badgeBorder} ${status.badgeTextClass}`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${status.dotColor} shrink-0`} />
+                      <span className="font-black">تنبيه: المتجر {status.badgeText} ({status.detailText})</span>
+                    </div>
+                    <span className="text-[11px] opacity-80 hidden sm:inline">
+                      يمكنك تصفح المنتجات فقط، الطلبات متوقفة مؤقتاً
+                    </span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             {/* Products List Controls Header */}
             <div className="flex items-center justify-between gap-3 pt-1 border-b border-slate-800/80 pb-3">
@@ -3038,31 +3064,9 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
       {/* Footer */}
       <footer className="mt-auto border-t border-slate-800/80 bg-slate-900/40 py-5 px-4 text-center text-xs text-slate-500">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p>
-            {settings.storeName || 'متجر قريتي'} © {new Date().getFullYear()} - منصة تصفح وطلب المنتجات
-          </p>
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              type="button"
-              onClick={() => onOpenAuthModal ? onOpenAuthModal('DEVELOPER') : onOpenLanding()}
-              className="px-3 py-1.5 rounded-xl bg-purple-950/60 hover:bg-purple-900 border border-purple-700/50 text-purple-300 transition-all text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
-              title="لوحة تحكم المطور الشاملة (تحكم كامل: المتاجر، التجار، السائقين، العملاء، الطلبات)"
-            >
-              <Code2 className="w-3.5 h-3.5 text-purple-400" />
-              <span>لوحة المطور الشاملة 🛡️</span>
-            </button>
-            <button
-              type="button"
-              onClick={onOpenLanding}
-              className="text-slate-400 hover:text-emerald-400 transition-colors text-xs cursor-pointer flex items-center gap-1.5"
-              title="دخول التجار ومندوبي التوصيل وإدارة المتاجر"
-            >
-              <Store className="w-3.5 h-3.5 text-slate-500" />
-              <span>بوابة التجار والمناديب 🔑</span>
-            </button>
-          </div>
-        </div>
+        <p className="text-slate-400">
+          {settings.storeName || 'متجر قريتي'} © {new Date().getFullYear()} - منصة تصفح وطلب المنتجات لأهالي القرية
+        </p>
       </footer>
 
       {/* ================================================================= */}
@@ -3231,11 +3235,11 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                     type="button"
                     onClick={() => {
                       setIsSideMenuOpen(false);
-                      setShowCustomerAuthModal(true);
+                      onOpenLanding();
                     }}
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-bold transition-all text-center border border-emerald-500/30 cursor-pointer"
+                    className="w-full py-2 px-3 rounded-xl bg-slate-800 text-slate-300 hover:text-white text-xs font-bold transition-all text-center border border-slate-700 cursor-pointer"
                   >
-                    تسجيل الدخول / إنشاء حساب عميل
+                    الانتقال لبوابة الدخول الموحدة 🔑
                   </button>
                 )}
               </div>
@@ -3306,19 +3310,6 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
 
               {/* Portal Links */}
               <div className="pt-3 border-t border-slate-800 space-y-2">
-                <div className="text-[11px] font-bold text-slate-400 px-1">بوابات الشركاء والعمل:</div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSideMenuOpen(false);
-                    onOpenMerchantPortal();
-                  }}
-                  className="w-full p-2.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 flex items-center gap-2.5 text-xs font-bold transition-all border border-slate-800 cursor-pointer"
-                >
-                  <Store className="w-4 h-4 text-emerald-400" />
-                  <span>بوابة التجار وإدارة المتجر 🔑</span>
-                </button>
-
                 <button
                   type="button"
                   onClick={() => {

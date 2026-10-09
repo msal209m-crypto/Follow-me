@@ -69,6 +69,7 @@ import { GlobalSettingsModal } from './GlobalSettingsModal';
 import { VillageMapPickerModal } from './VillageMapPickerModal';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { getGlobalPreferences, SUPPORTED_COUNTRIES } from '../services/globalizationService';
+import { StoreAdsBanner } from './StoreAdsBanner';
 
 interface PortalLandingScreenProps {
   settings: StoreSettings;
@@ -608,6 +609,11 @@ export const PortalLandingScreen: React.FC<PortalLandingScreenProps> = ({
       {/* Center Welcome & Portal Selection Cards */}
       <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 max-w-lg mx-auto w-full my-auto z-10 space-y-6">
         
+        {/* Promotional & Grand Opening Banners */}
+        <div className="w-full">
+          <StoreAdsBanner currentVillage={globalPrefs.customVillageName || 'الكل'} isDarkMode={isDarkMode} isRTL={isRTL} />
+        </div>
+
         <div className="text-center w-full">
           <h2 className={`text-2xl sm:text-3xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'} tracking-tight`}>
             تسجيل الدخول أو إنشاء حساب

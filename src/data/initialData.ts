@@ -25,7 +25,15 @@ export const INITIAL_SETTINGS: StoreSettings = {
   currency: 'ر.س',
   exchangeRate: 1.0,
   footerNote: 'شكراً لتعاملكم معنا',
-  powerSavingMode: false,
+  isStoreOpen: true,
+  workingHours: {
+    isStoreOpen: true,
+    isOpen24Hours: true,
+    openTime: '06:30',
+    closeTime: '23:30',
+    autoCloseForPrayer: true,
+    workingDays: [0, 1, 2, 3, 4, 5, 6],
+  },
   multiCurrency: {
     enabled: false,
     baseCurrencyCode: 'SAR',

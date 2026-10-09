@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Percent, Truck, Store, ArrowLeft, ArrowRight, Tag } from 'lucide-react';
-import { getPlatformAds, PlatformAd } from '../services/platformSettingsService';
+import { getAds } from '../services/adsService';
+import { AdRecord } from '../types';
 
 interface StoreAdsBannerProps {
   currentVillage: string;
@@ -15,16 +16,16 @@ export const StoreAdsBanner: React.FC<StoreAdsBannerProps> = ({
   isRTL = true,
   onStoreSelect,
 }) => {
-  const [ads, setAds] = useState<PlatformAd[]>(() => getPlatformAds().filter((a) => a.isActive));
+  const [ads, setAds] = useState<AdRecord[]>(() => getAds().filter((a) => a.status === 'APPROVED'));
   const [activeSlide, setActiveSlide] = useState(0);
 
   useEffect(() => {
     const handleAdsUpdate = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail && Array.isArray(customEvent.detail)) {
-        setAds(customEvent.detail.filter((a: PlatformAd) => a.isActive));
+        setAds(customEvent.detail.filter((a: AdRecord) => a.status === 'APPROVED'));
       } else {
-        setAds(getPlatformAds().filter((a) => a.isActive));
+        setAds(getAds().filter((a) => a.status === 'APPROVED'));
       }
     };
 
@@ -49,43 +50,48 @@ export const StoreAdsBanner: React.FC<StoreAdsBannerProps> = ({
   const current = slides[activeSlide] || slides[0];
   if (!current) return null;
 
+  const isHotDeal = current.theme === 'HOT_DEAL';
+  const bgGradient = isHotDeal ? 'from-rose-950 via-purple-950 to-slate-900' : 'from-emerald-950 via-teal-900 to-slate-900';
+  const borderColor = isHotDeal ? 'border-rose-500/40' : 'border-emerald-500/40';
+  const accentColor = isHotDeal ? 'bg-rose-500 text-white' : 'bg-amber-400 text-slate-950';
+
   return (
     <div className="max-w-6xl mx-auto px-4 mt-3 mb-3">
       <div
-        className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${
-          (current as any).bgGradient || 'from-emerald-950 via-teal-900 to-slate-900'
-        } border ${
-          (current as any).borderColor || 'border-emerald-500/40'
-        } p-4 sm:p-5 shadow-2xl text-right flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-500`}
+        className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${bgGradient} border ${borderColor} p-4 sm:p-5 shadow-2xl text-right flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-500`}
       >
         <div className="absolute -left-12 -top-12 w-48 h-48 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
 
         <div className="space-y-2 z-10 w-full sm:w-auto flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span
-              className={`px-3 py-1 rounded-full text-[11px] font-black ${(current as any).accentColor || 'bg-emerald-500 text-slate-950'} flex items-center gap-1.5 shadow-md`}
+              className={`px-3 py-1 rounded-full text-[11px] font-black ${accentColor} flex items-center gap-1.5 shadow-md`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>{(current as any).badge || (current as any).title}</span>
+              <span>{current.badgeText || (current.theme === 'HOT_DEAL' ? 'عرض خاص 🔥' : 'افتتاح رسمي 🎉')}</span>
             </span>
-            {currentVillage && currentVillage !== 'ALL' && (
+            {current.storeName && (
+              <span className="text-[11px] text-cyan-300 font-bold bg-cyan-950/60 px-2.5 py-0.5 rounded-lg border border-cyan-700/50">
+                🏪 {current.storeName}
+              </span>
+            )}
+            {current.village && current.village !== 'الكل' && (
               <span className="text-[11px] text-amber-300 font-bold bg-amber-500/20 px-2.5 py-0.5 rounded-lg border border-amber-500/30">
-                📍 عرض خاص لـ ({currentVillage})
+                📍 قرية ({current.village})
               </span>
             )}
           </div>
 
           <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
-            {(current as any).title}
+            {current.title}
           </h3>
           <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
-            {(current as any).subtitle || (current as any).description}
+            {current.description}
           </p>
 
-          {(current as any).discountCode && (
-            <div className="inline-flex items-center gap-1.5 bg-slate-900/90 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-xl text-xs font-mono font-bold mt-1">
-              <Tag className="w-3.5 h-3.5 text-amber-400" />
-              <span>استخدم رمز الخصم: {(current as any).discountCode}</span>
+          {current.actionText && (
+            <div className="inline-flex items-center gap-1.5 bg-slate-900/90 text-emerald-300 border border-emerald-500/40 px-3 py-1.5 rounded-xl text-xs font-bold mt-1">
+              <span>{current.actionText}</span>
             </div>
           )}
         </div>

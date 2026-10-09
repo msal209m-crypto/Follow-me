@@ -271,7 +271,9 @@ export interface StoreSettings {
   freeDelivery?: boolean; // هل يقدم المتجر توصيل مجاني
   freeDeliveryMinOrder?: number; // الحد الأدنى للطلب للتوصيل المجاني
   deliveryFee?: number; // رسوم التوصيل المعتادة (إذا لم يكن مجانياً)
+  isStoreOpen?: boolean; // حالة المتجر: مفتوح (true) أم مغلق (false)
   workingHours?: {
+    isStoreOpen?: boolean; // حالة المتجر للعمل
     isOpen24Hours?: boolean;
     openTime?: string;
     closeTime?: string;
@@ -440,7 +442,9 @@ export interface StoreDirectoryRecord {
   freeDelivery?: boolean; // توصيل مجاني بناءً على إعدادات التاجر
   freeDeliveryMinOrder?: number;
   deliveryFee?: number;
+  isStoreOpen?: boolean; // حالة المتجر: مفتوح (true) أم مغلق (false)
   workingHours?: {
+    isStoreOpen?: boolean;
     isOpen24Hours?: boolean;
     openTime?: string;
     closeTime?: string;
@@ -452,6 +456,8 @@ export interface StoreDirectoryRecord {
   };
   village?: string;      // القرية التابع لها المتجر
   commissionRate?: number; // نسبة عمولة المنصة
+  deliveryTime?: string;
+  minOrder?: number;
 }
 
 export interface AdPackage {
