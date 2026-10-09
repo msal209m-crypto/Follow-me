@@ -450,6 +450,8 @@ export interface StoreDirectoryRecord {
     workingDays?: number[];
     autoCloseForPrayer?: boolean;
   };
+  village?: string;      // القرية التابع لها المتجر
+  commissionRate?: number; // نسبة عمولة المنصة
 }
 
 export interface AdPackage {

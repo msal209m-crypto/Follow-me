@@ -46,7 +46,8 @@ import {
   Menu,
   LocateFixed,
   Compass,
-  Layers
+  Layers,
+  Code2
 } from 'lucide-react';
 import { CoffeeTreeLogo } from './CoffeeTreeLogo';
 import { VillageWalletModal } from './VillageWalletModal';
