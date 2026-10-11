@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   KeyRound,
   Phone,
-  Lock,
+  Lock as LockIcon,
   ArrowRight,
   ArrowLeft,
   CheckCircle2,
@@ -301,7 +301,7 @@ export const OTPPasswordResetModal: React.FC<OTPPasswordResetModalProps> = ({
                   كلمة المرور الجديدة
                 </label>
                 <div className="relative">
-                  <Lock className={`w-4 h-4 text-slate-400 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                  <LockIcon className={`w-4 h-4 text-slate-400 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
                   <input
                     type="password"
                     required
@@ -321,7 +321,7 @@ export const OTPPasswordResetModal: React.FC<OTPPasswordResetModalProps> = ({
                   تأكيد كلمة المرور الجديدة
                 </label>
                 <div className="relative">
-                  <Lock className={`w-4 h-4 text-slate-400 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                  <LockIcon className={`w-4 h-4 text-slate-400 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
                   <input
                     type="password"
                     required

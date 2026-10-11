@@ -22,6 +22,7 @@ import {
   Coins,
   Calculator,
   AlertTriangle,
+  Lock as LockIcon,
 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -657,7 +658,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-950/80 border-2 border-amber-500/80 shadow-md flex items-center justify-between gap-3 text-amber-200">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-amber-500/30 text-amber-300 border border-amber-500/50 flex items-center justify-center shrink-0">
-              <Lock className="w-5 h-5" />
+              <LockIcon className="w-5 h-5" />
             </div>
             <div>
               <h4 className="text-xs font-black text-amber-200">

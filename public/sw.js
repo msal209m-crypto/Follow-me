@@ -14,7 +14,12 @@ const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/version.json'
+  '/version.json',
+  '/icon.png',
+  '/apple-touch-icon.png',
+  '/favicon.ico',
+  '/pwa-192x192.png',
+  '/pwa-512x512.png'
 ];
 
 // URLs that must bypass the Service Worker (e.g., Firebase real-time and auth APIs)
@@ -41,7 +46,7 @@ function getCacheNameForRequest(url) {
   if (url.match(/\.(png|jpe?g|svg|gif|webp|ico)$/i)) {
     return IMAGES_CACHE;
   }
-  if (url.match(/\.(js|mjs|css)$/i)) {
+  if (url.match(/\.(js|mjs|css)$/i) || url.includes('unpkg.com')) {
     return RUNTIME_CACHE;
   }
   return STATIC_CACHE;

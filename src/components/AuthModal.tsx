@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   ShieldCheck,
-  Lock,
+  Lock as LockIcon,
   Mail,
   Store,
   User,
@@ -604,7 +604,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   )}
                 </div>
                 <div className="relative">
-                  <Lock className={`w-4 h-4 text-slate-400 absolute ${isRTL ? 'right-3' : 'left-3'} top-2.5`} />
+                  <LockIcon className={`w-4 h-4 text-slate-400 absolute ${isRTL ? 'right-3' : 'left-3'} top-2.5`} />
                   <input
                     type="password"
                     required

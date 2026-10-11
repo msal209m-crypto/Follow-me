@@ -35,7 +35,7 @@ import {
   Smile,
   Palette,
   Clock,
-  Lock,
+  Lock as LockIcon,
   Unlock,
   Calendar,
   ChevronDown,
@@ -753,7 +753,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
                     {isStoreOpen ? (
                       <Store className="w-6 h-6 animate-pulse" />
                     ) : (
-                      <Lock className="w-6 h-6 text-rose-400" />
+                      <LockIcon className="w-6 h-6 text-rose-400" />
                     )}
                   </div>
 

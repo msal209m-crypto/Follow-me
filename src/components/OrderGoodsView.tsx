@@ -14,7 +14,7 @@ import {
   ArrowRight,
   Filter,
   ShoppingBag,
-  History,
+  History as HistoryIcon,
   Calendar,
   User,
   Printer,
@@ -532,7 +532,7 @@ export const OrderGoodsView: React.FC<OrderGoodsViewProps> = ({
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <History className="w-4 h-4" />
+            <HistoryIcon className="w-4 h-4" />
             <span>سجل فواتير التوريد ({purchaseTransactions.length})</span>
           </button>
         </div>

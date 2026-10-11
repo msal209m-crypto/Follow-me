@@ -21,7 +21,7 @@ import {
   Phone,
   MapPin,
   Sparkles,
-  Lock,
+  Lock as LockIcon,
   Eye,
   Barcode,
   Megaphone,
@@ -1631,7 +1631,7 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                             <td className="py-3">
                               {keyRec.is_used ? (
                                 <span className="inline-flex items-center gap-1 text-rose-400 font-bold text-[11px]">
-                                  <Lock className="w-3 h-3" /> تم التفعيل
+                                  <LockIcon className="w-3 h-3" /> تم التفعيل
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-emerald-400 font-bold text-[11px]">
@@ -3503,7 +3503,7 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
 
               <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
                 <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-amber-400" />
+                  <LockIcon className="w-4 h-4 text-amber-400" />
                   <span className="text-xs text-slate-400 font-bold">رمز الحماية الخاص بحساب التاجر (PIN):</span>
                 </div>
                 <span className="text-sm font-black text-amber-300 font-mono tracking-widest px-2.5 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/30">

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   MapPin,
-  Navigation,
+  Navigation as NavigationIcon,
   Store,
   Home,
   Truck,
@@ -407,7 +407,7 @@ export const OrderDeliveryMiniMap: React.FC<OrderDeliveryMiniMapProps> = ({
         <div className="absolute bottom-2 inset-x-2 flex items-center justify-between gap-1 pointer-events-none">
           {/* Distance Badge */}
           <div className="px-2.5 py-1 rounded-xl bg-slate-950/90 border border-slate-800 text-white text-[10px] font-bold flex items-center gap-1.5 shadow-md pointer-events-auto backdrop-blur-md">
-            <Navigation className="w-3 h-3 text-emerald-400 shrink-0 rotate-45" />
+            <NavigationIcon className="w-3 h-3 text-emerald-400 shrink-0 rotate-45" />
             <span>المسافة:</span>
             <strong className="text-emerald-400 font-mono">{distanceKm} كم</strong>
           </div>

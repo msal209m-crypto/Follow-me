@@ -6,8 +6,8 @@ import {
   ShieldCheck, 
   Users, 
   ArrowLeft, 
-  History, 
-  Lock, 
+  History as HistoryIcon, 
+  Lock as LockIcon, 
   Unlock, 
   RefreshCw, 
   Trash2, 
@@ -1648,7 +1648,7 @@ export const DeveloperControlPanel: React.FC<DeveloperControlPanelProps> = ({
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <Lock className="w-4 h-4" />
+            <LockIcon className="w-4 h-4" />
             <span>سجل الأمان والضبط</span>
           </button>
         </div>
@@ -3780,7 +3780,7 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
-                  <History className="w-4 h-4" />
+                  <HistoryIcon className="w-4 h-4" />
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-white">
@@ -3849,7 +3849,7 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
             <div className="max-h-[500px] overflow-y-auto space-y-2.5 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
               {filteredLogs.length === 0 ? (
                 <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-12 text-center">
-                  <Lock className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                  <LockIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
                   <h4 className="font-bold text-slate-400 text-sm">لا توجد سجلات دخول مطابقة حالياً</h4>
                   <p className="text-xs text-slate-500 mt-1">
                     سيتم رصد وتسجيل أي عملية محاولة دخول فاشلة أو ناجحة لبوابات التطبيق فوراً هنا.
@@ -3871,7 +3871,7 @@ CREATE POLICY "Allow public all" ON public.orders FOR ALL USING (true) WITH CHEC
                           ? 'bg-emerald-500/10 text-emerald-400' 
                           : 'bg-rose-500/10 text-rose-400'
                       }`}>
-                        {log.status === 'SUCCESS' ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                        {log.status === 'SUCCESS' ? <Unlock className="w-4 h-4" /> : <LockIcon className="w-4 h-4" />}
                       </div>
 
                       <div className="space-y-1">

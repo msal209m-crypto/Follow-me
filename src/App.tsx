@@ -422,7 +422,6 @@ const MainAppContent: React.FC<MainAppContentProps> = ({
 
       {/* Global Iframe-safe Toast */}
       <ToastNotification />
-      <OfflineBanner />
 
       {/* Immediate PWA Install Prompt Modal */}
       <PWAInstallModal />
@@ -983,6 +982,7 @@ export default function App() {
           <AppProvider>
             <SubscriptionProvider>
               <AppUpdateBanner />
+              <OfflineBanner />
               <PortalRouter />
             </SubscriptionProvider>
           </AppProvider>

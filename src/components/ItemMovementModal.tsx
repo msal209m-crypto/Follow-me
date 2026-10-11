@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   X,
-  History,
+  History as HistoryIcon,
   TrendingUp,
   Truck,
   ShoppingCart,
@@ -67,7 +67,7 @@ export const ItemMovementModal: React.FC<ItemMovementModalProps> = ({
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/70">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-400 border border-teal-500/30 flex items-center justify-center font-bold">
-              <History className="w-5 h-5" />
+              <HistoryIcon className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">

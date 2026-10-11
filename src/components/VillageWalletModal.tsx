@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Wallet,
   PlusCircle,
-  History,
+  History as HistoryIcon,
   CheckCircle2,
   X,
   CreditCard,
@@ -11,7 +11,11 @@ import {
   Smartphone,
   ShieldCheck,
   Sparkles,
-  Globe
+  Globe,
+  AlertCircle,
+  Info,
+  Copy,
+  Check
 } from 'lucide-react';
 import {
   getVillageWallet,
@@ -39,9 +43,13 @@ export const VillageWalletModal: React.FC<VillageWalletModalProps> = ({
 }) => {
   const [wallet, setWallet] = useState<VillageWalletState>(getVillageWallet());
   const [activeTab, setActiveTab] = useState<'balance' | 'deposit' | 'history'>('balance');
-  const [topupAmount, setTopupAmount] = useState<number>(100);
+  const [topupAmount, setTopupAmount] = useState<number>(1000);
   const [selectedGatewayId, setSelectedGatewayId] = useState<string>('');
   const [refNoInput, setRefNoInput] = useState<string>('');
+  const [senderNameInput, setSenderNameInput] = useState<string>('');
+  const [senderPhoneInput, setSenderPhoneInput] = useState<string>('');
+  const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const prefs = getGlobalPreferences();
@@ -59,22 +67,55 @@ export const VillageWalletModal: React.FC<VillageWalletModalProps> = ({
 
   if (!isOpen) return null;
 
+  const copyToClipboard = (text: string, label: string) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      setCopiedText(label);
+      setTimeout(() => setCopiedText(null), 2500);
+    }
+  };
+
   const handlePerformDeposit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (topupAmount <= 0) return;
+    setErrorMessage(null);
+
+    if (topupAmount <= 0) {
+      setErrorMessage('يرجى تحديد مبلغ شحن صحيح أكبر من الصفر.');
+      return;
+    }
 
     const selectedGateway = countryGateways.find((g) => g.id === selectedGatewayId);
-    const methodName = selectedGateway ? selectedGateway.nameAr : 'شحن رقمي';
+    if (!selectedGateway) {
+      setErrorMessage('يرجى اختيار وسيلة الشحن المستخدمة في التحويل أولاً.');
+      return;
+    }
 
-    const updated = depositToWallet(topupAmount, methodName, refNoInput.trim());
+    // Require transaction reference or proof number to prevent fake free top-ups
+    const trimmedRef = refNoInput.trim();
+    if (!trimmedRef) {
+      setErrorMessage('⚠️ تنبيه أمان: يرجى إدخال رقم الحوالة أو رقم إشعار التحويل البنكي/المحفظة الصادر من تطبيقك (مثل الكريمي أو جيب) لتوثيق الإيداع.');
+      return;
+    }
+
+    if (trimmedRef.length < 4) {
+      setErrorMessage('⚠️ رقم الإشعار/الحوالة المدخل قصير جداً، يرجى كتابة الرقم المرجعي الكامل للعملية.');
+      return;
+    }
+
+    const methodName = selectedGateway.nameAr;
+    const senderDetails = senderNameInput.trim() ? ` (المودع: ${senderNameInput.trim()})` : '';
+
+    const updated = depositToWallet(topupAmount, methodName + senderDetails, trimmedRef);
     setWallet(updated);
-    setSuccessMessage(`تم شحن حسابك بمبلغ ${formatGlobalCurrency(topupAmount)} بنجاح عبر (${methodName}) 🎉`);
+    setSuccessMessage(`تم تسجيل شحن رصيدك بنجاح بمبلغ ${formatGlobalCurrency(topupAmount)} عبر (${methodName}) برقم مرجع #${trimmedRef} ✓`);
     setRefNoInput('');
+    setSenderNameInput('');
+    setSenderPhoneInput('');
 
     setTimeout(() => {
       setSuccessMessage(null);
       setActiveTab('balance');
-    }, 2000);
+    }, 2800);
   };
 
   return (
@@ -146,7 +187,7 @@ export const VillageWalletModal: React.FC<VillageWalletModalProps> = ({
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
             }`}
           >
-            <History className="w-4 h-4" />
+            <HistoryIcon className="w-4 h-4" />
             <span>سجل المعاملات</span>
           </button>
         </div>
@@ -224,12 +265,32 @@ export const VillageWalletModal: React.FC<VillageWalletModalProps> = ({
           {/* TAB 2: Deposit Form */}
           {activeTab === 'deposit' && (
             <form onSubmit={handlePerformDeposit} className="space-y-4">
+              {/* Notice Banner */}
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 text-xs text-slate-300 space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-emerald-400">
+                  <Info className="w-4 h-4 shrink-0" />
+                  <span>كيفية شحن رصيد المحفظة بالخطوات:</span>
+                </div>
+                <ol className="list-decimal list-inside text-[11px] text-slate-300 space-y-1 mr-1">
+                  <li>حدد مبلغ الشحن المطلوب، واختر وسيلة الدفع المناسبة لك أدناه.</li>
+                  <li>قم بتحويل المبلغ من تطبيقك البنكي أو المحفظة (مثل الكريمي أو جيب) إلى الحساب الموضح أدناه.</li>
+                  <li>انسخ رقم إشعار الحوالة / السند من تطبيقك وأدخله في خانة "رقم الإشعار" لتوثيق الإيداع.</li>
+                </ol>
+              </div>
+
+              {errorMessage && (
+                <div className="p-3 rounded-2xl bg-rose-500/20 border border-rose-500/50 text-rose-300 text-xs font-bold flex items-center gap-2 animate-shake">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-bold text-slate-300 mb-1.5 block">
-                  اختر مبلغ الشحن ({prefs.currencyCode}):
+                  اختر أو اكتب مبلغ الشحن ({prefs.currencyCode}):
                 </label>
                 <div className="grid grid-cols-4 gap-2 mb-2">
-                  {[50, 100, 250, 500].map((amt) => (
+                  {[500, 1000, 2500, 5000].map((amt) => (
                     <button
                       key={amt}
                       type="button"
@@ -248,6 +309,7 @@ export const VillageWalletModal: React.FC<VillageWalletModalProps> = ({
                 <input
                   type="number"
                   min="1"
+                  required
                   value={topupAmount}
                   onChange={(e) => setTopupAmount(Number(e.target.value))}
                   className="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-white font-black text-sm outline-none focus:border-emerald-500"
@@ -259,65 +321,149 @@ export const VillageWalletModal: React.FC<VillageWalletModalProps> = ({
               <div>
                 <label className="text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
                   <Smartphone className="w-4 h-4 text-emerald-400" />
-                  <span>وسائل الشحن المتاحة في ({country.nameAr} {country.flag}):</span>
+                  <span>اختر وسيلة الشحن التي ستقوم بالتحويل منها ({country.nameAr} {country.flag}):</span>
                 </label>
 
                 <div className="space-y-2">
-                  {countryGateways.map((gtw) => (
-                    <label
-                      key={gtw.id}
-                      onClick={() => setSelectedGatewayId(gtw.id)}
-                      className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${
-                        selectedGatewayId === gtw.id
-                          ? 'bg-emerald-950/40 border-emerald-500/80 text-white'
-                          : 'bg-slate-800/30 border-slate-700/60 text-slate-300 hover:border-slate-600'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-xl">{gtw.icon}</span>
-                        <div>
-                          <div className="text-xs font-bold flex items-center gap-2">
-                            <span>{gtw.nameAr}</span>
-                            {gtw.badgeAr && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold">
-                                {gtw.badgeAr}
-                              </span>
-                            )}
-                          </div>
-                          {gtw.instructionsAr && (
-                            <p className="text-[11px] text-amber-300/90 font-medium mt-0.5">
-                              📌 {gtw.instructionsAr}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
+                  {countryGateways.map((gtw) => {
+                    const isSelected = selectedGatewayId === gtw.id;
+                    return (
                       <div
-                        className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          selectedGatewayId === gtw.id
-                            ? 'border-emerald-400 bg-emerald-500'
-                            : 'border-slate-600'
+                        key={gtw.id}
+                        onClick={() => setSelectedGatewayId(gtw.id)}
+                        className={`p-3 rounded-2xl border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-emerald-950/40 border-emerald-500/80 text-white shadow-md'
+                            : 'bg-slate-800/30 border-slate-700/60 text-slate-300 hover:border-slate-600'
                         }`}
                       >
-                        {selectedGatewayId === gtw.id && <CheckCircle2 className="w-3.5 h-3.5 text-slate-950" />}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-xl">{gtw.icon}</span>
+                            <div>
+                              <div className="text-xs font-bold flex items-center gap-2">
+                                <span>{gtw.nameAr}</span>
+                                {gtw.badgeAr && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold">
+                                    {gtw.badgeAr}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div
+                            className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                              isSelected
+                                ? 'border-emerald-400 bg-emerald-500'
+                                : 'border-slate-600'
+                            }`}
+                          >
+                            {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-slate-950" />}
+                          </div>
+                        </div>
+
+                        {/* Instructions & Transfer Account Details */}
+                        {isSelected && gtw.instructionsAr && (
+                          <div className="mt-2.5 pt-2 border-t border-slate-700/60 bg-slate-950/60 p-2.5 rounded-xl space-y-1.5">
+                            <p className="text-[11px] text-amber-300 font-medium flex items-start gap-1">
+                              <span>📌</span>
+                              <span>{gtw.instructionsAr}</span>
+                            </p>
+
+                            {/* Quick copy buttons for Yemen accounts */}
+                            {gtw.id === 'kuraimi_haseb' && (
+                              <div className="flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                                <span className="text-[11px] font-mono text-emerald-300 font-bold">حساب الكريمي: 301294857</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    copyToClipboard('301294857', 'كريمي');
+                                  }}
+                                  className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 font-bold flex items-center gap-1 cursor-pointer"
+                                >
+                                  {copiedText === 'كريمي' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                  <span>{copiedText === 'كريمي' ? 'تم النسخ' : 'نسخ الرقم'}</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {gtw.id === 'jeeb' && (
+                              <div className="flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                                <span className="text-[11px] font-mono text-emerald-300 font-bold">رقم محفظة جيب: 770001122</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    copyToClipboard('770001122', 'جيب');
+                                  }}
+                                  className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 font-bold flex items-center gap-1 cursor-pointer"
+                                >
+                                  {copiedText === 'جيب' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                  <span>{copiedText === 'جيب' ? 'تم النسخ' : 'نسخ الرقم'}</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </label>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Reference / Proof input (optional) */}
-              <div>
-                <label className="text-xs font-bold text-slate-300 mb-1 block">
-                  رقم الإشعار / المرجع للتأكيد (اختياري):
-                </label>
-                <input
-                  type="text"
-                  value={refNoInput}
-                  onChange={(e) => setRefNoInput(e.target.value)}
-                  placeholder="مثلاً: TXN-998823..."
-                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white outline-none focus:border-emerald-500"
-                />
+              {/* Sender Info & Proof of Payment (Required for verification) */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2.5">
+                <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>بيانات تأكيد الإيداع والتحويل الفعلي:</span>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-300 mb-1 block">
+                    رقم الإشعار / رقم الحوالة / السند <span className="text-rose-400">*</span>:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={refNoInput}
+                    onChange={(e) => setRefNoInput(e.target.value)}
+                    placeholder="أدخل رقم الإشعار أو الحوالة الصادر من تطبيق البنك..."
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    يتم التحقق من رقم السند لمطابقة وصول المبلغ الفعلي إلى حساب إدارة المتجر.
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-300 mb-1 block">
+                      اسم المودع / المحول (اختياري):
+                    </label>
+                    <input
+                      type="text"
+                      value={senderNameInput}
+                      onChange={(e) => setSenderNameInput(e.target.value)}
+                      placeholder="اسم صاحب الحساب المحول منه..."
+                      className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-300 mb-1 block">
+                      رقم هاتف المودع للتواصل (اختياري):
+                    </label>
+                    <input
+                      type="tel"
+                      value={senderPhoneInput}
+                      onChange={(e) => setSenderPhoneInput(e.target.value)}
+                      placeholder="77XXXXXXX"
+                      className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
               </div>
 
               <button
@@ -325,7 +471,7 @@ export const VillageWalletModal: React.FC<VillageWalletModalProps> = ({
                 className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 cursor-pointer transition-all active:scale-95"
               >
                 <PlusCircle className="w-5 h-5" />
-                <span>تأكيد شحن المحفظة فوراً</span>
+                <span>تأكيد تسجيل إيداع الرصيد</span>
               </button>
             </form>
           )}

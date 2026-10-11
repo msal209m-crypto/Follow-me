@@ -9,7 +9,7 @@ import {
   Clock,
   Sparkles,
   ChevronDown,
-  Navigation,
+  Navigation as NavigationIcon,
   X,
   CheckCircle2,
   Sliders,
@@ -709,8 +709,7 @@ export const PrayerTimesModal: React.FC<PrayerTimesModalProps> = ({
             <div className="relative w-44 h-44 mb-4 flex items-center justify-center">
               <div className="absolute inset-0 rounded-full border-4 border-dashed border-emerald-500/30 animate-spin-slow" />
               <div className="w-36 h-36 rounded-full bg-slate-900 border-2 border-emerald-500/50 flex items-center justify-center shadow-inner relative">
-                <Navigation
-                  className="w-16 h-16 text-emerald-400 transition-transform duration-700 filter drop-shadow-[0_0_12px_rgba(16,185,129,0.5)]"
+                <NavigationIcon                  className="w-16 h-16 text-emerald-400 transition-transform duration-700 filter drop-shadow-[0_0_12px_rgba(16,185,129,0.5)]"
                   style={{ transform: `rotate(${prayerData.qiblaDegrees}deg)` }}
                 />
                 <span className="absolute top-2 text-[10px] font-black text-slate-400">شمال</span>

@@ -10,7 +10,7 @@ import {
   Share2,
   Printer,
   Sparkles,
-  Lock,
+  Lock as LockIcon,
   Unlock,
   RefreshCw,
   Search,
@@ -352,7 +352,7 @@ WITH CHECK (
         {!isAdminAuthorized ? (
           <div className="p-8 flex flex-col items-center justify-center text-center space-y-4 my-auto">
             <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
-              <Lock className="w-8 h-8" />
+              <LockIcon className="w-8 h-8" />
             </div>
             <div className="max-w-md">
               <h3 className="text-lg font-bold text-white mb-1">
@@ -854,7 +854,7 @@ WITH CHECK (
 
                   <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
                     <span className="text-xs font-bold text-sky-300 flex items-center gap-1.5">
-                      <Lock className="w-4 h-4 text-sky-400" />
+                      <LockIcon className="w-4 h-4 text-sky-400" />
                       منع تسريب الأكواد
                     </span>
                     <p className="text-[11px] text-slate-400">

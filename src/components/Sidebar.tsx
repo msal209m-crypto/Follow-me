@@ -26,7 +26,7 @@ import {
   Cloud,
   Share2,
   KeyRound,
-  Lock,
+  Lock as LockIcon,
   ShoppingCart,
   Check,
   X,
@@ -391,7 +391,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {isCashierMode ? (
                 <div className="flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-500/40 px-2 py-0.5 rounded-lg shadow-sm">
-                  <Lock className="w-3 h-3 text-amber-400" />
+                  <LockIcon className="w-3 h-3 text-amber-400" />
                   <span>{language === 'ar' ? 'صلاحيات كاشير' : 'Cashier Mode'}</span>
                 </div>
               ) : (
@@ -618,7 +618,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <LogOut className="w-4 h-4" />
                       <span>{language === 'ar' ? 'خروج نهائي' : 'Full Logout'}</span>
                     </div>
-                    <Lock className="w-3 h-3" />
+                    <LockIcon className="w-3 h-3" />
                   </button>
                 )}
               </div>

@@ -41,7 +41,7 @@ import {
   AlertCircle,
   Star,
   Wallet,
-  Navigation,
+  Navigation as NavigationIcon,
   Bot,
   Menu,
   LocateFixed,
@@ -1315,7 +1315,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
               className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer border border-slate-700 flex items-center gap-1 shadow-xs active:scale-95"
               title="اختيار القرية أو المنطقة يدوياً"
             >
-              <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+              <NavigationIcon className="w-3.5 h-3.5 text-emerald-400" />
               <span className="hidden sm:inline">تغيير</span>
             </button>
           </div>
@@ -2510,7 +2510,7 @@ export const VillageStoreView: React.FC<VillageStoreViewProps> = ({
                           onClick={() => setIsLiveTrackerOpen(true)}
                           className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
                         >
-                          <Navigation className="w-3.5 h-3.5 text-white animate-spin" />
+                          <NavigationIcon className="w-3.5 h-3.5 text-white animate-spin" />
                           <span>فتح الخريطة الحية للتتبع بالـ GPS 🗺️</span>
                         </button>
 

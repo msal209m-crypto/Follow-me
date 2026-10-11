@@ -107,14 +107,13 @@ export function playNotificationChime(type: 'new_order' | 'ready_pickup' | 'acce
   }
 }
 
-export function saveDeliveryOrders(orders: DeliveryOrder[]) {
+export function saveDeliveryOrders(orders: DeliveryOrder[], specificUpdatedOrder?: DeliveryOrder) {
   try {
     localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
     window.dispatchEvent(new CustomEvent('qaryati:orders-updated', { detail: orders }));
-    // Sync all to Firestore
-    orders.forEach((o) => {
-      syncSaveOrder(o).catch((e) => console.warn('Firestore order sync error:', e));
-    });
+    if (specificUpdatedOrder) {
+      syncSaveOrder(specificUpdatedOrder).catch((e) => console.warn('Firestore order sync error:', e));
+    }
   } catch (e) {
     console.error('Failed to save delivery orders:', e);
   }

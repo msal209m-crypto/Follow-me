@@ -16,7 +16,7 @@ import {
   AlertCircle,
   Home,
   MessageSquare,
-  Navigation,
+  Navigation as NavigationIcon,
   LogOut,
   Edit3,
   Save,
@@ -328,7 +328,7 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
                   {[
                     { id: 'MOTORCYCLE', label: 'دباب / نارية', icon: Bike },
                     { id: 'CAR', label: 'سيارة', icon: Truck },
-                    { id: 'BICYCLE', label: 'دراجة', icon: Navigation },
+                    { id: 'BICYCLE', label: 'دراجة', icon: NavigationIcon },
                   ].map((v) => {
                     const Icon = v.icon;
                     const isSelected = vehicleType === v.id;
@@ -715,7 +715,7 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
                             }}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black rounded-lg transition-all cursor-pointer"
                           >
-                            <Navigation className="w-3.5 h-3.5 animate-pulse" />
+                            <NavigationIcon className="w-3.5 h-3.5 animate-pulse" />
                             <span>تحديث الشحنة: أنا في الطريق للزبون الآن 🛵</span>
                           </button>
                         </div>

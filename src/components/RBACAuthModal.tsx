@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   ShieldCheck,
-  Lock,
+  Lock as LockIcon,
   Phone,
   Store,
   User,
@@ -696,7 +696,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                       )}
                     </div>
                     <div className="relative">
-                      <Lock className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                      <LockIcon className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
                       <input
                         type="password"
                         required
@@ -916,7 +916,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                       )}
                     </div>
                     <div className="relative">
-                      <Lock className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                      <LockIcon className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
                       <input
                         type="password"
                         required
@@ -1077,7 +1077,7 @@ export const RBACAuthModal: React.FC<RBACAuthModalProps> = ({
                       مفتاح المطور السري / كلمة المرور
                     </label>
                     <div className="relative">
-                      <Lock className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
+                      <LockIcon className={`w-4 h-4 text-slate-500 absolute top-2.5 ${isRTL ? 'right-3' : 'left-3'}`} />
                       <input
                         type="password"
                         required

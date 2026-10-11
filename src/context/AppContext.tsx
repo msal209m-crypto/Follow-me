@@ -602,9 +602,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
       localStorage.setItem('qaryati_products', JSON.stringify(qaryatiFormat));
 
-      // Save to IndexedDB asynchronously to handle rich images and bypass 5MB local quota
-      import('../utils/indexedDB').then(({ saveToIndexedDB }) => {
-        items.forEach((item) => saveToIndexedDB('items', item));
+      // Save to IndexedDB asynchronously using high-performance bulk transaction to bypass 5MB local quota
+      import('../utils/indexedDB').then(({ saveBulkToIndexedDB }) => {
+        saveBulkToIndexedDB('items', items);
       });
     } catch (e) {
       console.error('Failed to sync items to localStorage (quota or serialization issue):', e);
@@ -616,8 +616,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }));
         localStorage.setItem(userPrefix + STORAGE_KEYS.ITEMS, JSON.stringify(lightweightItems));
 
-        import('../utils/indexedDB').then(({ saveToIndexedDB }) => {
-          items.forEach((item) => saveToIndexedDB('items', item));
+        import('../utils/indexedDB').then(({ saveBulkToIndexedDB }) => {
+          saveBulkToIndexedDB('items', items);
         });
       } catch (innerE) {
         console.error('Critical localStorage quota exceeded:', innerE);
@@ -628,9 +628,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     try {
       localStorage.setItem(userPrefix + STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
-      // Save to IndexedDB asynchronously for full sales history
-      import('../utils/indexedDB').then(({ saveToIndexedDB }) => {
-        transactions.forEach((tx) => saveToIndexedDB('transactions', tx));
+      // Save to IndexedDB in a single bulk transaction
+      import('../utils/indexedDB').then(({ saveBulkToIndexedDB }) => {
+        saveBulkToIndexedDB('transactions', transactions);
       });
     } catch (e) {
       console.error(e);
@@ -640,9 +640,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     try {
       localStorage.setItem(userPrefix + STORAGE_KEYS.DEBTS, JSON.stringify(debts));
-      // Save to IndexedDB asynchronously for debts
-      import('../utils/indexedDB').then(({ saveToIndexedDB }) => {
-        debts.forEach((d) => saveToIndexedDB('debts', d));
+      // Save to IndexedDB in a single bulk transaction
+      import('../utils/indexedDB').then(({ saveBulkToIndexedDB }) => {
+        saveBulkToIndexedDB('debts', debts);
       });
     } catch (e) {
       console.error(e);

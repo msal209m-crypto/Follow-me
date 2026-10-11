@@ -734,14 +734,23 @@ export async function syncSaveOrder(order: DeliveryOrder): Promise<void> {
     window.dispatchEvent(new CustomEvent('qaryati:orders-updated', { detail: list }));
   } catch {}
 
-  // Cloud Firestore
+  // Cloud Firestore with Offline Queue Fallback
   try {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const { queueOfflineSync } = await import('../utils/indexedDB');
+      await queueOfflineSync('delivery_orders', 'SET', order);
+      return;
+    }
     await safeSetDoc(doc(db, 'delivery_orders', order.id), {
       ...order,
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (err) {
-    console.warn('Firestore order save error:', err);
+    console.warn('Firestore order save error, enqueuing for offline sync:', err);
+    try {
+      const { queueOfflineSync } = await import('../utils/indexedDB');
+      await queueOfflineSync('delivery_orders', 'SET', order);
+    } catch {}
   }
 }
 

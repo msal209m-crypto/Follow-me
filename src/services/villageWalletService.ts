@@ -21,21 +21,9 @@ export interface VillageWalletState {
 const WALLET_KEY = 'qaryati_village_wallet_v1';
 
 const DEFAULT_WALLET: VillageWalletState = {
-  balance: 350.0, // Default welcome test balance
+  balance: 0.0, // الرصيد الافتراضي 0 حتى يقوم المستخدم بالشحن الحقيقي
   currency: 'SAR',
-  transactions: [
-    {
-      id: 'tx_welcome',
-      type: 'DEPOSIT',
-      amount: 350.0,
-      currency: 'SAR',
-      title: 'هدية الترحيب بمحفظة القرية 🎁',
-      description: 'رصيد محفظة رقمي تجريبي للبدء في التسوق المباشر',
-      methodName: 'مكافأة النظام',
-      timestamp: new Date().toLocaleDateString('ar-SA'),
-      refNumber: 'TX-INIT-001',
-    },
-  ],
+  transactions: [],
 };
 
 export function getVillageWallet(): VillageWalletState {

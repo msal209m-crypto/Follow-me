@@ -15,7 +15,7 @@ import {
   TrendingUp,
   DollarSign,
   Layers,
-  History,
+  History as HistoryIcon,
   Truck,
   Clock,
   ArrowUpRight,
@@ -25,7 +25,7 @@ import {
   Store,
   MapPin,
   FileSpreadsheet,
-  Lock,
+  Lock as LockIcon,
   Tag,
   FolderKanban,
   X,
@@ -393,7 +393,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
         <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-950/80 border-2 border-amber-500/80 shadow-md flex items-center justify-between gap-3 text-amber-200">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-amber-500/30 text-amber-300 border border-amber-500/50 flex items-center justify-center shrink-0">
-              <Lock className="w-5 h-5" />
+              <LockIcon className="w-5 h-5" />
             </div>
             <div>
               <h4 className="text-xs font-black text-amber-200">
@@ -450,7 +450,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
               : 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/20 cursor-pointer'
           }`}
         >
-          {!isMerchantApproved ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <Plus className="w-3.5 h-3.5" />}
+          {!isMerchantApproved ? <LockIcon className="w-3.5 h-3.5 text-amber-400" /> : <Plus className="w-3.5 h-3.5" />}
           <span>إضافة صنف جديد</span>
           {!isMerchantApproved && <span className="text-[9px] px-1 py-0.2 rounded bg-amber-950 text-amber-300">مقفل</span>}
         </button>
@@ -1328,7 +1328,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
                             title={t.viewMovementHistory}
                             className="p-1.5 rounded-lg bg-teal-500/20 text-teal-300 hover:bg-teal-500/30 border border-teal-500/40 transition-colors cursor-pointer"
                           >
-                            <History className="w-4 h-4" />
+                            <HistoryIcon className="w-4 h-4" />
                           </button>
 
                           {/* Print Sticker Button */}

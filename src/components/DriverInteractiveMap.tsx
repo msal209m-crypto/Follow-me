@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MapPin, Navigation, Compass, Info, Award, Clock, ArrowLeftRight, CheckCircle2, ChevronRight, AlertCircle, Phone, MessageSquare, Plus, Check } from 'lucide-react';
+import { MapPin, Navigation as NavigationIcon, Compass, Info, Award, Clock, ArrowLeftRight, CheckCircle2, ChevronRight, AlertCircle, Phone, MessageSquare, Plus, Check } from 'lucide-react';
 import { DeliveryOrder, StoreSettings } from '../types';
 
 interface DriverInteractiveMapProps {
@@ -503,7 +503,7 @@ export const DriverInteractiveMap: React.FC<DriverInteractiveMapProps> = ({
                 {routeStats && (
                   <div className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl space-y-2 text-[10px]">
                     <div className="font-bold text-slate-300 flex items-center gap-1">
-                      <Navigation className="w-3.5 h-3.5 text-amber-500" />
+                      <NavigationIcon className="w-3.5 h-3.5 text-amber-500" />
                       <span>بيانات المسار والمسافات (GPS):</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400">

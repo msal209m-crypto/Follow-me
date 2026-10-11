@@ -11,7 +11,7 @@ const DB_VERSION = 2;
 export interface OfflineAction {
   id: string; // unique action ID
   timestamp: string;
-  collection: 'transactions' | 'items' | 'debts';
+  collection: 'transactions' | 'items' | 'debts' | 'delivery_orders' | 'stores';
   operation: 'SET' | 'DELETE';
   payload: any;
 }
@@ -82,6 +82,33 @@ export async function saveToIndexedDB(
     });
   } catch (err) {
     console.error(`Error saving to IndexedDB [${storeName}]:`, err);
+  }
+}
+
+/**
+ * Saves multiple records in a single high-performance IndexedDB transaction.
+ * Completely eliminates UI lag and event loop freezing when persisting hundreds of items/transactions.
+ */
+export async function saveBulkToIndexedDB(
+  storeName: 'transactions' | 'items' | 'debts' | 'offline_queue',
+  records: any[]
+): Promise<void> {
+  if (!records || records.length === 0) return;
+  try {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(storeName, 'readwrite');
+      const store = transaction.objectStore(storeName);
+      for (const record of records) {
+        store.put(record);
+      }
+
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(new Error(`Transaction aborted on ${storeName}`));
+    });
+  } catch (err) {
+    console.error(`Error bulk saving to IndexedDB [${storeName}]:`, err);
   }
 }
 
@@ -177,7 +204,7 @@ export async function clearIndexedDBStore(
  * Enqueues a write or delete operation to be synced when the internet is active
  */
 export async function queueOfflineSync(
-  collection: 'transactions' | 'items' | 'debts',
+  collection: 'transactions' | 'items' | 'debts' | 'delivery_orders' | 'stores',
   operation: 'SET' | 'DELETE',
   payload: any
 ): Promise<void> {
@@ -215,12 +242,21 @@ export async function processOfflineSyncQueue(
 
   for (const action of queue) {
     try {
-      // Reconstruct document reference in Firestore
-      // e.g., users/{uid}/{collection}/{id}
-      const docPath = `users/${currentUserUid}/${action.collection}/${action.payload.id}`;
-      // Import dynamic or pass firestore doc helper
       const { doc } = await import('firebase/firestore');
-      const docRef = doc(dbRef, 'users', currentUserUid, action.collection, action.payload.id);
+      let docRef: any;
+      let docPath: string;
+
+      if (action.collection === 'delivery_orders') {
+        docRef = doc(dbRef, 'delivery_orders', action.payload.id);
+        docPath = `delivery_orders/${action.payload.id}`;
+      } else if (action.collection === 'stores') {
+        docRef = doc(dbRef, 'stores', action.payload.id);
+        docPath = `stores/${action.payload.id}`;
+      } else {
+        const uid = currentUserUid || 'default';
+        docRef = doc(dbRef, 'users', uid, action.collection, action.payload.id);
+        docPath = `users/${uid}/${action.collection}/${action.payload.id}`;
+      }
 
       if (action.operation === 'SET') {
         await safeSetDocFn(docRef, action.payload, { merge: true });

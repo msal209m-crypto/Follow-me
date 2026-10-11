@@ -402,12 +402,58 @@ export function getCountryPaymentGateways(countryCode?: string): CountryPaymentG
     case 'YE':
       return [
         commonWallet,
-        { id: 'kuraimi_haseb', nameAr: 'حاسب الكريمي (Kuraimi Express) 🏦', nameEn: 'Kuraimi Haseb', icon: '🏦', type: 'BANK_APP', badgeAr: 'اليمن الأكثر استخداماً', instructionsAr: 'ارسل إلى حساب الكريمي رقم: 301294857 باسم متجر قريتي' },
-        { id: 'flousak', nameAr: 'محفظة فلوسك (Flousak) 💸', nameEn: 'Flousak Wallet', icon: '💸', type: 'WALLETS', badgeAr: 'محفظة رقمية' },
-        { id: 'jawwal_money', nameAr: 'جوال ماني (Jawwal Money) 📱', nameEn: 'Jawwal Money', icon: '📱', type: 'WALLETS' },
-        { id: 'onecash', nameAr: 'ون كاش (OneCash) 💳', nameEn: 'OneCash', icon: '💳', type: 'WALLETS' },
-        { id: 'jeeb', nameAr: 'جيب (Jeeb Wallet) 📲', nameEn: 'Jeeb Wallet', icon: '📲', type: 'WALLETS' },
-        { id: 'local_hawala', nameAr: 'حوالة صرافة سريعة (النجم/الممتاز) 📨', nameEn: 'Local Hawala Exchange', icon: '📨', type: 'CASH', badgeAr: 'حوالة' },
+        { 
+          id: 'kuraimi_haseb', 
+          nameAr: 'حاسب الكريمي (Kuraimi Express) 🏦', 
+          nameEn: 'Kuraimi Haseb', 
+          icon: '🏦', 
+          type: 'BANK_APP', 
+          badgeAr: 'بنك الكريمي', 
+          instructionsAr: 'قم بالتحويل عبر تطبيق الكريمي جوال لحساب رقم (301294857) باسم (إدارة متجر قريتي)، ثم أدخل رقم الحوالة/الإشعار للتأكيد.' 
+        },
+        { 
+          id: 'jeeb', 
+          nameAr: 'محفظة جيب (Jeeb Wallet) 📲', 
+          nameEn: 'Jeeb Wallet', 
+          icon: '📲', 
+          type: 'WALLETS', 
+          badgeAr: 'محفظة جيب كاك بنك', 
+          instructionsAr: 'حول من تطبيق محفظة جيب إلى رقم الحساب (770001122) أو عبر مسح QR المحفظة، ثم أرفق رقم السند.' 
+        },
+        { 
+          id: 'flousak', 
+          nameAr: 'محفظة فلوسك (Flousak - بنك اليمن والكويت) 💸', 
+          nameEn: 'Flousak Wallet', 
+          icon: '💸', 
+          type: 'WALLETS', 
+          badgeAr: 'محفظة فلوسك', 
+          instructionsAr: 'أرسل المبلغ لرقم فلوسك (775550011) ثم ضع رقم العملية هنا.' 
+        },
+        { 
+          id: 'jawwal_money', 
+          nameAr: 'جوال ماني (Jawwal Money - كاك بنك) 📱', 
+          nameEn: 'Jawwal Money', 
+          icon: '📱', 
+          type: 'WALLETS', 
+          instructionsAr: 'التحويل لرقم حساب جوال ماني (778889900) وإدخال رقم المرجع.' 
+        },
+        { 
+          id: 'onecash', 
+          nameAr: 'ون كاش (OneCash) 💳', 
+          nameEn: 'OneCash', 
+          icon: '💳', 
+          type: 'WALLETS', 
+          instructionsAr: 'التحويل لرقم محفظة ون كاش (711122233) وإدخال رقم الإشعار.' 
+        },
+        { 
+          id: 'local_hawala', 
+          nameAr: 'حوالة صرافة سريعة (النجم / الامتياز / الحزمي) 📨', 
+          nameEn: 'Local Hawala Exchange', 
+          icon: '📨', 
+          type: 'CASH', 
+          badgeAr: 'شبكات الصرافة', 
+          instructionsAr: 'أرسل حوالة باسم المستلم (متجر قريتي - 770000000) عبر أي صراف، وأدخل رقم الحوالة الصادر من الصراف.' 
+        },
         commonCash,
       ];
 

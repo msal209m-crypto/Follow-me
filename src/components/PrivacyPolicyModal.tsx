@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, X, FileText, Lock, Eye, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, X, FileText, Lock as LockIcon, Eye, CheckCircle2 } from 'lucide-react';
 
 interface PrivacyPolicyModalProps {
   isOpen: boolean;
@@ -37,7 +37,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({
         <div className="space-y-4 text-xs sm:text-sm text-slate-300 leading-relaxed">
           <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
             <h3 className="font-bold text-white flex items-center gap-2">
-              <Lock className="w-4 h-4 text-emerald-400" />
+              <LockIcon className="w-4 h-4 text-emerald-400" />
               <span>1. حماية البيانات والخصوصية</span>
             </h3>
             <p>

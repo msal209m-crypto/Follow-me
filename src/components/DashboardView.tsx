@@ -45,7 +45,7 @@ import {
   Bell,
   Compass,
   Coins,
-  Lock,
+  Lock as LockIcon,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { NavigationTab, Transaction, Item } from '../types';
@@ -383,7 +383,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-950/80 border-2 border-amber-500/80 shadow-lg shadow-amber-950/60 backdrop-blur-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-pulse">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/30 text-amber-300 border border-amber-500/50 flex items-center justify-center shrink-0">
-              <Lock className="w-5 h-5" />
+              <LockIcon className="w-5 h-5" />
             </div>
             <div>
               <h4 className="text-xs sm:text-sm font-black text-amber-200 flex items-center gap-2">
@@ -410,7 +410,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 : 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse'
             }`}
           >
-            {isKycApproved ? <ShieldCheck className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+            {isKycApproved ? <ShieldCheck className="w-5 h-5" /> : <LockIcon className="w-5 h-5" />}
           </div>
           <div>
             <div className="text-[11px] text-slate-400 font-bold flex items-center gap-1.5">
@@ -470,7 +470,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               : 'bg-slate-900 border border-slate-800 text-slate-200 hover:border-emerald-500/50 hover:text-emerald-400'
           }`}
         >
-          {!isKycApproved ? <Lock className="w-4 h-4 text-amber-400" /> : <Plus className="w-4 h-4" />}
+          {!isKycApproved ? <LockIcon className="w-4 h-4 text-amber-400" /> : <Plus className="w-4 h-4" />}
           <span>{language === 'ar' ? 'إضافة صنف' : 'Add Item'}</span>
           {!isKycApproved && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 font-bold">
@@ -493,7 +493,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               : 'bg-slate-900 border border-slate-800 text-slate-200 hover:border-amber-500/50 hover:text-amber-400'
           }`}
         >
-          {!isKycApproved ? <Lock className="w-4 h-4 text-amber-400" /> : <Truck className="w-4 h-4" />}
+          {!isKycApproved ? <LockIcon className="w-4 h-4 text-amber-400" /> : <Truck className="w-4 h-4" />}
           <span>{language === 'ar' ? 'توريد بضاعة' : 'Supply'}</span>
           {!isKycApproved && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 font-bold">

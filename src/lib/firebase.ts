@@ -1,6 +1,12 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { initializeFirestore, getFirestore, setLogLevel, enableIndexedDbPersistence } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  getFirestore,
+  setLogLevel,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
 import { getMessaging, isSupported } from 'firebase/messaging';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -18,13 +24,16 @@ setPersistence(auth, browserLocalPersistence).catch(() => {});
 
 export const googleProvider = new GoogleAuthProvider();
 
-// Initialize Firestore with custom databaseId, experimentalForceLongPolling and experimentalAutoDetectLongPolling
-// to prevent WebSocket/proxy connection drops and "Could not reach Cloud Firestore backend" timeout errors.
+// Initialize Firestore with robust multi-tab offline persistence via persistentLocalCache
+// and long polling to prevent proxy drops and "Could not reach Cloud Firestore backend" timeout errors.
 let firestoreInstance;
 try {
   firestoreInstance = initializeFirestore(
     app,
     {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
       experimentalForceLongPolling: true,
       experimentalAutoDetectLongPolling: true,
     },
@@ -38,11 +47,6 @@ try {
 }
 
 export const db = firestoreInstance;
-
-// Enable IndexedDb offline persistence for instant offline reads without network delay errors
-try {
-  enableIndexedDbPersistence(db).catch(() => {});
-} catch {}
 
 // Safe FCM Messaging initialization
 let messagingInstance: any = null;

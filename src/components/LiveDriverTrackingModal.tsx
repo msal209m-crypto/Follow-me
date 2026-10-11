@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Navigation,
+  Navigation as NavigationIcon,
   Phone,
   MessageSquare,
   Clock,
@@ -218,7 +218,7 @@ export const LiveDriverTrackingModal: React.FC<LiveDriverTrackingModalProps> = (
         <div className="p-4 border-b border-slate-700/50 flex items-center justify-between bg-slate-900/90 relative z-10 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30">
-              <Navigation className="w-5 h-5 animate-pulse" />
+              <NavigationIcon className="w-5 h-5 animate-pulse" />
             </div>
             <div>
               <h2 className="font-extrabold text-base sm:text-lg text-blue-400 flex items-center gap-2">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Megaphone, Sparkles, CheckCircle2, AlertCircle, Plus, Layers, BadgeDollarSign, Calendar, ExternalLink, Clock, Image, ArrowUpRight } from 'lucide-react';
+import { Megaphone, Sparkles, CheckCircle2, AlertCircle, Plus, Layers, BadgeDollarSign, Calendar, ExternalLink, Clock, Image as ImageIcon, ArrowUpRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getAds, submitAdRequest, DEFAULT_AD_PACKAGES } from '../services/adsService';
 import { AdRecord } from '../types';
@@ -196,7 +196,7 @@ export const MerchantAdsView: React.FC = () => {
                       placeholder="https://example.com/image.jpg"
                       className="w-full text-xs rounded-xl px-4 py-3 bg-slate-950 border border-slate-800 text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
-                    <Image className="w-4 h-4 text-slate-600 absolute top-1/2 -translate-y-1/2 left-3" />
+                    <ImageIcon className="w-4 h-4 text-slate-600 absolute top-1/2 -translate-y-1/2 left-3" />
                   </div>
                 </div>
 
