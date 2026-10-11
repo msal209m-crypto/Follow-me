@@ -367,6 +367,7 @@ export interface MerchantAccountRecord {
   status?: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
   suspendReason?: string;
   kycStatus?: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED'; // حالة مراجعة الهوية للتاجر
+  category?: string; // تصنيف المحل والنشاط
   extractedName?: string; // الاسم المستخرج من الهوية عبر OCR
   extractedNationalId?: string; // رقم الهوية المستخرج من الهوية عبر OCR
   ocrConfidence?: number; // نسبة مطابقة الـ OCR
@@ -660,6 +661,91 @@ export async function registerMerchant(params: {
     message: 'تم استلام طلب تسجيل متجرك بنجاح! حسابك حالياً بحالة (معلق ⏳ بانتظار اعتماد المطور وتدقيق الهوية والـ OCR تلقائياً).', 
     merchant: newMerchant 
   };
+}
+
+export async function registerMerchantAccount(params: {
+  name: string;
+  phone: string;
+  storeName: string;
+  nationalId?: string;
+  village?: string;
+  villageName?: string;
+  password?: string;
+  photo?: string;
+  category?: string;
+  isApproved?: boolean;
+}): Promise<{ success: boolean; message: string; merchant?: MerchantAccountRecord }> {
+  const cleanPhone = params.phone.trim().replace(/\s+/g, '');
+  const cleanNationalId = (params.nationalId || `ST-${Date.now().toString().slice(-6)}`).trim();
+  const cleanName = (params.name || params.storeName || 'صاحب المتجر').trim();
+  const village = (params.villageName || params.village || 'القرية').trim();
+  const finalPassword = (params.password || '1234').trim();
+
+  const merchants = getMerchants();
+  let existing = merchants.find(
+    (m) => phonesMatch(m.phone, cleanPhone) || (cleanNationalId && m.nationalId === cleanNationalId)
+  );
+
+  if (existing) {
+    existing.name = cleanName || existing.name;
+    existing.storeName = params.storeName.trim() || existing.storeName;
+    existing.passwordHash = finalPassword;
+    existing.village = village || existing.village;
+    existing.category = params.category || existing.category || 'محلات تجارية عامة';
+    if (params.photo) existing.photo = params.photo;
+    existing.isApproved = true;
+    (existing as any).status = 'ACTIVE';
+    (existing as any).kycStatus = 'APPROVED';
+    existing.updatedAt = new Date().toISOString();
+
+    await saveMerchants(merchants);
+    await syncSaveMerchant(existing);
+    return { success: true, message: 'تم تحديث وتفعيل حساب التاجر بنجاح', merchant: existing };
+  }
+
+  const merchantId = `merchant_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const newMerchant: MerchantAccountRecord = {
+    id: merchantId,
+    name: cleanName,
+    phone: cleanPhone,
+    nationalId: cleanNationalId,
+    passwordHash: finalPassword,
+    storeName: params.storeName.trim() || `متجر ${cleanName}`,
+    village: village,
+    category: params.category || 'محلات تجارية عامة',
+    photo: params.photo || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    isApproved: true,
+  } as any;
+  (newMerchant as any).status = 'ACTIVE';
+  (newMerchant as any).kycStatus = 'APPROVED';
+
+  try {
+    if (supabase) {
+      await (supabase as any).from('merchants').upsert({
+        id: merchantId,
+        name: cleanName,
+        phone: cleanPhone,
+        national_id: cleanNationalId,
+        store_name: newMerchant.storeName,
+        village_name: newMerchant.village,
+        village_id: newMerchant.village,
+        password_hash: finalPassword,
+        is_approved: true,
+        created_at: newMerchant.createdAt,
+        updated_at: newMerchant.updatedAt,
+      }, { onConflict: 'phone' });
+    }
+  } catch (e) {
+    console.warn('Supabase merchant table sync notice:', e);
+  }
+
+  merchants.unshift(newMerchant);
+  await saveMerchants(merchants);
+  await syncSaveMerchant(newMerchant);
+
+  return { success: true, message: 'تم إنشاء وتفعيل حساب التاجر بنجاح', merchant: newMerchant };
 }
 
 export async function loginMerchant(

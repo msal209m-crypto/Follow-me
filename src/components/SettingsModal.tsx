@@ -28,6 +28,7 @@ import {
   MessageCircle,
   Bell,
   Key,
+  KeyRound,
   Battery,
   Truck,
   Image as ImageIcon,
@@ -187,6 +188,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
   const [address, setAddress] = useState(settings.address);
   const [currency, setCurrency] = useState(settings.currency);
   const [footerNote, setFooterNote] = useState(settings.footerNote);
+  const [merchantPassword, setMerchantPassword] = useState(settings.merchantPassword || '1234');
   const [storeLogo, setStoreLogo] = useState<string>(settings.storeLogo || '');
   const [storeCover, setStoreCover] = useState<string>(settings.storeCover || '');
   const [storeIcon, setStoreIcon] = useState<string>(settings.storeIcon || '🏪');
@@ -281,6 +283,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
       address,
       currency: currency.trim() || 'ر.س',
       footerNote,
+      merchantPassword: merchantPassword.trim() || '1234',
       storeLogo: storeLogo.trim() || undefined,
       storeCover: storeCover.trim() || undefined,
       storeIcon: storeIcon.trim() || undefined,
@@ -729,6 +732,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, initialTa
                   {language === 'en' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
                 </button>
               </div>
+            </div>
+
+            {/* Merchant / Admin Password Setting */}
+            <div className="bg-slate-950/60 border border-amber-500/30 rounded-xl p-3 space-y-2">
+              <label className="text-amber-300 font-bold block flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span>{language === 'ar' ? 'كلمة مرور التاجر / المدير العام (للرجوع من وضع الكاشير):' : 'Merchant / Admin Password (for Cashier Return):'}</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={merchantPassword}
+                  onChange={(e) => setMerchantPassword(e.target.value)}
+                  placeholder="مثال: 5678 أو كلمة مرور سرية"
+                  className="w-full bg-slate-900 border border-amber-500/40 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-amber-400"
+                />
+              </div>
+              <p className="text-[10px] text-amber-200/70">
+                {language === 'ar'
+                  ? '💡 هذه كلمة المرور السرية التي سيطلبها النظام حصرياً عندما يحاول الكاشير العودة لحساب التاجر أو المشرف.'
+                  : '💡 This secret password will be strictly required when a cashier attempts to return to the merchant/admin account.'}
+              </p>
             </div>
 
             {/* ================================================================= */}

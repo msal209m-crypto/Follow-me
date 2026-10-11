@@ -23,6 +23,7 @@ import {
   Sparkles,
   Lock as LockIcon,
   Eye,
+  EyeOff,
   Barcode,
   Megaphone,
   Globe,
@@ -48,11 +49,15 @@ import {
   PackagePlus,
   LogOut,
   Edit3,
+  Edit2,
   Save,
   Bell,
   MessageSquare,
+  MessageCircle,
   Send,
   IdCard,
+  Upload,
+  Image as ImageIcon,
   X,
 } from 'lucide-react';
 import {
@@ -104,6 +109,7 @@ import {
   getPlatformAds,
   savePlatformAds,
   addPlatformAd,
+  updatePlatformAd,
   togglePlatformAdStatus,
   deletePlatformAd,
   getBarcodePlatformConfig,
@@ -114,6 +120,7 @@ import {
   addApprovedVillage,
   deleteApprovedVillage
 } from '../services/platformSettingsService';
+import { deleteAdRecord, updateAdRecord } from '../services/adsService';
 
 interface PlatformAdminViewProps {
   settings: StoreSettings;
@@ -349,6 +356,54 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   const [newAdGradient, setNewAdGradient] = useState('from-emerald-600 via-teal-600 to-cyan-700');
   const [newAdStoreId, setNewAdStoreId] = useState<string>('');
 
+  // Edit Ad State
+  const [editingAd, setEditingAd] = useState<PlatformAd | null>(null);
+  const [editAdTitle, setEditAdTitle] = useState('');
+  const [editAdSubtitle, setEditAdSubtitle] = useState('');
+  const [editAdBadge, setEditAdBadge] = useState('');
+  const [editAdCode, setEditAdCode] = useState('');
+  const [editAdGradient, setEditAdGradient] = useState('');
+  const [editAdStoreId, setEditAdStoreId] = useState('');
+  const [editAdActionText, setEditAdActionText] = useState('');
+  const [editAdIsActive, setEditAdIsActive] = useState(true);
+
+  const handleOpenEditAd = (ad: PlatformAd) => {
+    setEditingAd(ad);
+    setEditAdTitle(ad.title || '');
+    setEditAdSubtitle(ad.subtitle || '');
+    setEditAdBadge(ad.badge || 'عرض خاص 🌟');
+    setEditAdCode(ad.discountCode || '');
+    setEditAdGradient(ad.bgGradient || 'from-emerald-600 via-teal-600 to-cyan-700');
+    setEditAdStoreId(ad.storeId || '');
+    setEditAdActionText(ad.actionText || 'تصفح العرض');
+    setEditAdIsActive(ad.isActive);
+  };
+
+  const handleSaveEditAd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAd || !editAdTitle.trim()) return;
+
+    const selectedStore = stores.find((s) => s.id === editAdStoreId);
+
+    const updatedData: Partial<PlatformAd> = {
+      title: editAdTitle.trim(),
+      subtitle: editAdSubtitle.trim(),
+      badge: editAdBadge.trim() || 'عرض مميز',
+      discountCode: editAdCode.trim() || undefined,
+      bgGradient: editAdGradient,
+      storeId: selectedStore?.id || editingAd.storeId,
+      storeName: selectedStore?.name || editingAd.storeName,
+      village: selectedStore?.cityOrVillage || editingAd.village,
+      actionText: editAdActionText.trim() || 'تصفح العرض',
+      isActive: editAdIsActive,
+    };
+
+    updatePlatformAd(editingAd.id, updatedData);
+    setAdsList(getPlatformAds());
+    setEditingAd(null);
+    showToast('تم حفظ وتعديل الإعلان والبنر بنجاح! ✅');
+  };
+
   const handleAddAdSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAdTitle.trim()) return;
@@ -384,10 +439,11 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   };
 
   const handleDeleteAd = (id: string) => {
-    if (confirm('هل أنت متأكد من حذف هذا الإعلان؟')) {
+    if (confirm('هل أنت متأكد من حذف هذا الإعلان نهائياً؟ لن يعود للظهور مجدداً.')) {
       deletePlatformAd(id);
+      deleteAdRecord(id);
       setAdsList(getPlatformAds());
-      showToast('تم حذف الإعلان');
+      showToast('تم حذف الإعلان نهائياً');
     }
   };
 
@@ -504,6 +560,11 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   const [newOwnerName, setNewOwnerName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newVillage, setNewVillage] = useState('');
+  const [newStoreCategory, setNewStoreCategory] = useState('بقالات وتموينات غذائية 🛒');
+  const [customCategoryInput, setCustomCategoryInput] = useState('');
+  const [newStoreLogo, setNewStoreLogo] = useState('');
+  const [newStorePassword, setNewStorePassword] = useState('');
+  const [showNewStorePassword, setShowNewStorePassword] = useState(false);
   const [newMerchantPin, setNewMerchantPin] = useState('1234');
   const [newIsPro, setNewIsPro] = useState(true);
   const [createdStoreModal, setCreatedStoreModal] = useState<StoreDirectoryRecord | null>(null);
@@ -668,26 +729,61 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
   const handleAddStoreSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStoreName.trim() || !newPhone.trim()) return;
+
+    const finalCategory =
+      newStoreCategory === 'CUSTOM'
+        ? (customCategoryInput.trim() || 'محلات تجارية عامة')
+        : newStoreCategory;
+    const finalPassword = newStorePassword.trim() || `store${Math.floor(1000 + Math.random() * 9000)}`;
+    const finalPin = newMerchantPin.trim() || '1234';
+
     const addedStore = addStoreToDirectory({
       name: newStoreName.trim(),
       ownerName: newOwnerName.trim() || 'صاحب المتجر',
       phone: newPhone.trim(),
       cityOrVillage: newVillage.trim() || 'القرية',
+      category: finalCategory,
+      logo: newStoreLogo.trim() || undefined,
+      merchantPin: finalPin,
+      merchantPassword: finalPassword,
       itemsCount: 0,
       isPro: newIsPro,
       planName: newIsPro ? 'باقة PRO (مفعلة من مالك المنصة)' : 'الباقة المجانية',
       status: 'ACTIVE',
-      merchantPin: newMerchantPin.trim() || '1234',
     });
-    setCreatedStoreModal(addedStore);
+
+    // Also auto-register and approve the merchant account in RBAC system so they can log in
+    import('../services/rbacAuthService').then(({ registerMerchantAccount }) => {
+      registerMerchantAccount({
+        name: newOwnerName.trim() || newStoreName.trim(),
+        phone: newPhone.trim(),
+        storeName: newStoreName.trim(),
+        nationalId: `ST-${Date.now().toString().slice(-6)}`,
+        villageName: newVillage.trim() || 'القرية',
+        password: finalPassword,
+        photo: newStoreLogo.trim() || undefined,
+      }).catch(console.warn);
+    });
+
+    setCreatedStoreModal({
+      ...addedStore,
+      category: finalCategory,
+      logo: newStoreLogo.trim() || undefined,
+      merchantPassword: finalPassword,
+      merchantPin: finalPin,
+    });
     setNewStoreName('');
     setNewOwnerName('');
     setNewPhone('');
     setNewVillage('');
+    setNewStoreCategory('بقالات وتموينات غذائية 🛒');
+    setCustomCategoryInput('');
+    setNewStoreLogo('');
+    setNewStorePassword('');
     setNewMerchantPin('1234');
     setShowAddStoreModal(false);
     refreshStoresAndOrders();
-    showToast(`تمت إضافة المتجر وفتح حسابه المحمي: ${addedStore.name}`);
+    showToast(`تمت إضافة المتجر بنجاح وجاهز لتسليم الحساب: ${addedStore.name}`);
   };
 
   const proStoresCount = stores.filter((s) => s.isPro).length;
@@ -2079,6 +2175,14 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                           )}
                           <button
                             type="button"
+                            onClick={() => handleOpenEditAd(ad)}
+                            className="p-1.5 rounded-lg bg-slate-850 hover:bg-purple-900/40 text-slate-400 hover:text-purple-300 transition-colors cursor-pointer"
+                            title="تعديل الإعلان والبنر"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeleteAd(ad.id)}
                             className="p-1.5 rounded-lg bg-slate-850 hover:bg-rose-900/40 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
                             title="حذف الإعلان"
@@ -2891,96 +2995,473 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
         </div>
       )}
 
-      {/* Add Store Modal */}
+      {/* Add Store Modal with Logo, Password, Category, and Instant Handover */}
       {showAddStoreModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4">
-            <h3 className="font-bold text-white text-base">إضافة متجر جديد لشبكة قريتي</h3>
-            <form onSubmit={handleAddStoreSubmit} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">اسم المتجر / التموينات</label>
-                <input
-                  type="text"
-                  required
-                  value={newStoreName}
-                  onChange={(e) => setNewStoreName(e.target.value)}
-                  placeholder="مثال: تموينات الفلاح"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn overflow-y-auto">
+          <div className="bg-slate-900 border border-purple-500/40 rounded-3xl w-full max-w-lg p-5 sm:p-6 shadow-2xl space-y-4 my-8 text-right">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-purple-600/20 text-purple-400 flex items-center justify-center">
+                  <Store className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-white text-base">إضافة متجر جديد وتسليم الحساب للتاجر</h3>
+                  <p className="text-[11px] text-slate-400">سجل بيانات التاجر والمتجر وسلمه الحساب فوراً برقم سري ورابط مباشر</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddStoreModal(false)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddStoreSubmit} className="space-y-3.5 max-h-[75vh] overflow-y-auto pr-1">
+              {/* Store & Owner Names */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    اسم النشاط أو المحل <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newStoreName}
+                    onChange={(e) => setNewStoreName(e.target.value)}
+                    placeholder="مثال: إكسسوارات الأناقة / بقالة الخير"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    اسم صاحب المحل (التاجر) <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newOwnerName}
+                    onChange={(e) => setNewOwnerName(e.target.value)}
+                    placeholder="مثال: عبد الله السالم"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">اسم صاحب المتجر</label>
-                <input
-                  type="text"
-                  value={newOwnerName}
-                  onChange={(e) => setNewOwnerName(e.target.value)}
-                  placeholder="مثال: عبد الله السالم"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">رقم الهاتف للتواصل</label>
-                <input
-                  type="tel"
-                  required
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  placeholder="05xxxxxxxx"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-left focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">اسم القرية أو الموقع (إلزامي)</label>
-                <input
-                  type="text"
-                  required
-                  value={newVillage}
-                  onChange={(e) => setNewVillage(e.target.value)}
-                  placeholder="مثال: قرية السعادة"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">رمز الدخول المحمي لحساب التاجر (PIN)</label>
-                <input
-                  type="text"
-                  required
-                  maxLength={6}
-                  value={newMerchantPin}
-                  onChange={(e) => setNewMerchantPin(e.target.value)}
-                  placeholder="1234"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-mono tracking-widest focus:outline-none focus:border-purple-500 text-center"
-                />
-                <p className="text-[10px] text-slate-500 mt-0.5">رمز مرور سري لحماية حساب التاجر عند الدخول وإضافة الأصناف</p>
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="proCheck"
-                  checked={newIsPro}
-                  onChange={(e) => setNewIsPro(e.target.checked)}
-                  className="w-4 h-4 rounded text-purple-600 bg-slate-950 border-slate-700"
-                />
-                <label htmlFor="proCheck" className="text-xs font-bold text-amber-300 cursor-pointer">
-                  تفعيل باقة PRO فوراً للمتجر 👑
+              {/* Category / Activity Selection */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-300">
+                  تسمية النشاط أو التصنيف <span className="text-rose-400">*</span>
                 </label>
+                <select
+                  value={newStoreCategory}
+                  onChange={(e) => setNewStoreCategory(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-bold"
+                >
+                  <option value="بقالات وتموينات غذائية 🛒">بقالات وتموينات غذائية 🛒</option>
+                  <option value="مخابز وحلويات ومعجنات 🥐">مخابز وحلويات ومعجنات 🥐</option>
+                  <option value="مطاعم ومطابخ ومأكولات 🍔">مطاعم ومطابخ ومأكولات 🍔</option>
+                  <option value="محلات تجارية عامة 🏬">محلات تجارية عامة 🏬</option>
+                  <option value="إكسسوارات وساعات 💍">إكسسوارات وساعات 💍</option>
+                  <option value="كماليات وهدايا وعطور 🎁">كماليات وهدايا وعطور 🎁</option>
+                  <option value="صيدليات وعناية صحية 💊">صيدليات وعناية صحية 💊</option>
+                  <option value="خضار وفواكه ولحوم طازجة 🥩">خضار وفواكه ولحوم طازجة 🥩</option>
+                  <option value="إلكترونيات وصيانة جوالات 📱">إلكترونيات وصيانة جوالات 📱</option>
+                  <option value="مغاسل وتنظيف ومفروشات 🧺">مغاسل وتنظيف ومفروشات 🧺</option>
+                  <option value="كافيهات ومقاهي ☕">كافيهات ومقاهي ☕</option>
+                  <option value="CUSTOM">✏️ تسمية نشاط مخصص آخر...</option>
+                </select>
+
+                {newStoreCategory === 'CUSTOM' && (
+                  <div className="pt-1">
+                    <input
+                      type="text"
+                      required
+                      value={customCategoryInput}
+                      onChange={(e) => setCustomCategoryInput(e.target.value)}
+                      placeholder="اكتب اسم النشاط أو التخصص المخصص هنا (مثال: كماليات وأواني، مكتبة وقرطاسية)..."
+                      className="w-full bg-purple-950/40 border border-purple-500/50 rounded-xl px-3 py-2 text-xs text-purple-200 placeholder-purple-400/60 focus:outline-none focus:border-purple-400"
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="flex gap-2 pt-2">
+              {/* Logo / Brand Image */}
+              <div className="space-y-1.5 p-3 rounded-2xl bg-slate-950/70 border border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
+                    <span>شعار المحل أو صورة المتجر</span>
+                  </label>
+                  {newStoreLogo && (
+                    <button
+                      type="button"
+                      onClick={() => setNewStoreLogo('')}
+                      className="text-[10px] text-rose-400 hover:underline"
+                    >
+                      إزالة الشعار
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
+                    {newStoreLogo ? (
+                      <img src={newStoreLogo} alt="Logo" className="w-full h-full object-cover" />
+                    ) : (
+                      <Store className="w-6 h-6 text-slate-600" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      type="url"
+                      value={newStoreLogo}
+                      onChange={(e) => setNewStoreLogo(e.target.value)}
+                      placeholder="رابط صورة الشعار (https://...)"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                    />
+                    <div className="flex items-center gap-2">
+                      <label className="px-2.5 py-1 rounded-lg bg-purple-900/40 hover:bg-purple-900/60 border border-purple-700/50 text-purple-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors">
+                        <Upload className="w-3 h-3" />
+                        <span>رفع صورة من الجهاز</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                if (reader.result) setNewStoreLogo(String(reader.result));
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                      <span className="text-[10px] text-slate-500">أو اختر شعاراً سريعاً:</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick preset logo selectors */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  {[
+                    { label: 'بقالة 🛒', url: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=150&auto=format&fit=crop&q=80' },
+                    { label: 'مخبز 🥐', url: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=150&auto=format&fit=crop&q=80' },
+                    { label: 'مطعم 🍔', url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=150&auto=format&fit=crop&q=80' },
+                    { label: 'إكسسوارات 💍', url: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=150&auto=format&fit=crop&q=80' },
+                    { label: 'كماليات 🎁', url: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?w=150&auto=format&fit=crop&q=80' },
+                    { label: 'متجر تجاري 🏬', url: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=150&auto=format&fit=crop&q=80' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setNewStoreLogo(preset.url)}
+                      className={`text-[10px] px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                        newStoreLogo === preset.url
+                          ? 'bg-purple-600 text-white border-purple-400 font-bold'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Password & Credentials */}
+              <div className="space-y-1.5 p-3 rounded-2xl bg-amber-950/20 border border-amber-500/20">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                    <span>كلمة المرور لتسليم الحساب للتاجر <span className="text-rose-400">*</span></span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const genPass = `store${Math.floor(1000 + Math.random() * 9000)}`;
+                      setNewStorePassword(genPass);
+                    }}
+                    className="text-[10px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>توليد كلمة مرور عشوائية</span>
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showNewStorePassword ? 'text' : 'password'}
+                    required
+                    value={newStorePassword}
+                    onChange={(e) => setNewStorePassword(e.target.value)}
+                    placeholder="مثال: store2026 أو كلمة مرور خاصة"
+                    className="w-full bg-slate-950 border border-amber-500/40 rounded-xl pr-3 pl-10 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewStorePassword(!showNewStorePassword)}
+                    className="absolute left-2.5 top-2.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    {showNewStorePassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-amber-400" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-amber-200/70">
+                  💡 سيستخدم التاجر رقم هاتفه وهذه كلمة المرور لتسجيل الدخول مباشرة إلى بوابته وإدارة أصنافه.
+                </p>
+              </div>
+
+              {/* Phone & Village */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    رقم الجوال للدخول والتواصل <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
+                    placeholder="05xxxxxxxx"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-left focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    اسم القرية أو الموقع <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    list="approvedVillagesList"
+                    value={newVillage}
+                    onChange={(e) => setNewVillage(e.target.value)}
+                    placeholder="اختر أو اكتب القرية..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                  />
+                  <datalist id="approvedVillagesList">
+                    {approvedVillages.map((v) => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              {/* Quick PIN & PRO License */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">رمز الدخول السريع (PIN)</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={newMerchantPin}
+                    onChange={(e) => setNewMerchantPin(e.target.value)}
+                    placeholder="1234"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-mono tracking-widest focus:outline-none focus:border-purple-500 text-center"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-4">
+                  <input
+                    type="checkbox"
+                    id="proCheck"
+                    checked={newIsPro}
+                    onChange={(e) => setNewIsPro(e.target.checked)}
+                    className="w-4 h-4 rounded text-purple-600 bg-slate-950 border-slate-700"
+                  />
+                  <label htmlFor="proCheck" className="text-xs font-bold text-amber-300 cursor-pointer">
+                    تفعيل باقة PRO الحصرية للمتجر 👑
+                  </label>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-xl text-xs shadow-md transition-colors cursor-pointer"
+                  className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black rounded-xl text-xs shadow-lg shadow-purple-950 flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  حفظ المتجر وفتح حسابه المحمي
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>حفظ المتجر وتوليد بطاقة التسليم 🚀</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAddStoreModal(false)}
+                  className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Ad Modal */}
+      {editingAd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn overflow-y-auto">
+          <div className="bg-slate-900 border border-purple-500/40 rounded-3xl w-full max-w-lg p-5 sm:p-6 shadow-2xl space-y-4 my-8 text-right">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-cyan-600/20 text-cyan-400 flex items-center justify-center">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-white text-base">تعديل الإعلان والبنر الترويجي</h3>
+                  <p className="text-[11px] text-slate-400">تحديث نصوص وألوان وشروط البنر في المتجر والشاشات</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAd(null)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Live Banner Preview Inside Modal */}
+            <div
+              className={`bg-gradient-to-r ${editAdGradient || 'from-emerald-950 to-slate-900'} rounded-2xl p-4 text-white shadow-lg relative overflow-hidden`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-white/20 backdrop-blur-md">
+                  {editAdBadge || 'عرض خاص 🌟'}
+                </span>
+                {editAdCode && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white text-slate-900">
+                    كود: {editAdCode}
+                  </span>
+                )}
+              </div>
+              <h4 className="font-extrabold text-sm sm:text-base text-white">{editAdTitle || 'عنوان الإعلان والبنر'}</h4>
+              <p className="text-xs text-white/80 mt-1 line-clamp-2">{editAdSubtitle || 'تفاصيل وشرح العرض الترويجي'}</p>
+            </div>
+
+            <form onSubmit={handleSaveEditAd} className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  عنوان الإعلان الرئيسي <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editAdTitle}
+                  onChange={(e) => setEditAdTitle(e.target.value)}
+                  placeholder="مثال: خصم 30% على منتجات المخبز بمناسبة الافتتاح!"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">نص التوضيح والعرض (الوصف)</label>
+                <input
+                  type="text"
+                  value={editAdSubtitle}
+                  onChange={(e) => setEditAdSubtitle(e.target.value)}
+                  placeholder="مثال: يسري العرض لجميع أهالي القرية حتى نفاد الكمية"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">شارة الإعلان</label>
+                  <input
+                    type="text"
+                    value={editAdBadge}
+                    onChange={(e) => setEditAdBadge(e.target.value)}
+                    placeholder="مثال: عرض مميز 🌟"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">كود الخصم (اختياري)</label>
+                  <input
+                    type="text"
+                    value={editAdCode}
+                    onChange={(e) => setEditAdCode(e.target.value)}
+                    placeholder="مثال: SAVE20"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono uppercase focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">نص زر الإجراء</label>
+                  <input
+                    type="text"
+                    value={editAdActionText}
+                    onChange={(e) => setEditAdActionText(e.target.value)}
+                    placeholder="مثال: تصفح العرض / اطلب الآن"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">ربط الإعلان بمتجر</label>
+                  <select
+                    value={editAdStoreId}
+                    onChange={(e) => setEditAdStoreId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="">-- بدون ربط بمتجر محدد --</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.cityOrVillage})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">لون وتدرج خلفية البنر</label>
+                <select
+                  value={editAdGradient}
+                  onChange={(e) => setEditAdGradient(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="from-emerald-600 via-teal-600 to-cyan-700">أخضر زمردي ونيلي (Emerald & Cyan)</option>
+                  <option value="from-amber-600 via-orange-600 to-rose-700">برتقالي وذهبي دافئ (Amber & Rose)</option>
+                  <option value="from-purple-600 via-indigo-600 to-blue-700">بنفسجي ملكي (Purple & Blue)</option>
+                  <option value="from-rose-600 via-pink-600 to-red-700">وردي وأحمر ناري (Pink & Red)</option>
+                  <option value="from-blue-600 via-indigo-600 to-slate-900">أزرق داكن وكحلي (Blue & Slate)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="editAdActiveCheck"
+                  checked={editAdIsActive}
+                  onChange={(e) => setEditAdIsActive(e.target.checked)}
+                  className="w-4 h-4 rounded text-cyan-600 bg-slate-950 border-slate-700"
+                />
+                <label htmlFor="editAdActiveCheck" className="text-xs font-bold text-cyan-300 cursor-pointer">
+                  تفعيل الإعلان والبنر فوراً في المتجر الرئيسي والشاشات
+                </label>
+              </div>
+
+              <div className="flex gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black rounded-xl text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>حفظ تعديلات الإعلان والبنر</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingAd(null)}
                   className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                 >
                   إلغاء
@@ -3456,67 +3937,101 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
         )}
 
       {createdStoreModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-          <div className="bg-slate-900 border border-purple-500/50 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
+          <div className="bg-slate-900 border border-emerald-500/50 rounded-3xl w-full max-w-lg p-5 sm:p-6 shadow-2xl space-y-4 my-8 relative overflow-hidden text-right">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
             {/* Top header */}
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/30">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
               <div>
                 <h3 className="font-black text-white text-base">
-                  تم إنشاء المتجر وفتح حساب التاجر بنجاح 🚀
+                  تم إنشاء المتجر وتجهيز بطاقة تسليم الحساب للتاجر 🚀
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  تم تخصيص حساب محمي للتاجر لإضافة الأصناف وإدارة المخزون
+                  تم اعتماد وتفعيل الحساب فوراً بنجاح، يمكنك الآن تسليم البيانات للتاجر مباشرة
                 </p>
               </div>
             </div>
 
-            {/* Highlighted Store and Village Information Card */}
+            {/* Store & Handover Credentials Card */}
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
-                <div className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-purple-400" />
-                  <span className="text-xs text-slate-400 font-bold">اسم المتجر:</span>
+              {/* Logo & Store Header */}
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
+                <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0 shadow-md">
+                  {createdStoreModal.logo ? (
+                    <img src={createdStoreModal.logo} alt={createdStoreModal.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Store className="w-7 h-7 text-emerald-400" />
+                  )}
                 </div>
-                <span className="text-sm font-black text-white">{createdStoreModal.name}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-black text-base text-white truncate">{createdStoreModal.name}</h4>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      مفعل ومقبول ✓
+                    </span>
+                  </div>
+                  <p className="text-xs text-purple-300 font-bold mt-0.5">
+                    {createdStoreModal.category || 'محلات تجارية عامة'}
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    📍 {createdStoreModal.cityOrVillage}
+                  </p>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs text-slate-400 font-bold">اسم القرية / الموقع:</span>
-                </div>
-                <span className="text-sm font-black text-emerald-300">{createdStoreModal.cityOrVillage}</span>
-              </div>
-
-              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
+              {/* Owner and Phone */}
+              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80 text-xs">
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-sky-400" />
-                  <span className="text-xs text-slate-400 font-bold">صاحب المتجر (التاجر):</span>
+                  <span className="text-slate-400 font-bold">اسم التاجر / المستلم:</span>
                 </div>
-                <span className="text-xs font-bold text-slate-200">{createdStoreModal.ownerName} ({createdStoreModal.phone})</span>
+                <span className="font-bold text-white">{createdStoreModal.ownerName}</span>
               </div>
 
-              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
+              {/* Phone / Username */}
+              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80 text-xs">
                 <div className="flex items-center gap-2">
-                  <LockIcon className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs text-slate-400 font-bold">رمز الحماية الخاص بحساب التاجر (PIN):</span>
+                  <Phone className="w-4 h-4 text-emerald-400" />
+                  <span className="text-slate-400 font-bold">اسم المستخدم (رقم الجوال):</span>
                 </div>
-                <span className="text-sm font-black text-amber-300 font-mono tracking-widest px-2.5 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <span className="font-mono font-bold text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
+                  {createdStoreModal.phone}
+                </span>
+              </div>
+
+              {/* Password */}
+              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80 text-xs">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <span className="text-slate-400 font-bold">كلمة المرور (Password):</span>
+                </div>
+                <span className="font-mono font-bold text-amber-300 bg-amber-950/60 px-2.5 py-0.5 rounded border border-amber-800/50">
+                  {createdStoreModal.merchantPassword || createdStoreModal.merchantPin || '1234'}
+                </span>
+              </div>
+
+              {/* PIN Code */}
+              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80 text-xs">
+                <div className="flex items-center gap-2">
+                  <LockIcon className="w-4 h-4 text-purple-400" />
+                  <span className="text-slate-400 font-bold">رمز الدخول السريع (PIN):</span>
+                </div>
+                <span className="font-mono font-bold text-purple-300 bg-purple-950/60 px-2.5 py-0.5 rounded border border-purple-800/50">
                   {createdStoreModal.merchantPin || '1234'}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between gap-2">
+              {/* Plan */}
+              <div className="flex items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-2">
                   <Crown className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs text-slate-400 font-bold">حالة الباقة والترخيص:</span>
+                  <span className="text-slate-400 font-bold">حالة الباقة والترخيص:</span>
                 </div>
-                <span className={`text-xs font-black px-2 py-0.5 rounded-full ${
+                <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${
                   createdStoreModal.isPro
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                     : 'bg-slate-800 text-slate-400'
@@ -3526,8 +4041,28 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
               </div>
             </div>
 
-            {/* Direct action buttons */}
-            <div className="space-y-2">
+            {/* Direct Handover & WhatsApp Action Buttons */}
+            <div className="space-y-2 pt-1">
+              {/* WhatsApp direct delivery link */}
+              {(() => {
+                const digits = (createdStoreModal.phone || '').replace(/\D/g, '');
+                const intlPhone = digits.startsWith('0') ? '966' + digits.slice(1) : digits.startsWith('966') ? digits : '966' + digits;
+                const handoverMsg = `🏪 منصة قريتي - بيانات تسليم حساب المتجر الرسمي\n━━━━━━━━━━━━━━━━━━━━\n🏬 اسم النشاط / المتجر: ${createdStoreModal.name}\n🏷️ التصنيف / النشاط: ${createdStoreModal.category || 'محلات تجارية عامة'}\n👤 صاحب المتجر: ${createdStoreModal.ownerName}\n📍 القرية / الموقع: ${createdStoreModal.cityOrVillage}\n📱 اسم المستخدم (رقم الجوال): ${createdStoreModal.phone}\n🔑 كلمة المرور (Password): ${createdStoreModal.merchantPassword || createdStoreModal.merchantPin || '1234'}\n🔐 رمز الدخول السريع (PIN): ${createdStoreModal.merchantPin || '1234'}\n👑 الترخيص: ${createdStoreModal.planName}\n━━━━━━━━━━━━━━━━━━━━\n🌐 رابط إدارة المتجر وإضافة المنتجات:\n${window.location.origin}/?portal=merchant`;
+                const waUrl = `https://api.whatsapp.com/send?phone=${intlPhone}&text=${encodeURIComponent(handoverMsg)}`;
+
+                return (
+                  <a
+                    href={waUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-950 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>إرسال وتسليم الحساب للتاجر عبر واتساب فوراً 💬</span>
+                  </a>
+                );
+              })()}
+
               <button
                 type="button"
                 onClick={() => {
@@ -3541,30 +4076,30 @@ export const PlatformAdminView: React.FC<PlatformAdminViewProps> = ({
                   });
                   showToast(`تم فتح حساب التاجر: ${target.name} (${target.cityOrVillage})`);
                 }}
-                className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
                 <PackagePlus className="w-4 h-4" />
-                <span>دخول حساب التاجر فوراً لإضافة الأصناف 🚀</span>
+                <span>دخول حساب المتجر فوراً لتسجيل الأصناف 🚀</span>
               </button>
 
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={async () => {
-                    const credentialsText = `🏪 منصة قريتي - بيانات حساب التاجر الجديد\n📍 القرية: ${createdStoreModal.cityOrVillage}\n🏬 اسم المتجر: ${createdStoreModal.name}\n👤 اسم التاجر: ${createdStoreModal.ownerName}\n📱 الهاتف: ${createdStoreModal.phone}\n🔐 رمز الدخول المحمي (PIN): ${createdStoreModal.merchantPin || '1234'}\n👑 الترخيص: ${createdStoreModal.planName}\n\nرابط إدارة المتجر وإضافة الأصناف:\n${window.location.origin}/?portal=merchant`;
+                    const credentialsText = `🏪 منصة قريتي - بيانات حساب التاجر الرسمي\n📍 القرية: ${createdStoreModal.cityOrVillage}\n🏬 اسم المتجر: ${createdStoreModal.name}\n🏷️ التصنيف: ${createdStoreModal.category || 'محلات تجارية'}\n👤 اسم التاجر: ${createdStoreModal.ownerName}\n📱 الهاتف: ${createdStoreModal.phone}\n🔑 كلمة المرور: ${createdStoreModal.merchantPassword || createdStoreModal.merchantPin || '1234'}\n🔐 رمز PIN: ${createdStoreModal.merchantPin || '1234'}\n👑 الترخيص: ${createdStoreModal.planName}\n\nرابط إدارة المتجر:\n${window.location.origin}/?portal=merchant`;
                     await copyToClipboard(credentialsText);
-                    showToast('تم نسخ بيانات المتجر ورابط الدخول إلى الحافظة');
+                    showToast('تم نسخ بيانات المتجر وحساب التاجر إلى الحافظة');
                   }}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Copy className="w-3.5 h-3.5 text-amber-400" />
-                  <span>نسخ بيانات حساب التاجر</span>
+                  <span>نسخ بيانات الحساب</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setCreatedStoreModal(null)}
-                  className="px-4 py-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                 >
                   إغلاق
                 </button>

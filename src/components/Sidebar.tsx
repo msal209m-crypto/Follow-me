@@ -39,7 +39,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { usePWA } from '../context/PWAContext';
 import { clearAllSystemSessions } from '../services/rbacAuthService';
-import { NavigationTab } from '../types';
+import { NavigationTab, Cashier } from '../types';
 
 interface SidebarProps {
   onOpenAddItem: () => void;
@@ -92,12 +92,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isCashierMode,
     resetCashierPassword,
     offlineSyncCount,
+    showNotification,
   } = useApp();
 
   // حالة نافذة استعادة كلمة مرور الكاشير للتاجر (المشرف)
   const [showResetPasswordModal, setShowResetPasswordModal] = React.useState(false);
   const [selectedCashierToReset, setSelectedCashierToReset] = React.useState<string>('');
   const [newPasswordInput, setNewPasswordInput] = React.useState<string>('1234');
+
+  // حماية رجوع الكاشير لحساب التاجر بكلمة مرور
+  const [showMerchantAuthModal, setShowMerchantAuthModal] = React.useState(false);
+  const [pendingTargetCashier, setPendingTargetCashier] = React.useState<Cashier | null>(null);
+  const [pendingAction, setPendingAction] = React.useState<(() => void) | null>(null);
+  const [enteredMerchantPassword, setEnteredMerchantPassword] = React.useState('');
+  const [merchantAuthError, setMerchantAuthError] = React.useState('');
 
   // صلاحيات الكاشير: عند تفعيل حساب الكاشير، إخفاء الحسابات والأرباح والمخزون، والاكتفاء بشاشة نقاط البيع فقط
   const navItems: {
@@ -376,8 +384,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <select
                   value={currentCashier.id}
                   onChange={(e) => {
-                    const found = cashiers.find((c) => c.id === e.target.value);
-                    if (found) setCurrentCashier(found);
+                    const targetId = e.target.value;
+                    const found = cashiers.find((c) => c.id === targetId);
+                    if (!found) return;
+
+                    const isTargetAdmin = found.role && (
+                      found.role.includes('مدير') ||
+                      found.role.includes('مشرف') ||
+                      found.role.includes('ADMIN') ||
+                      found.role.includes('MANAGER') ||
+                      found.role.includes('OWNER') ||
+                      found.role === 'ADMIN'
+                    );
+
+                    if (isCashierMode && isTargetAdmin) {
+                      setPendingTargetCashier(found);
+                      setPendingAction(null);
+                      setEnteredMerchantPassword('');
+                      setMerchantAuthError('');
+                      setShowMerchantAuthModal(true);
+                      return;
+                    }
+
+                    setCurrentCashier(found);
                   }}
                   className="bg-transparent text-emerald-300 font-bold focus:outline-none cursor-pointer py-1 max-w-[125px] truncate"
                 >
@@ -742,6 +771,128 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>{language === 'ar' ? 'حفظ وتعيين كلمة المرور' : 'Save New Password'}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Merchant / Supervisor Password Authentication Modal for Cashier Return */}
+      {showMerchantAuthModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-amber-500/50 rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-4 text-right">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <LockIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-white text-base">
+                    {language === 'ar' ? 'كلمة مرور التاجر مطلوبة' : 'Merchant Password Required'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {language === 'ar' ? 'لا يمكن للكاشير الرجوع لحساب التاجر أو المشرف إلا بكلمة المرور' : 'Cashier cannot return to merchant account without password'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMerchantAuthModal(false)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const adminCashiers = cashiers.filter(
+                  (c) =>
+                    c.id === 'cashier-owner' ||
+                    (c.role &&
+                      (c.role.includes('مدير') ||
+                        c.role.includes('مشرف') ||
+                        c.role.includes('ADMIN') ||
+                        c.role.includes('MANAGER') ||
+                        c.role.includes('OWNER')))
+                );
+                const validPasswords = [
+                  settings.merchantPassword,
+                  ...adminCashiers.map((c) => c.password).filter(Boolean),
+                ].filter(Boolean);
+
+                if (validPasswords.length === 0) {
+                  validPasswords.push('1234');
+                }
+
+                if (
+                  !enteredMerchantPassword.trim() ||
+                  !validPasswords.includes(enteredMerchantPassword.trim())
+                ) {
+                  setMerchantAuthError(
+                    language === 'ar'
+                      ? 'كلمة مرور التاجر / المشرف غير صحيحة!'
+                      : 'Incorrect merchant/supervisor password!'
+                  );
+                  return;
+                }
+
+                setShowMerchantAuthModal(false);
+                if (pendingTargetCashier) {
+                  setCurrentCashier(pendingTargetCashier);
+                  setPendingTargetCashier(null);
+                } else if (pendingAction) {
+                  pendingAction();
+                  setPendingAction(null);
+                }
+                showNotification(
+                  language === 'ar'
+                    ? 'تم التحقق بنجاح والرجوع لحساب التاجر/المشرف'
+                    : 'Successfully authenticated and switched back!',
+                  'success'
+                );
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  {language === 'ar' ? 'أدخل كلمة مرور التاجر أو المشرف:' : 'Enter Merchant/Supervisor Password:'}
+                </label>
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  value={enteredMerchantPassword}
+                  onChange={(e) => {
+                    setEnteredMerchantPassword(e.target.value);
+                    setMerchantAuthError('');
+                  }}
+                  placeholder="••••••••"
+                  className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-amber-400"
+                />
+                {merchantAuthError && (
+                  <p className="text-[11px] text-rose-400 font-bold mt-1 animate-shake">
+                    {merchantAuthError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowMerchantAuthModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-colors flex items-center gap-1.5 shadow-lg shadow-amber-950 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{language === 'ar' ? 'تأكيد ودخول' : 'Confirm & Enter'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

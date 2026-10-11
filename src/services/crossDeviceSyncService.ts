@@ -229,12 +229,21 @@ export function initGlobalCloudSync(): void {
   let initialAdsSync = true;
   try {
     onSnapshot(collection(db, 'ads'), (snapshot) => {
+      let deletedIds: Set<string> = new Set();
+      try {
+        const rawDel = localStorage.getItem('qaryati_deleted_ad_ids');
+        if (rawDel) deletedIds = new Set(JSON.parse(rawDel));
+      } catch {}
+
       const ads: any[] = [];
       snapshot.forEach((docSnap) => {
-        ads.push({ id: docSnap.id, ...docSnap.data() });
+        if (!deletedIds.has(docSnap.id)) {
+          ads.push({ id: docSnap.id, ...docSnap.data() });
+        }
       });
       ads.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       localStorage.setItem('qaryati_ads_directory', JSON.stringify(ads));
+      localStorage.setItem('qaryati_platform_ads_v1', JSON.stringify(ads));
       window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: ads }));
 
       if (!initialAdsSync) {

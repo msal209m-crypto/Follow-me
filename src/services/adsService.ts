@@ -34,65 +34,63 @@ export const DEFAULT_AD_PACKAGES: AdPackage[] = [
   }
 ];
 
-const INITIAL_FESTIVE_ADS: AdRecord[] = [
-  {
-    id: 'ad_festive_opening_1',
-    storeName: 'بقالة البركة المركزية',
-    title: '🎉 تم بحمد الله وتوفيقه افتتاح بقالة البركة المركزية في قرية بني عيسى!',
-    description: 'يسرنا استقبالكم بأحدث المنتجات الطازجة والمواد الغذائية مع خصومات وهدايا كبرى بمناسبة الافتتاح المبارك وتوصيل فوري لجميع المنازل 🚚✨',
-    imageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800',
-    packageName: 'الباقة الذهبية الممتازة VIP 👑',
-    status: 'APPROVED',
-    village: 'بني عيسى',
-    theme: 'CELEBRATION',
-    badgeText: 'افتتاح رسمي مبارك 🎉',
-    isConfettiEnabled: true,
-    actionText: 'تسوق من بقالة البركة الآن 🛒',
-    actionUrl: '',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: '2035-12-31',
-    createdAt: new Date().toISOString(),
-    approvedBy: 'المطور المعتمد'
-  },
-  {
-    id: 'ad_festive_opening_2',
-    storeName: 'مخبز وأفران القرية الحديثة',
-    title: '🔥 عروض نارية بمناسبة تدشين الفرع الجديد في قرية الجعدة!',
-    description: 'خصم خاص 20% على كافة المخبوزات والحلويات والمعجنات الطازجة لأهالي قريتنا الكرام مع التوصيل السريع للمنازل 🥐🍰',
-    imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&q=80&w=800',
-    packageName: 'الباقة الشهرية الفضية 🥈',
-    status: 'APPROVED',
-    village: 'الجعدة',
-    theme: 'HOT_DEAL',
-    badgeText: 'عروض الافتتاح الكبرى 🔥',
-    isConfettiEnabled: true,
-    actionText: 'اطلب من المخبز فوراً 🥖',
-    actionUrl: '',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: '2035-12-31',
-    createdAt: new Date().toISOString(),
-    approvedBy: 'المطور المعتمد'
-  }
-];
+const INITIAL_FESTIVE_ADS: AdRecord[] = [];
+
+const DELETED_ADS_STORAGE_KEY = 'qaryati_deleted_ad_ids';
+
+export function getDeletedAdIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_ADS_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      // Ensure the two annoying legacy demo ads are always marked permanently deleted
+      return new Set([...arr, 'ad_festive_opening_1', 'ad_festive_opening_2', 'default-ad-1', 'default-ad-2']);
+    }
+  } catch {}
+  return new Set(['ad_festive_opening_1', 'ad_festive_opening_2', 'default-ad-1', 'default-ad-2']);
+}
+
+export function markAdAsDeleted(id: string): void {
+  try {
+    const set = getDeletedAdIds();
+    set.add(id);
+    localStorage.setItem(DELETED_ADS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
 
 export function getAds(): AdRecord[] {
+  const deletedIds = getDeletedAdIds();
   try {
     const raw = localStorage.getItem(ADS_STORAGE_KEY);
-    if (!raw) {
-      return INITIAL_FESTIVE_ADS;
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((a) => a && a.id && !deletedIds.has(a.id));
+      }
     }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_FESTIVE_ADS;
-  } catch {
-    return INITIAL_FESTIVE_ADS;
+  } catch (e) {
+    console.warn('Error reading ads from storage:', e);
   }
+  return [];
 }
 
 export function saveAdRecord(ad: AdRecord) {
+  try {
+    const current = getAds().filter((a) => a.id !== ad.id);
+    const updated = [ad, ...current];
+    localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(updated));
+    localStorage.setItem('qaryati_platform_ads_v1', JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('qaryati:ads-updated', { detail: updated }));
+  } catch {}
   syncSaveAd(ad).catch((e) => console.warn('syncSaveAd failed:', e));
 }
 
+export function updateAdRecord(ad: AdRecord) {
+  saveAdRecord(ad);
+}
+
 export function deleteAdRecord(id: string) {
+  markAdAsDeleted(id);
   syncDeleteAd(id).catch((e) => console.warn('syncDeleteAd failed:', e));
 }
 
@@ -123,6 +121,9 @@ export function resumeAllAds(): void {
 }
 
 export function clearAllAds(): void {
+  const current = getAds();
+  current.forEach((a) => markAdAsDeleted(a.id));
+  INITIAL_FESTIVE_ADS.forEach((a) => markAdAsDeleted(a.id));
   syncClearAllAds().catch((e) => console.warn('clearAllAds failed:', e));
 }
 

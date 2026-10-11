@@ -261,6 +261,7 @@ export interface StoreSettings {
   footerNote: string;
   storeLogo?: string; // شعار المتجر (رابط أو صورة مرفوعة أو أيقونة)
   storeCover?: string; // غلاف المتجر (بانر علوي)
+  merchantPassword?: string; // كلمة مرور التاجر والمدير العام للخروج من وضع الكاشير
   storeIcon?: string; // أيقونة أو إيموجي المتجر المميز
   tagline?: string; // وصف ترويجي أو شعار لفظي للمتجر
   autoBackupEnabled?: boolean;
@@ -433,6 +434,7 @@ export interface StoreDirectoryRecord {
   suspendReason?: string;
   joinedAt: string;
   merchantPin?: string;
+  merchantPassword?: string;
   rating?: number;       // متوسط التقييم بالنجوم
   ratingCount?: number;  // عدد المقيمين
   category?: string;     // تصنيف المتجر

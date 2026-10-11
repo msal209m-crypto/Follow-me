@@ -1006,6 +1006,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const updated = { ...prev, ...finalSettings };
+      if (newSettings.merchantPassword) {
+        setCashiers((prevCashiers) =>
+          prevCashiers.map((c) => {
+            const isOwnerOrManager =
+              c.role === 'OWNER' ||
+              c.role === 'ADMIN' ||
+              c.role?.includes('مدير') ||
+              c.role?.includes('مشرف') ||
+              c.id === 'cashier-owner';
+            if (isOwnerOrManager) {
+              return { ...c, password: newSettings.merchantPassword };
+            }
+            return c;
+          })
+        );
+      }
       if (canWriteToCloud && currentUser) {
         safeSetDoc(doc(db, 'users', currentUser.uid, 'settings', 'store_config'), updated, { merge: true }).catch(console.warn);
       }

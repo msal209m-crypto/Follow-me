@@ -198,15 +198,39 @@ const DEFAULT_DEVELOPER_SETTINGS: PlatformDeveloperSettings = {
   storefrontCategoryStyle: 'circular',
 };
 
+const DELETED_ADS_KEY = 'qaryati_deleted_ad_ids';
+
+function getDeletedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_ADS_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+function recordDeletedId(id: string) {
+  try {
+    const set = getDeletedIds();
+    set.add(id);
+    localStorage.setItem(DELETED_ADS_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
 // --- Ads Management ---
 export function getPlatformAds(): PlatformAd[] {
+  const deletedIds = getDeletedIds();
   try {
     const raw = localStorage.getItem(ADS_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((a) => !deletedIds.has(a.id));
+      }
+    }
   } catch (e) {
     console.warn('Error reading platform ads:', e);
   }
-  return DEFAULT_ADS;
+  return DEFAULT_ADS.filter((a) => !deletedIds.has(a.id));
 }
 
 export function savePlatformAds(ads: PlatformAd[]): void {
@@ -235,6 +259,20 @@ export function addPlatformAd(newAd: Omit<PlatformAd, 'id' | 'createdAt'>): Plat
   return created;
 }
 
+export function updatePlatformAd(id: string, updatedData: Partial<PlatformAd>): PlatformAd | null {
+  const ads = getPlatformAds();
+  const index = ads.findIndex((a) => a.id === id);
+  if (index === -1) return null;
+  const updated: PlatformAd = {
+    ...ads[index],
+    ...updatedData,
+    id, // preserve ID
+  };
+  ads[index] = updated;
+  savePlatformAds(ads);
+  return updated;
+}
+
 export function togglePlatformAdStatus(id: string): void {
   const ads = getPlatformAds();
   const updated = ads.map((ad) => (ad.id === id ? { ...ad, isActive: !ad.isActive } : ad));
@@ -242,6 +280,7 @@ export function togglePlatformAdStatus(id: string): void {
 }
 
 export function deletePlatformAd(id: string): void {
+  recordDeletedId(id);
   const ads = getPlatformAds();
   const updated = ads.filter((ad) => ad.id !== id);
   localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(updated));
